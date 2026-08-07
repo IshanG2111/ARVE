@@ -23,83 +23,66 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
     e.preventDefault();
     setError(null);
     setLoading(true);
-
     try {
       const newTarget = await api.addTarget(projectId, domain);
       onTargetAdded(newTarget);
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to add target website');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to add target website';
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(3, 7, 18, 0.8)',
-      backdropFilter: 'blur(8px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      padding: '20px'
-    }}>
-      <div className="glass-card" style={{ width: '100%', maxWidth: '480px', padding: '28px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Globe size={24} color="var(--primary)" />
-            <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Add Security Target</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Project: {projectName}</p>
+    <div className="modal-overlay">
+      <div className="card modal" style={{ maxWidth: '460px' }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Globe size={16} color="var(--cyan)" />
+              Add Target Domain
             </div>
+            <div className="modal-sub">{projectName}</div>
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{ padding: '6px' }}>
-            <X size={18} />
+          <button className="btn btn-ghost btn-icon" onClick={onClose} id="close-add-target">
+            <X size={16} />
           </button>
         </div>
 
         {error && (
-          <div style={{
-            background: 'rgba(244, 63, 94, 0.15)',
-            border: '1px solid rgba(244, 63, 94, 0.3)',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            marginBottom: '16px',
-            color: '#FDA4AF',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <AlertCircle size={16} /> {error}
+          <div className="alert alert-error" style={{ marginBottom: '16px' }}>
+            <AlertCircle size={13} style={{ flexShrink: 0 }} />
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label className="input-label">Target Website Domain / URL *</label>
-            <input
-              type="text"
-              required
-              className="input-field"
-              placeholder="my-site.com or https://staging.my-site.com"
-              value={domain}
-              onChange={(e) => setDomain(e.target.value)}
-            />
-            <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '4px' }}>
+          <div className="field" style={{ marginBottom: '20px' }}>
+            <label className="label">Target Domain / URL</label>
+            <div className="input-wrap">
+              <span className="input-icon"><Globe size={14} /></span>
+              <input
+                type="text"
+                required
+                className="input"
+                placeholder="my-site.com or https://staging.my-site.com"
+                value={domain}
+                onChange={e => setDomain(e.target.value)}
+                autoFocus
+                id="target-domain-input"
+              />
+            </div>
+            <span style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '4px' }}>
               Only add domains you own or are explicitly authorized to test.
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Adding...' : 'Add Target & Generate Token'}
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={loading} id="submit-add-target">
+              {loading ? 'Adding…' : 'Add & Generate Token'}
             </button>
           </div>
         </form>

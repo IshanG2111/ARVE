@@ -1,60 +1,17 @@
-const API_BASE_URL = 'http://localhost:8000/api';
+import axios from "axios";
+import type { User, GitHubRepo, Branch, Project, CreateProjectPayload, TargetWebsite, VerificationResult } from '../types';
 
-export interface User {
-  id: string;
-  email: string;
-  full_name?: string;
-  github_login?: string;
-  github_avatar?: string;
-  is_active: boolean;
-  created_at: string;
-}
+export type { User, GitHubRepo, Branch, Project, CreateProjectPayload, TargetWebsite, VerificationResult };
 
-export interface GitHubRepo {
-  id: string;
-  name: string;
-  full_name: string;
-  html_url: string;
-  default_branch: string;
-  private: boolean;
-  updated_at: string;
-  language?: string;
-  description?: string;
-}
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const BASE = `${API_URL}/api`;
 
-export interface TargetWebsite {
-  id: string;
-  project_id: string;
-  domain: string;
-  verification_token: string;
-  is_verified: boolean;
-  verified_at?: string;
-  created_at: string;
-}
+export const api: any = axios.create({
+  baseURL: API_URL,
+  withCredentials: true, // sends/receives the httpOnly cookie
+});
 
-export interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  owner_id: string;
-  repo_name?: string;
-  repo_url?: string;
-  repo_id?: string;
-  default_branch?: string;
-  created_at: string;
-  targets: TargetWebsite[];
-}
-
-export interface VerificationResult {
-  target_id: string;
-  domain: string;
-  is_verified: boolean;
-  message: string;
-  checked_url: string;
-  verified_at?: string;
-}
-
-function getAuthHeaders(): HeadersInit {
+function authHeaders(): HeadersInit {
   const token = localStorage.getItem('arve_token');
   return {
     'Content-Type': 'application/json',
@@ -62,137 +19,154 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 
-export const api = {
-  async register(email: string, password: string, fullName?: string): Promise<User> {
-    const res = await fetch(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, full_name: fullName }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Registration failed' }));
-      throw new Error(err.detail || 'Registration failed');
-    }
-    return res.json();
-  },
-
-  async login(email: string, password: string): Promise<{ access_token: string }> {
-    const res = await fetch(`${API_BASE_URL}/auth/login/json`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Login failed' }));
-      throw new Error(err.detail || 'Invalid email or password');
-    }
-    const data = await res.json();
-    localStorage.setItem('arve_token', data.access_token);
-    return data;
-  },
-
-  async githubCallback(code: string, isMock: boolean = false): Promise<{ access_token: string }> {
-    const res = await fetch(`${API_BASE_URL}/github/callback`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, is_mock: isMock }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'GitHub authentication failed' }));
-      throw new Error(err.detail || 'GitHub authentication failed');
-    }
-    const data = await res.json();
-    localStorage.setItem('arve_token', data.access_token);
-    return data;
-  },
-
-  async getGitHubRepos(): Promise<GitHubRepo[]> {
-    const res = await fetch(`${API_BASE_URL}/github/repos`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch GitHub repositories');
-    return res.json();
-  },
-
-  async me(): Promise<User> {
-    const res = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Unauthorized');
-    return res.json();
-  },
-
-  async getProjects(): Promise<Project[]> {
-    const res = await fetch(`${API_BASE_URL}/projects`, {
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to fetch projects');
-    return res.json();
-  },
-
-  async createProject(data: {
-    name: string;
-    description?: string;
-    repo_name?: string;
-    repo_url?: string;
-    repo_id?: string;
-    default_branch?: string;
-    target_domain?: string;
-  }): Promise<Project> {
-    const res = await fetch(`${API_BASE_URL}/projects`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to create project' }));
-      throw new Error(err.detail || 'Failed to create project');
-    }
-    return res.json();
-  },
-
-  async deleteProject(projectId: string): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to delete project');
-  },
-
-  async addTarget(projectId: string, domain: string): Promise<TargetWebsite> {
-    const res = await fetch(`${API_BASE_URL}/projects/${projectId}/targets`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ domain }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to add target website' }));
-      throw new Error(err.detail || 'Failed to add target website');
-    }
-    return res.json();
-  },
-
-  async verifyTarget(targetId: string): Promise<VerificationResult> {
-    const res = await fetch(`${API_BASE_URL}/targets/${targetId}/verify`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Verification request failed' }));
-      throw new Error(err.detail || 'Verification request failed');
-    }
-    return res.json();
-  },
-
-  async deleteTarget(targetId: string): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/targets/${targetId}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders(),
-    });
-    if (!res.ok) throw new Error('Failed to delete target');
-  },
-
-  logout() {
-    localStorage.removeItem('arve_token');
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
   }
-};
+  return res.json() as Promise<T>;
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export async function getMe(): Promise<User> {
+  const res = await fetch(`${API_URL}/me`, { headers: authHeaders(), credentials: 'include' });
+  if (!res.ok) {
+    const fallbackRes = await fetch(`${BASE}/auth/me`, { headers: authHeaders(), credentials: 'include' });
+    return handleResponse<User>(fallbackRes);
+  }
+  return handleResponse<User>(res);
+}
+
+export async function getGitHubAuthUrl(): Promise<{ auth_url: string; is_configured: boolean }> {
+  const res = await fetch(`${BASE}/github/auth-url`, { credentials: 'include' });
+  return handleResponse(res);
+}
+
+export async function githubCallback(code: string, isMock = false): Promise<{ access_token: string }> {
+  const res = await fetch(`${BASE}/github/callback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ code, is_mock: isMock }),
+  });
+  const data = await handleResponse<{ access_token: string }>(res);
+  if (data.access_token) {
+    localStorage.setItem('arve_token', data.access_token);
+  }
+  return data;
+}
+
+export async function logout() {
+  localStorage.removeItem('arve_token');
+  try {
+    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch (err) {
+    // Ignore network error on logout
+  }
+}
+
+// ─── GitHub Repos (wizard list) ───────────────────────────────────────────────
+export async function getGitHubRepos(): Promise<GitHubRepo[]> {
+  const res = await fetch(`${BASE}/repositories/github/list`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<GitHubRepo[]>(res);
+}
+
+// ─── Branches ─────────────────────────────────────────────────────────────────
+export async function getBranches(repoId: string): Promise<Branch[]> {
+  const res = await fetch(`${BASE}/repositories/${repoId}/branches`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<Branch[]>(res);
+}
+
+// Fetch branches from GitHub using full_name (for wizard before repo is saved)
+export async function getBranchesByFullName(fullName: string): Promise<Branch[]> {
+  const res = await fetch(`${BASE}/github/branches?full_name=${encodeURIComponent(fullName)}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    return [
+      { name: 'main', protected: true },
+      { name: 'develop', protected: false },
+    ];
+  }
+  return handleResponse<Branch[]>(res);
+}
+
+// ─── Projects ─────────────────────────────────────────────────────────────────
+export async function getProjects(): Promise<Project[]> {
+  const res = await fetch(`${BASE}/projects`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<Project[]>(res);
+}
+
+export async function getProject(id: string): Promise<Project> {
+  const res = await fetch(`${BASE}/projects/${id}`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<Project>(res);
+}
+
+export async function createProject(payload: CreateProjectPayload): Promise<Project> {
+  const res = await fetch(`${BASE}/projects`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<Project>(res);
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const res = await fetch(`${BASE}/projects/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Delete failed' }));
+    throw new Error(err.detail || 'Delete failed');
+  }
+}
+
+// ─── Targets ──────────────────────────────────────────────────────────────────
+export async function addTarget(projectId: string, domain: string): Promise<TargetWebsite> {
+  const res = await fetch(`${BASE}/targets/projects/${projectId}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ domain }),
+  });
+  return handleResponse<TargetWebsite>(res);
+}
+
+export async function deleteTarget(targetId: string): Promise<void> {
+  const res = await fetch(`${BASE}/targets/${targetId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Target delete failed' }));
+    throw new Error(err.detail || 'Target delete failed');
+  }
+}
+
+export async function verifyTarget(targetId: string): Promise<VerificationResult> {
+  const res = await fetch(`${BASE}/targets/${targetId}/verify`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<VerificationResult>(res);
+}
+
+Object.assign(api, {
+  me: getMe,
+  getGitHubRepos,
+  getProjects,
+  getProject,
+  createProject,
+  deleteProject,
+  githubCallback,
+  logout,
+  addTarget,
+  deleteTarget,
+  verifyTarget,
+});

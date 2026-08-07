@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Plus, Trash2, Globe, CheckCircle2, AlertTriangle, ExternalLink, Calendar } from 'lucide-react';
+import { ShieldCheck, Plus, Trash2, Globe, ExternalLink, Calendar, GitBranch } from 'lucide-react';
+import { GitHubIcon } from './GitHubIcon';
 import { type Project, type TargetWebsite, api } from '../services/api';
 import { VerificationModal } from './VerificationModal';
 import { AddTargetModal } from './AddTargetModal';
@@ -15,21 +16,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
   const [addTargetProjectId, setAddTargetProjectId] = useState<{ id: string; name: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Compute metrics
-  const totalTargets = projects.reduce((acc, p) => acc + (p.targets?.length || 0), 0);
-  const verifiedTargets = projects.reduce(
-    (acc, p) => acc + (p.targets?.filter((t) => t.is_verified).length || 0),
-    0
-  );
+  const totalTargets = projects.reduce((a, p) => a + (p.targets?.length || 0), 0);
+  const verifiedTargets = projects.reduce((a, p) => a + (p.targets?.filter((t: TargetWebsite) => t.is_verified).length || 0), 0);
   const verificationRate = totalTargets > 0 ? Math.round((verifiedTargets / totalTargets) * 100) : 0;
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!window.confirm('Are you sure you want to delete this project and all its targets?')) return;
+    if (!window.confirm('Delete this project and all its targets?')) return;
     setDeletingId(projectId);
     try {
       await api.deleteProject(projectId);
       onRefresh();
-    } catch (err) {
+    } catch {
       alert('Failed to delete project');
     } finally {
       setDeletingId(null);
@@ -37,219 +34,200 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
   };
 
   const handleDeleteTarget = async (targetId: string) => {
-    if (!window.confirm('Remove this target website from the project?')) return;
+    if (!window.confirm('Remove this target domain?')) return;
     try {
       await api.deleteTarget(targetId);
       onRefresh();
-    } catch (err) {
+    } catch {
       alert('Failed to remove target');
     }
   };
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '32px 24px' }}>
-      {/* Overview Metric Bar */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        gap: '20px',
-        marginBottom: '36px'
-      }}>
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Active Projects</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, marginTop: '4px', color: '#F8FAFC' }}>
-            {projects.length}
+    <div className="dashboard">
+
+      {/* Metrics */}
+      <div className="metrics-row">
+        <div className="card metric-card">
+          <div className="metric-label">Projects</div>
+          <div className="metric-value">{projects.length}</div>
+        </div>
+        <div className="card metric-card">
+          <div className="metric-label">Targets</div>
+          <div className="metric-value">{totalTargets}</div>
+        </div>
+        <div className="card metric-card">
+          <div className="metric-label">Authorized</div>
+          <div className="metric-value" style={{ color: 'var(--green)' }}>
+            {verifiedTargets}
+            <span style={{ fontSize: '14px', color: 'var(--text-3)', fontWeight: 400 }}>
+              {' '}/{totalTargets}
+            </span>
           </div>
         </div>
-
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Target Websites</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, marginTop: '4px', color: '#F8FAFC' }}>
-            {totalTargets}
-          </div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Authorized Targets</div>
-          <div style={{ fontSize: '28px', fontWeight: 700, marginTop: '4px', color: '#34D399', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {verifiedTargets} <span style={{ fontSize: '14px', color: 'var(--text-dim)', fontWeight: 400 }}>/ {totalTargets}</span>
-          </div>
-        </div>
-
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>Authorization Progress</div>
-          <div style={{ fontSize: '24px', fontWeight: 700, marginTop: '4px', color: 'var(--primary)' }}>
+        <div className="card metric-card">
+          <div className="metric-label">Auth Rate</div>
+          <div className="metric-value" style={{ color: verificationRate === 100 ? 'var(--green)' : 'var(--text-1)' }}>
             {verificationRate}%
           </div>
-          <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px', marginTop: '10px', overflow: 'hidden' }}>
-            <div style={{ width: `${verificationRate}%`, height: '100%', background: 'linear-gradient(90deg, #00F0FF, #34D399)', transition: 'width 0.5s ease' }} />
+          <div className="metric-bar">
+            <div className="metric-bar-fill" style={{ width: `${verificationRate}%` }} />
           </div>
         </div>
       </div>
 
-      {/* Header section */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+      {/* Section header */}
+      <div className="section-header">
         <div>
-          <h2 style={{ fontSize: '22px', fontWeight: 700 }}>Security Testing Projects</h2>
-          <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-            Only verified targets with active ownership verification (.well-known) can be scanned.
-          </p>
+          <div className="section-title">Projects</div>
+          <div className="section-sub">GitHub repositories linked to verified deployment targets</div>
         </div>
-        <button className="btn btn-primary" onClick={onOpenNewProject}>
-          <Plus size={18} /> Create Project
+        <button className="btn btn-primary" onClick={onOpenNewProject} id="connect-repo-btn">
+          <Plus size={14} />
+          Connect Repository
         </button>
       </div>
 
-      {/* Projects List */}
+      {/* Project list */}
       {projects.length === 0 ? (
-        <div className="glass-card" style={{ padding: '48px 24px', textAlign: 'center' }}>
-          <ShieldCheck size={48} color="var(--primary)" style={{ opacity: 0.8, marginBottom: '16px' }} />
-          <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px' }}>No Security Projects Found</h3>
-          <p style={{ fontSize: '14px', color: 'var(--text-muted)', maxWidth: '400px', margin: '0 auto 24px' }}>
-            Get started by creating your first project and defining your target website domain.
+        <div className="card empty-state">
+          <div className="empty-icon">
+            <ShieldCheck size={36} />
+          </div>
+          <div className="empty-title">No repositories connected</div>
+          <p className="empty-sub">
+            Connect a GitHub repository and specify its deployed website URL to begin security verification.
           </p>
           <button className="btn btn-primary" onClick={onOpenNewProject}>
-            <Plus size={18} /> Create Your First Project
+            <Plus size={14} />
+            Connect Repository
           </button>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div>
           {projects.map((project) => {
-            const projTargets = project.targets || [];
-            const projVerifiedCount = projTargets.filter((t) => t.is_verified).length;
+            const targets = project.targets || [];
+            const verified = targets.filter((t: TargetWebsite) => t.is_verified).length;
 
             return (
-              <div key={project.id} className="glass-card glass-card-interactive" style={{ padding: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      {project.name}
-                    </h3>
-                    
-                    {/* Linked GitHub Repo Badge */}
+              <div key={project.id} className="card card-interactive project-card">
+
+                {/* Project header */}
+                <div className="project-header">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="project-name">{project.name}</div>
+
                     {project.repo_name && (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '6px', padding: '4px 10px', borderRadius: '6px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border-color)', fontSize: '12px' }}>
-                        <span style={{ color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <ExternalLink size={13} /> {project.repo_name}
+                      <div className="repo-badge">
+                        <GitHubIcon size={12} color="var(--cyan)" />
+                        <a href={project.repo_url || '#'} target="_blank" rel="noreferrer">
+                          {project.repo_name}
+                        </a>
+                        <span style={{ color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                          <GitBranch size={10} />
+                          {project.default_branch || 'main'}
                         </span>
-                        <span style={{ color: 'var(--text-dim)' }}>({project.default_branch || 'main'})</span>
                       </div>
                     )}
 
                     {project.description && (
-                      <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginTop: '6px' }}>{project.description}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '5px' }}>
+                        {project.description}
+                      </p>
                     )}
 
-                    <div style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Calendar size={13} /> Created {new Date(project.created_at).toLocaleDateString()}
+                    <div className="project-meta">
+                      <Calendar size={10} />
+                      {new Date(project.created_at).toLocaleDateString()}
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div className="project-actions">
                     <button
-                      className="btn btn-secondary btn-sm"
-                      onClick={() => setAddTargetProjectId({ id: project.id, name: project.name })}
+                      className="btn btn-ghost"
+                      onClick={() => setAddTargetProjectId({ id: project.id, name: project.name || 'Project' })}
+                      id={`add-target-${project.id}`}
                     >
-                      <Plus size={15} /> Add Target Website
+                      <Plus size={13} />
+                      Add Target
                     </button>
                     <button
-                      className="btn btn-danger btn-sm"
+                      className="btn btn-danger btn-icon"
                       onClick={() => handleDeleteProject(project.id)}
                       disabled={deletingId === project.id}
-                      title="Delete Project"
+                      title="Delete project"
+                      id={`delete-project-${project.id}`}
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
 
-                {/* Targets Table / List */}
-                <div style={{ marginTop: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-muted)' }}>
-                      Target Domains ({projVerifiedCount}/{projTargets.length} Authorized)
-                    </span>
+                {/* Targets */}
+                <div className="targets-section">
+                  <div className="targets-label">
+                    Targets — {verified}/{targets.length} authorized
                   </div>
 
-                  {projTargets.length === 0 ? (
+                  {targets.length === 0 ? (
                     <div style={{
-                      padding: '16px',
-                      background: 'rgba(15, 23, 42, 0.4)',
-                      borderRadius: '8px',
-                      fontSize: '13px',
-                      color: 'var(--text-dim)',
+                      padding: '12px',
+                      background: 'rgba(13, 17, 23, 0.5)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '12px',
+                      color: 'var(--text-3)',
                       textAlign: 'center'
                     }}>
-                      No target domains added yet. Click "Add Target Website" to add a domain to authorize.
+                      No target URL linked — click "Add Target" to configure a domain.
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {projTargets.map((target) => (
-                        <div
-                          key={target.id}
-                          style={{
-                            background: 'rgba(15, 23, 42, 0.7)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: '8px',
-                            padding: '12px 16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <Globe size={18} color="var(--primary)" />
-                            <div>
-                              <div style={{ fontSize: '14px', fontWeight: 600, color: '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {target.domain}
-                                <a
-                                  href={`http://${target.domain}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  style={{ color: 'var(--text-dim)' }}
-                                  title="Open website"
-                                >
-                                  <ExternalLink size={12} />
-                                </a>
-                              </div>
-                              <div style={{ fontSize: '11px', color: 'var(--text-dim)', marginTop: '2px' }} className="mono">
-                                Token: {target.verification_token.substring(0, 24)}...
-                              </div>
-                            </div>
+                    targets.map((target: TargetWebsite) => (
+                      <div key={target.id} className="target-row">
+                        <div style={{ minWidth: 0 }}>
+                          <div className="target-domain">
+                            <Globe size={13} color="var(--text-3)" />
+                            {target.domain}
+                            <a
+                              href={`https://${target.domain}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Open website"
+                            >
+                              <ExternalLink size={10} />
+                            </a>
                           </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <span className={`badge ${target.is_verified ? 'badge-verified' : 'badge-unverified'}`}>
-                              {target.is_verified ? (
-                                <>
-                                  <CheckCircle2 size={13} /> AUTHORIZED
-                                </>
-                              ) : (
-                                <>
-                                  <AlertTriangle size={13} /> UNVERIFIED
-                                </>
-                              )}
-                            </span>
-
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => setSelectedTarget(target)}
-                            >
-                              {target.is_verified ? 'Manage Authorization' : 'Verify Ownership'}
-                            </button>
-
-                            <button
-                              className="btn btn-danger btn-sm"
-                              style={{ padding: '6px' }}
-                              onClick={() => handleDeleteTarget(target.id)}
-                              title="Remove target domain"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                          <div className="target-token">
+                            {target.verification_token.substring(0, 26)}…
                           </div>
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="target-actions">
+                          <span className={`badge ${target.is_verified ? 'badge-verified' : 'badge-pending'}`}>
+                            <span className={`dot ${target.is_verified ? 'dot-green' : 'dot-amber'}`} />
+                            {target.is_verified ? 'Authorized' : 'Pending'}
+                          </span>
+
+                          <button
+                            className="btn btn-ghost"
+                            style={{ fontSize: '12px', padding: '5px 10px' }}
+                            onClick={() => setSelectedTarget(target)}
+                            id={`verify-target-${target.id}`}
+                          >
+                            {target.is_verified ? 'Info' : 'Verify'}
+                          </button>
+
+                          <button
+                            className="btn btn-danger btn-icon"
+                            onClick={() => handleDeleteTarget(target.id)}
+                            title="Remove target"
+                            id={`delete-target-${target.id}`}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
@@ -258,17 +236,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
         </div>
       )}
 
-      {/* Target Verification Modal */}
+      {/* Modals */}
       {selectedTarget && (
         <VerificationModal
           target={selectedTarget}
           onClose={() => setSelectedTarget(null)}
           onTargetUpdated={() => {
             onRefresh();
-            // refresh selected target state if modal remains open
-            api.getProjects().then((projs) => {
+            api.getProjects().then((projs: Project[]) => {
               for (const p of projs) {
-                const found = p.targets?.find((t) => t.id === selectedTarget.id);
+                const found = p.targets?.find((t: TargetWebsite) => t.id === selectedTarget.id);
                 if (found) setSelectedTarget(found);
               }
             });
@@ -276,15 +253,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
         />
       )}
 
-      {/* Add Target Modal */}
       {addTargetProjectId && (
         <AddTargetModal
           projectId={addTargetProjectId.id}
           projectName={addTargetProjectId.name}
           onClose={() => setAddTargetProjectId(null)}
-          onTargetAdded={() => {
-            onRefresh();
-          }}
+          onTargetAdded={() => { onRefresh(); }}
         />
       )}
     </div>

@@ -1,440 +1,277 @@
-import React, { useState, useEffect } from 'react';
-import { X, Globe, CheckCircle2, AlertCircle, ArrowRight, ArrowLeft, RefreshCw, Copy, Check, HelpCircle } from 'lucide-react';
-import { GitHubIcon } from './GitHubIcon';
-import { api, type GitHubRepo, type Project } from '../services/api';
+import React, { useState } from 'react';
+import { useGitHubRepos, useBranchesByName } from '../hooks/useRepositories';
+import { useCreateProject } from '../hooks/useProjects';
+import type { GitHubRepo } from '../types';
 
-interface ProjectWizardModalProps {
+interface Props {
   onClose: () => void;
-  onProjectCreated: (project: Project) => void;
+  onCreated: () => void;
 }
 
-export const ProjectWizardModal: React.FC<ProjectWizardModalProps> = ({ onClose, onProjectCreated }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [loadingRepos, setLoadingRepos] = useState(true);
+type Step = 1 | 2 | 3;
+
+const STEP_LABELS = ['Repository', 'Branch', 'Deployment'];
+
+export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
+  const [step, setStep] = useState<Step>(1);
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null);
-
-  // Target Domain & Verification state
-  const [targetDomain, setTargetDomain] = useState('');
-  const [verificationToken] = useState(() => `arve-verify-${Math.random().toString(36).substring(2, 12)}`);
-  const [verifying, setVerifying] = useState(false);
-  const [verificationMsg, setVerificationMsg] = useState<string | null>(null);
-
-  const [copiedFile, setCopiedFile] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState('');
+  const [deploymentUrl, setDeploymentUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    api.getGitHubRepos()
-      .then((data) => {
-        setRepos(data);
-        if (data.length > 0) setSelectedRepo(data[0]);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingRepos(false));
-  }, []);
+  const { data: repos = [], isLoading: loadingRepos } = useGitHubRepos();
+  const { data: branches = [], isLoading: loadingBranches } = useBranchesByName(
+    selectedRepo?.full_name ?? null
+  );
+  const createProject = useCreateProject();
 
-  const copyToClipboard = (text: string, type: 'file' | 'token') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'file') {
-      setCopiedFile(true);
-      setTimeout(() => setCopiedFile(false), 2000);
-    } else {
-      setCopiedToken(true);
-      setTimeout(() => setCopiedToken(false), 2000);
+  // Auto-pick first repo
+  React.useEffect(() => {
+    if (repos.length > 0 && !selectedRepo) setSelectedRepo(repos[0]);
+  }, [repos, selectedRepo]);
+
+  // Auto-pick default branch when repo changes
+  React.useEffect(() => {
+    if (selectedRepo) {
+      setSelectedBranch(selectedRepo.default_branch || 'main');
+    }
+  }, [selectedRepo]);
+
+  const goNext = () => {
+    if (step === 1) {
+      if (!selectedRepo) { setError('Select a repository'); return; }
+      setError(null);
+      setStep(2);
+    } else if (step === 2) {
+      if (!selectedBranch) { setError('Select a branch'); return; }
+      setError(null);
+      setStep(3);
     }
   };
 
-  const handleTestVerification = async () => {
-    if (!targetDomain.trim()) {
-      setError('Please enter a valid deployed website URL or domain');
-      return;
-    }
-
+  const goBack = () => {
     setError(null);
-    setVerifying(true);
-    setVerificationMsg(null);
-
-    // Clean domain representation
-    let clean = targetDomain.replace(/^https?:\/\//i, '').split('/')[0].trim();
-    let checkUrl = `http://${clean}/.well-known/arve-verification.txt`;
-
-    try {
-      // Attempt fetching directly or test mock endpoint
-      const res = await fetch(checkUrl, { method: 'GET' }).catch(() => null);
-      if (res && res.status === 200) {
-        const text = await res.text();
-        if (text.includes(verificationToken)) {
-          setVerificationMsg(`Successfully verified ownership via ${checkUrl}`);
-        } else {
-          setVerificationMsg(`Connected to ${checkUrl}, but token did not match.`);
-        }
-      } else {
-        // Fallback for local sandbox testing
-        setVerificationMsg(`Target ${clean} ready for ownership verification upon creation.`);
-      }
-    } catch (err: any) {
-      setVerificationMsg(`Target domain configured for ownership verification.`);
-    } finally {
-      setVerifying(false);
-    }
+    setStep((s) => (s - 1) as Step);
   };
 
-  const handleFinalSubmit = async () => {
+  const handleCreate = async () => {
+    if (!deploymentUrl.trim()) { setError('Enter a deployment URL'); return; }
+    if (!selectedRepo) { setError('No repository selected'); return; }
     setError(null);
-    setCreating(true);
 
-    if (!selectedRepo) {
-      setError('Please select a GitHub repository');
-      setCreating(false);
-      return;
-    }
-
-    const repoName = selectedRepo.full_name;
-    const repoUrl = selectedRepo.html_url;
-    const repoId = selectedRepo.id;
-    const branch = selectedRepo.default_branch || 'main';
-
-    try {
-      const proj = await api.createProject({
+    createProject.mutate(
+      {
+        branch: selectedBranch,
+        deployment_url: deploymentUrl.trim(),
         name: selectedRepo.name,
-        description: selectedRepo.description || `Security audit project for ${repoName}`,
-        repo_name: repoName,
-        repo_url: repoUrl,
-        repo_id: repoId,
-        default_branch: branch,
-        target_domain: targetDomain
-      });
-
-      onProjectCreated(proj);
-      onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to create project');
-    } finally {
-      setCreating(false);
-    }
+        description: selectedRepo.description || undefined,
+        repo_name: selectedRepo.full_name,
+        repo_url: selectedRepo.html_url,
+        repo_id: selectedRepo.id,
+        default_branch: selectedRepo.default_branch,
+      },
+      {
+        onSuccess: () => {
+          onCreated();
+          onClose();
+        },
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : 'Failed to create project');
+        },
+      }
+    );
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(3, 7, 18, 0.85)',
-      backdropFilter: 'blur(10px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 50,
-      padding: '20px'
-    }}>
-      <div className="glass-card" style={{
-        width: '100%',
-        maxWidth: '680px',
-        padding: '32px',
-        position: 'relative',
-        maxHeight: '90vh',
-        overflowY: 'auto'
-      }}>
-        {/* Wizard Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
-          <div>
-            <h3 style={{ fontSize: '20px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <GitHubIcon size={22} color="var(--primary)" /> Connect GitHub Repository & Deployed Website
-            </h3>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Project = GitHub Repository + Verified Deployment
-            </p>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose} style={{ padding: '6px' }}>
-            <X size={18} />
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="card modal">
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '6px' }}>
+          <div className="modal-title">New project</div>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: '18px', padding: '0 4px', lineHeight: 1, color: 'var(--ink-50)' }}
+            onClick={onClose}
+            id="close-wizard"
+          >
+            ×
           </button>
         </div>
+        <div className="modal-sub">Connect a GitHub repository to start security analysis</div>
 
-        {/* Wizard Steps Indicator */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '28px',
-          padding: '12px 16px',
-          background: 'rgba(15, 23, 42, 0.6)',
-          borderRadius: '10px',
-          border: '1px solid var(--border-color)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 1 ? 'var(--primary)' : 'var(--text-dim)', fontWeight: 600, fontSize: '13px' }}>
-            <span style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: step >= 1 ? 'rgba(0,240,255,0.2)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${step >= 1 ? 'var(--primary)' : 'var(--border-color)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px'
-            }}>1</span>
-            Select Repository
-          </div>
-
-          <div style={{ height: '1px', width: '30px', background: 'var(--border-color)' }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 2 ? 'var(--primary)' : 'var(--text-dim)', fontWeight: 600, fontSize: '13px' }}>
-            <span style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: step >= 2 ? 'rgba(0,240,255,0.2)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${step >= 2 ? 'var(--primary)' : 'var(--border-color)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px'
-            }}>2</span>
-            Deployed Website URL
-          </div>
-
-          <div style={{ height: '1px', width: '30px', background: 'var(--border-color)' }} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 3 ? 'var(--primary)' : 'var(--text-dim)', fontWeight: 600, fontSize: '13px' }}>
-            <span style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              background: step >= 3 ? 'rgba(0,240,255,0.2)' : 'rgba(255,255,255,0.05)',
-              border: `1px solid ${step >= 3 ? 'var(--primary)' : 'var(--border-color)'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '12px'
-            }}>3</span>
-            Verify & Create
-          </div>
+        {/* Steps */}
+        <div className="steps">
+          {STEP_LABELS.map((label, idx) => {
+            const n = (idx + 1) as Step;
+            const state = n < step ? 'done' : n === step ? 'active' : '';
+            return (
+              <React.Fragment key={n}>
+                {idx > 0 && <div className="step-connector" />}
+                <div className={`step ${state}`}>
+                  <div className="step-num">{n < step ? '✓' : n}</div>
+                  <span>{label}</span>
+                </div>
+              </React.Fragment>
+            );
+          })}
         </div>
 
+        {/* Error */}
         {error && (
-          <div style={{
-            background: 'rgba(244, 63, 94, 0.15)',
-            border: '1px solid rgba(244, 63, 94, 0.3)',
-            borderRadius: '8px',
-            padding: '10px 14px',
-            marginBottom: '20px',
-            color: '#FDA4AF',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <AlertCircle size={16} /> {error}
-          </div>
+          <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>
         )}
 
-        {/* STEP 1: Select Repository */}
+        {/* ── Step 1: Repository ── */}
         {step === 1 && (
           <div>
-            <label className="input-label" style={{ marginBottom: '12px', display: 'block' }}>
-              Select a GitHub Repository to Audit
-            </label>
+            <div className="label" style={{ marginBottom: '8px' }}>Select a GitHub repository</div>
 
             {loadingRepos ? (
-              <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading GitHub Repositories...
+              <div style={{ padding: '32px', textAlign: 'center' }}>
+                <div className="spinner" style={{ margin: '0 auto 8px' }} />
+                <p style={{ fontSize: '12px', color: 'var(--ink-30)' }}>Loading repositories…</p>
+              </div>
+            ) : repos.length === 0 ? (
+              <div className="alert alert-info" style={{ marginBottom: '16px' }}>
+                No repositories found. Make sure your GitHub account has repositories.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto', marginBottom: '20px' }}>
-                {repos.map((repo) => {
-                  const isSelected = selectedRepo?.id === repo.id;
-                  return (
-                    <div
-                      key={repo.id}
-                      onClick={() => setSelectedRepo(repo)}
-                      style={{
-                        padding: '14px 16px',
-                        borderRadius: '10px',
-                        background: isSelected ? 'rgba(0, 240, 255, 0.1)' : 'rgba(15, 23, 42, 0.6)',
-                        border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#F8FAFC', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <GitHubIcon size={16} color="var(--primary)" /> {repo.full_name}
-                        </div>
-                        {repo.description && (
-                          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {repo.description}
-                          </div>
-                        )}
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {repo.language && (
-                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', background: 'rgba(255,255,255,0.08)', color: 'var(--text-muted)' }}>
-                            {repo.language}
-                          </span>
-                        )}
-                        <span className="mono" style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                          {repo.default_branch}
-                        </span>
-                      </div>
+              <div className="list-scroll">
+                {repos.map((repo) => (
+                  <div
+                    key={repo.id}
+                    className={`list-item${selectedRepo?.id === repo.id ? ' selected' : ''}`}
+                    onClick={() => setSelectedRepo(repo)}
+                    id={`repo-${repo.id}`}
+                  >
+                    <div className="list-item-title">{repo.full_name}</div>
+                    {repo.description && (
+                      <div className="list-item-sub">{repo.description}</div>
+                    )}
+                    <div className="list-item-tags">
+                      {repo.language && <span className="list-tag">{repo.language}</span>}
+                      <span className="list-tag">{repo.default_branch}</span>
+                      {repo.private && <span className="list-tag list-tag-private">Private</span>}
                     </div>
-                  );
-                })}
+                  </div>
+                ))}
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  if (!selectedRepo) {
-                    setError('Please select a repository to proceed');
-                    return;
-                  }
-                  setError(null);
-                  setStep(2);
-                }}
-              >
-                Next: Deployed Website <ArrowRight size={16} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+              <button className="btn btn-primary" onClick={goNext} id="wizard-next-1">
+                Next →
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 2: Enter Deployed Website URL */}
+        {/* ── Step 2: Branch ── */}
         {step === 2 && (
           <div>
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '10px',
-              padding: '16px',
-              marginBottom: '20px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              <GitHubIcon size={24} color="var(--primary)" />
-              <div>
-                <div style={{ fontSize: '14px', fontWeight: 600 }}>Selected Repository</div>
-                <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                  {selectedRepo ? selectedRepo.full_name : 'No repo selected'}
-                </div>
+            {/* Selected repo reminder */}
+            {selectedRepo && (
+              <div style={{
+                padding: '10px 14px',
+                background: 'var(--ink-5)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '20px',
+                fontSize: '12.5px',
+                color: 'var(--ink-70)',
+                fontWeight: 500,
+              }}>
+                {selectedRepo.full_name}
               </div>
-            </div>
+            )}
 
-            <div className="input-group">
-              <label className="input-label">Deployed Website URL / Domain *</label>
-              <div style={{ position: 'relative' }}>
-                <Globe size={18} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-dim)' }} />
-                <input
-                  type="text"
-                  required
-                  className="input-field"
-                  style={{ paddingLeft: '40px' }}
-                  placeholder="https://my-app.vercel.app or mydomain.com"
-                  value={targetDomain}
-                  onChange={(e) => setTargetDomain(e.target.value)}
-                />
+            <div className="label" style={{ marginBottom: '8px' }}>Select a branch</div>
+
+            {loadingBranches ? (
+              <div style={{ padding: '20px', textAlign: 'center' }}>
+                <div className="spinner" style={{ margin: '0 auto 8px' }} />
+                <p style={{ fontSize: '12px', color: 'var(--ink-30)' }}>Loading branches…</p>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>
-                Enter the live deployed website associated with this GitHub repository.
+            ) : (
+              <div className="list-scroll" style={{ maxHeight: '200px' }}>
+                {branches.map((branch) => (
+                  <div
+                    key={branch.name}
+                    className={`list-item${selectedBranch === branch.name ? ' selected' : ''}`}
+                    onClick={() => setSelectedBranch(branch.name)}
+                    id={`branch-${branch.name}`}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div className="list-item-title">{branch.name}</div>
+                      {branch.protected && (
+                        <span className="badge badge-lock" style={{ fontSize: '10px' }}>Protected</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+              <button className="btn btn-secondary" onClick={goBack} id="wizard-back-2">
+                ← Back
+              </button>
+              <button className="btn btn-primary" onClick={goNext} id="wizard-next-2">
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Deployment URL ── */}
+        {step === 3 && (
+          <div>
+            {/* Summary */}
+            {selectedRepo && (
+              <div style={{
+                padding: '12px 14px',
+                background: 'var(--ink-5)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: '20px',
+                fontSize: '12.5px',
+                color: 'var(--ink-70)',
+              }}>
+                <div style={{ fontWeight: 600 }}>{selectedRepo.full_name}</div>
+                <div style={{ marginTop: '2px', color: 'var(--ink-50)' }}>Branch: {selectedBranch}</div>
+              </div>
+            )}
+
+            <div className="field" style={{ marginBottom: '20px' }}>
+              <label className="label" htmlFor="deployment-url-input">Deployment URL</label>
+              <input
+                id="deployment-url-input"
+                type="url"
+                className="input"
+                placeholder="https://my-app.vercel.app"
+                value={deploymentUrl}
+                onChange={(e) => setDeploymentUrl(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              />
+              <span style={{ fontSize: '11px', color: 'var(--ink-30)', marginTop: '2px' }}>
+                The live deployment associated with this repository
               </span>
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between', marginTop: '28px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(1)}>
-                <ArrowLeft size={16} /> Back
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+              <button className="btn btn-secondary" onClick={goBack} id="wizard-back-3">
+                ← Back
               </button>
               <button
                 className="btn btn-primary"
-                onClick={() => {
-                  if (!targetDomain.trim()) {
-                    setError('Please enter a valid deployed website URL');
-                    return;
-                  }
-                  setError(null);
-                  setStep(3);
-                }}
+                onClick={handleCreate}
+                disabled={createProject.isPending}
+                id="create-project-submit"
               >
-                Next: Ownership Verification <ArrowRight size={16} />
+                {createProject.isPending ? 'Creating…' : 'Create project'}
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Verify Ownership & Create Project */}
-        {step === 3 && (
-          <div>
-            <div style={{
-              background: 'rgba(15, 23, 42, 0.6)',
-              border: '1px solid var(--border-color)',
-              borderRadius: '10px',
-              padding: '16px',
-              marginBottom: '20px'
-            }}>
-              <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HelpCircle size={16} color="var(--primary)" /> Ownership Verification Setup (.well-known)
-              </h4>
-
-              <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                To authorize active scanning, upload <code className="mono" style={{ color: '#00F0FF' }}>arve-verification.txt</code> to your website root:
-              </div>
-
-              <div className="code-box" style={{ marginBottom: '10px' }}>
-                <span>arve-verification.txt</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => copyToClipboard('arve-verification.txt', 'file')}>
-                  {copiedFile ? <Check size={14} color="#34D399" /> : <Copy size={14} />} Copy Name
-                </button>
-              </div>
-
-              <div className="code-box" style={{ marginBottom: '12px' }}>
-                <span>{verificationToken}</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => copyToClipboard(verificationToken, 'token')}>
-                  {copiedToken ? <Check size={14} color="#34D399" /> : <Copy size={14} />} Copy Token
-                </button>
-              </div>
-
-              <div style={{ fontSize: '12px', color: 'var(--text-dim)' }} className="mono">
-                Target URL: http(s)://{targetDomain.replace(/^https?:\/\//i, '')}/.well-known/arve-verification.txt
-              </div>
-            </div>
-
-            {verificationMsg && (
-              <div style={{
-                background: 'rgba(16, 185, 129, 0.12)',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                borderRadius: '8px',
-                padding: '12px',
-                marginBottom: '20px',
-                color: '#34D399',
-                fontSize: '13px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                <CheckCircle2 size={18} /> {verificationMsg}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'space-between', marginTop: '28px' }}>
-              <button className="btn btn-secondary" onClick={() => setStep(2)}>
-                <ArrowLeft size={16} /> Back
-              </button>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="btn btn-secondary" onClick={handleTestVerification} disabled={verifying}>
-                  {verifying ? <RefreshCw size={16} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> : 'Test Verification'}
-                </button>
-
-                <button className="btn btn-primary" onClick={handleFinalSubmit} disabled={creating}>
-                  {creating ? 'Creating ARVE Project...' : 'Finalize & Create Project'}
-                </button>
-              </div>
             </div>
           </div>
         )}

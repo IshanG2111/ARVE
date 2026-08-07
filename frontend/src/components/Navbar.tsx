@@ -1,87 +1,69 @@
 import React from 'react';
-import { ShieldCheck, LogOut, User as UserIcon, Plus } from 'lucide-react';
-import type { User } from '../services/api';
+import { useNavigate } from 'react-router-dom';
+import { logout } from '../services/api';
+import { useQueryClient } from '@tanstack/react-query';
+import type { User } from '../types';
 
 interface NavbarProps {
   user: User | null;
-  onLogout: () => void;
-  onOpenNewProject: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ user, onLogout, onOpenNewProject }) => {
+export const Navbar: React.FC<NavbarProps> = ({ user }) => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const handleLogout = () => {
+    logout();
+    queryClient.clear();
+    navigate('/');
+  };
+
+  const displayName = user?.username || user?.github_login || user?.email?.split('@')[0];
+
   return (
-    <header style={{
-      borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-      background: 'rgba(7, 11, 20, 0.85)',
-      backdropFilter: 'blur(16px)',
-      position: 'sticky',
-      top: 0,
-      zIndex: 40
-    }}>
-      <div style={{
-        maxWidth: '1200px',
-        margin: '0 auto',
-        padding: '16px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        {/* Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '10px',
-            background: 'linear-gradient(135deg, #00F0FF 0%, #6366F1 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 0 20px rgba(0, 240, 255, 0.3)'
-          }}>
-            <ShieldCheck size={24} color="#070B14" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 style={{ fontSize: '20px', fontWeight: 700, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              ARVE <span style={{ fontSize: '11px', fontWeight: 600, background: 'rgba(0, 240, 255, 0.15)', color: '#00F0FF', border: '1px solid rgba(0, 240, 255, 0.3)', padding: '2px 8px', borderRadius: '12px' }}>Phase 1</span>
-            </h1>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Adaptive Remediation & Verification Engine</p>
-          </div>
-        </div>
+    <header className="navbar">
+      <div className="page-container navbar-inner">
 
-        {/* User Controls */}
-        {user ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <button className="btn btn-primary btn-sm" onClick={onOpenNewProject}>
-              <Plus size={16} /> New Project
-            </button>
+        {/* Brand — text only, no icon */}
+        <button
+          className="brand-name"
+          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          onClick={() => navigate(user ? '/dashboard' : '/')}
+          id="brand-link"
+        >
+          ARVE
+          <span className="brand-version">Sprint 1</span>
+        </button>
 
-            <div style={{ height: '24px', width: '1px', background: 'var(--border-color)' }} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                background: 'rgba(30, 41, 59, 0.8)',
-                border: '1px solid var(--border-color)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--primary)'
-              }}>
-                <UserIcon size={16} />
+        {/* User controls */}
+        {user && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div className="user-avatar">
+                {user.avatar_url || user.github_avatar ? (
+                  <img
+                    src={user.avatar_url || user.github_avatar}
+                    alt={displayName}
+                  />
+                ) : (
+                  (displayName || 'U')[0].toUpperCase()
+                )}
               </div>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '13px', fontWeight: 600 }}>{user.full_name || user.email.split('@')[0]}</div>
-                <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>{user.email}</div>
-              </div>
+              <span className="nav-user-name">{displayName}</span>
             </div>
 
-            <button className="btn btn-secondary btn-sm" onClick={onLogout} title="Sign Out">
-              <LogOut size={16} />
+            <div style={{ width: '1px', height: '18px', background: 'var(--border-mid)' }} />
+
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: '12px', color: 'var(--ink-50)' }}
+              onClick={handleLogout}
+              id="logout-btn"
+            >
+              Sign out
             </button>
           </div>
-        ) : null}
+        )}
       </div>
     </header>
   );

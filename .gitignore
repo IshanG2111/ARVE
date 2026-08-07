@@ -1,0 +1,32 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
+# Databases & local SQLite
+*.db
+*.sqlite
+*.sqlite3
+backend/arve.db
+backend/test_arve.db
+
+# Python & test caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# Node & Build outputs
+node_modules/
+dist/
+dist-ssr/
+build/
+*.log
+.DS_Store
+.vscode/
+.idea/

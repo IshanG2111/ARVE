@@ -1,82 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useAuth } from './hooks/useAuth';
 import { Navbar } from './components/Navbar';
-import { AuthView } from './components/AuthView';
-import { Dashboard } from './components/Dashboard';
-import { ProjectWizardModal } from './components/ProjectWizardModal';
-import { api, type User, type Project } from './services/api';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { LandingPage } from './pages/LandingPage';
+import { DashboardPage } from './pages/DashboardPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
+import { CallbackPage } from './pages/CallbackPage';
 
-export const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-
-  const fetchUserAndProjects = async () => {
-    try {
-      const currentUser = await api.me();
-      setUser(currentUser);
-      const projs = await api.getProjects();
-      setProjects(projs);
-    } catch (err) {
-      setUser(null);
-      setProjects([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchUserAndProjects();
-  }, []);
-
-  const handleLogout = () => {
-    api.logout();
-    setUser(null);
-    setProjects([]);
-  };
-
+/** Guard: redirect authenticated users away from landing */
+function PublicOnly({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--primary)',
-        fontSize: '16px',
-        fontWeight: 600
-      }}>
-        Loading ARVE Security Engine...
+      <div className="screen-center">
+        <div className="spinner" />
       </div>
     );
   }
+  if (user) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
+export const App: React.FC = () => {
+  const { user } = useAuth();
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Navbar
-        user={user}
-        onLogout={handleLogout}
-        onOpenNewProject={() => setShowCreateModal(true)}
-      />
-
+      <Navbar user={user} />
       <main style={{ flex: 1 }}>
-        {!user ? (
-          <AuthView onAuthSuccess={() => fetchUserAndProjects()} />
-        ) : (
-          <Dashboard
-            projects={projects}
-            onRefresh={fetchUserAndProjects}
-            onOpenNewProject={() => setShowCreateModal(true)}
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <PublicOnly>
+                <LandingPage />
+              </PublicOnly>
+            }
           />
-        )}
+          <Route path="/auth/github/callback" element={<CallbackPage />} />
+          <Route element={<ProtectedRoute />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          </Route>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
-
-      {showCreateModal && (
-        <ProjectWizardModal
-          onClose={() => setShowCreateModal(false)}
-          onProjectCreated={() => fetchUserAndProjects()}
-        />
-      )}
     </div>
   );
 };

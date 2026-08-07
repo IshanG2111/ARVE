@@ -86,26 +86,32 @@ async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get
                 "avatar_url": gh_data.get("avatar_url")
             }
 
+    gh_id_str = str(gh_user["id"])
+    email = gh_user.get("email") or f"{gh_user['login']}@users.noreply.github.com"
+    login = gh_user["login"]
+    avatar = gh_user.get("avatar_url")
+
     # Find or create user in DB
-    user = db.query(User).filter(User.github_id == gh_user["id"]).first()
+    user = db.query(User).filter((User.github_id == gh_id_str) | (User.email == email)).first()
     if not user:
-        # Check by email
-        user = db.query(User).filter(User.email == gh_user["email"]).first()
-        if user:
-            user.github_id = gh_user["id"]
-            user.github_login = gh_user["login"]
-            user.github_avatar = gh_user["avatar_url"]
-            user.github_access_token = access_token_gh
-        else:
-            user = User(
-                email=gh_user["email"],
-                full_name=gh_user["name"],
-                github_id=gh_user["id"],
-                github_login=gh_user["login"],
-                github_avatar=gh_user["avatar_url"],
-                github_access_token=access_token_gh
-            )
-            db.add(user)
+        user = User(
+            email=email,
+            full_name=gh_user.get("name") or login,
+            github_id=gh_id_str,
+            github_login=login,
+            github_avatar=avatar,
+            username=login,
+            avatar_url=avatar,
+            github_access_token=access_token_gh,
+        )
+        db.add(user)
+    else:
+        user.github_id = gh_id_str
+        user.github_login = login
+        user.github_avatar = avatar
+        user.username = login
+        user.avatar_url = avatar
+        user.github_access_token = access_token_gh
 
     db.commit()
     db.refresh(user)
@@ -176,4 +182,37 @@ async def list_github_repositories(
             language="JavaScript",
             description="Identity and access management portal"
         ),
+    ]
+
+
+@router.get("/branches")
+async def get_branches_by_full_name(
+    full_name: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Returns branches for a given repo full_name (owner/repo).
+    Used by the wizard before the repository is persisted in the DB.
+    """
+    from app.schemas.schemas import BranchResponse
+    token = current_user.github_access_token
+    is_real = token and token != "mock_github_access_token_123"
+
+    if is_real and full_name:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{full_name}/branches?per_page=50",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code == 200:
+                return [
+                    BranchResponse(name=b["name"], protected=b.get("protected", False))
+                    for b in resp.json()
+                ]
+
+    # Demo fallback
+    return [
+        BranchResponse(name="main", protected=True),
+        BranchResponse(name="develop", protected=False),
+        BranchResponse(name="staging", protected=False),
     ]
