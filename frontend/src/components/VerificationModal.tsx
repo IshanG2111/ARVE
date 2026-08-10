@@ -56,7 +56,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
         {/* Header */}
         <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Globe size={16} color={target.is_verified ? 'var(--green)' : 'var(--amber)'} />
+            <Globe size={16} color={target.is_verified ? 'var(--success)' : 'var(--medium)'} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="modal-title">{target.domain}</span>
@@ -81,9 +81,9 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
           padding: '16px',
           marginBottom: '16px'
         }}>
-          <p style={{ fontSize: '12px', color: 'var(--text-2)', marginBottom: '12px' }}>
-            Upload <code style={{ color: 'var(--cyan)' }}>arve-verification.txt</code> to{' '}
-            <code style={{ color: 'var(--text-1)' }}>{target.domain}/.well-known/</code>
+          <p style={{ fontSize: '12px', color: 'var(--secondary)', marginBottom: '12px' }}>
+            Upload <code style={{ color: 'var(--accent)' }}>arve-verification.txt</code> to{' '}
+            <code style={{ color: 'var(--primary)' }}>{target.domain}/.well-known/</code>
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -92,7 +92,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
               <div className="code-box">
                 <span>{fileName}</span>
                 <button className="btn btn-ghost btn-icon" onClick={() => copy(fileName, 'file')} title="Copy filename">
-                  {copiedFile ? <Check size={13} color="var(--green)" /> : <Copy size={13} />}
+                  {copiedFile ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
                 </button>
               </div>
             </div>
@@ -102,14 +102,14 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
               <div className="code-box">
                 <span style={{ wordBreak: 'break-all', flex: 1 }}>{target.verification_token}</span>
                 <button className="btn btn-ghost btn-icon" onClick={() => copy(target.verification_token, 'token')} title="Copy token">
-                  {copiedToken ? <Check size={13} color="var(--green)" /> : <Copy size={13} />}
+                  {copiedToken ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
                 </button>
               </div>
             </div>
 
             <div>
               <div className="label" style={{ marginBottom: '4px' }}>Must be accessible at</div>
-              <div style={{ font: 'var(--mono)', fontSize: '11.5px', color: 'var(--text-3)', wordBreak: 'break-all', padding: '6px 0' }}>
+              <div style={{ fontFamily: 'var(--font-code)', fontSize: '11.5px', color: 'var(--muted)', wordBreak: 'break-all', padding: '6px 0' }}>
                 {expectedUrl}
               </div>
             </div>
@@ -128,7 +128,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
                 {result.is_verified ? 'Domain authorized.' : 'Verification failed.'}
               </div>
               <div style={{ marginTop: '2px', opacity: 0.85 }}>{result.message}</div>
-              <div style={{ marginTop: '3px', fontFamily: 'var(--mono)', fontSize: '11px', opacity: 0.6 }}>
+              <div style={{ marginTop: '3px', fontFamily: 'var(--font-code)', fontSize: '11px', opacity: 0.6 }}>
                 {result.checked_url}
               </div>
             </div>
@@ -141,7 +141,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
             href={`http://localhost:8000/mock-verification-file/${target.verification_token}`}
             target="_blank"
             rel="noreferrer"
-            style={{ fontSize: '11px', color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
+            style={{ fontSize: '11px', color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}
           >
             Dev: test mock file <ExternalLink size={10} />
           </a>

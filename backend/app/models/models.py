@@ -14,10 +14,12 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
+    firebase_uid = Column(String, unique=True, index=True, nullable=True)
     github_id = Column(String, unique=True, index=True, nullable=True)
     username = Column(String, nullable=True)          # GitHub username / login
     email = Column(String, unique=True, index=True, nullable=False)
     avatar_url = Column(String, nullable=True)        # GitHub avatar
+
     # Internal / legacy fields (kept for OAuth-only backward compat)
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=True)

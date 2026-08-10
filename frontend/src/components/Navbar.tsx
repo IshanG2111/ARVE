@@ -52,11 +52,11 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
               <span className="nav-user-name">{displayName}</span>
             </div>
 
-            <div style={{ width: '1px', height: '18px', background: 'var(--border-mid)' }} />
+            <div style={{ width: '1px', height: '18px', background: 'var(--border)' }} />
 
             <button
               className="btn btn-ghost"
-              style={{ fontSize: '12px', color: 'var(--ink-50)' }}
+              style={{ fontSize: '12px' }}
               onClick={handleLogout}
               id="logout-btn"
             >

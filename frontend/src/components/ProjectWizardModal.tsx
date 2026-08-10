@@ -91,7 +91,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
           <div className="modal-title">New project</div>
           <button
             className="btn btn-ghost"
-            style={{ fontSize: '18px', padding: '0 4px', lineHeight: 1, color: 'var(--ink-50)' }}
+            style={{ fontSize: '18px', padding: '0 4px', lineHeight: 1, color: 'var(--muted)' }}
             onClick={onClose}
             id="close-wizard"
           >
@@ -130,7 +130,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
             {loadingRepos ? (
               <div style={{ padding: '32px', textAlign: 'center' }}>
                 <div className="spinner" style={{ margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '12px', color: 'var(--ink-30)' }}>Loading repositories…</p>
+                <p style={{ fontSize: '12px', color: 'var(--dim)' }}>Loading repositories…</p>
               </div>
             ) : repos.length === 0 ? (
               <div className="alert alert-info" style={{ marginBottom: '16px' }}>
@@ -174,12 +174,12 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
             {selectedRepo && (
               <div style={{
                 padding: '10px 14px',
-                background: 'var(--ink-5)',
+                background: 'var(--elevated)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)',
                 marginBottom: '20px',
                 fontSize: '12.5px',
-                color: 'var(--ink-70)',
+                color: 'var(--secondary)',
                 fontWeight: 500,
               }}>
                 {selectedRepo.full_name}
@@ -191,7 +191,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
             {loadingBranches ? (
               <div style={{ padding: '20px', textAlign: 'center' }}>
                 <div className="spinner" style={{ margin: '0 auto 8px' }} />
-                <p style={{ fontSize: '12px', color: 'var(--ink-30)' }}>Loading branches…</p>
+                <p style={{ fontSize: '12px', color: 'var(--dim)' }}>Loading branches…</p>
               </div>
             ) : (
               <div className="list-scroll" style={{ maxHeight: '200px' }}>
@@ -231,15 +231,15 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
             {selectedRepo && (
               <div style={{
                 padding: '12px 14px',
-                background: 'var(--ink-5)',
+                background: 'var(--elevated)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-md)',
                 marginBottom: '20px',
                 fontSize: '12.5px',
-                color: 'var(--ink-70)',
+                color: 'var(--secondary)',
               }}>
                 <div style={{ fontWeight: 600 }}>{selectedRepo.full_name}</div>
-                <div style={{ marginTop: '2px', color: 'var(--ink-50)' }}>Branch: {selectedBranch}</div>
+                <div style={{ marginTop: '2px', color: 'var(--muted)' }}>Branch: {selectedBranch}</div>
               </div>
             )}
 
@@ -255,7 +255,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
-              <span style={{ fontSize: '11px', color: 'var(--ink-30)', marginTop: '2px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '2px' }}>
                 The live deployment associated with this repository
               </span>
             </div>

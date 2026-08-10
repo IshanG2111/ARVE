@@ -9,9 +9,10 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core import security
 from app.auth.github import build_authorize_url, exchange_code_for_token, fetch_github_user
+from app.auth.firebase_auth import verify_firebase_token
 from app.auth.jwt import create_access_token
 from app.models.models import User
-from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token
+from app.schemas.schemas import UserCreate, UserLogin, UserResponse, Token, FirebaseLogin
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -22,6 +23,68 @@ COOKIE_KWARGS = dict(
     samesite="lax",
     max_age=settings.effective_jwt_expire_minutes * 60,
 )
+
+
+@router.post("/firebase", response_model=Token)
+async def firebase_login(
+    payload: FirebaseLogin,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    """
+    Verifies Firebase ID token, upserts User record with firebase_uid,
+    github_access_token, and outputs ARVE access token + sets HTTP-only cookie.
+    """
+    try:
+        fb_data = await verify_firebase_token(payload.id_token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Firebase verification failed: {str(e)}")
+
+    firebase_uid = fb_data.get("uid")
+    email = fb_data.get("email") or f"{firebase_uid}@users.firebase.local"
+    name = fb_data.get("name") or "Firebase User"
+    avatar = fb_data.get("picture")
+    username = fb_data.get("github_username") or email.split("@")[0]
+    github_id = fb_data.get("github_id")
+
+    user = db.query(User).filter(
+        (User.firebase_uid == firebase_uid) | (User.email == email)
+    ).first()
+
+    if not user:
+        user = User(
+            firebase_uid=firebase_uid,
+            github_id=github_id,
+            email=email,
+            full_name=name,
+            username=username,
+            avatar_url=avatar,
+            github_login=username,
+            github_avatar=avatar,
+            github_access_token=payload.github_access_token,
+        )
+        db.add(user)
+    else:
+        user.firebase_uid = firebase_uid
+        if github_id:
+            user.github_id = github_id
+        if avatar:
+            user.avatar_url = avatar
+            user.github_avatar = avatar
+        if username:
+            user.username = username
+            user.github_login = username
+        if payload.github_access_token:
+            user.github_access_token = payload.github_access_token
+
+    db.commit()
+    db.refresh(user)
+
+    jwt_token = create_access_token(user.id)
+    response.set_cookie("access_token", jwt_token, **COOKIE_KWARGS)
+
+    return {"access_token": jwt_token, "token_type": "bearer"}
+
 
 
 @router.get("/github/login")

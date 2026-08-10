@@ -1,38 +1,42 @@
-from pydantic_settings import BaseSettings
+import os
+from pathlib import Path
 from typing import List, Optional
+from pydantic_settings import BaseSettings
+
+# Absolute paths to backend/.env and workspace root/.env
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = BASE_DIR.parent
+
+ENV_FILES = (
+    str(BASE_DIR / ".env"),
+    str(ROOT_DIR / ".env"),
+)
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ARVE - Adaptive Remediation & Verification Engine"
     API_V1_STR: str = "/api"
 
     # JWT Settings
-    jwt_secret: str = "arve-secret-key-super-secure-change-in-production-2026"
-    SECRET_KEY: Optional[str] = None
-    jwt_algorithm: str = "HS256"
-    ALGORITHM: Optional[str] = None
-    jwt_expire_minutes: int = 10080  # 7 days
-    ACCESS_TOKEN_EXPIRE_MINUTES: Optional[int] = None
+    JWT_SECRET: str = "arve-secret-key-super-secure-change-in-production-2026"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
 
     # Database
-    database_url: str = "sqlite:///./arve.db"
-    DATABASE_URL: Optional[str] = None
+    DATABASE_URL: str = "sqlite:///./arve.db"
 
     # GitHub OAuth
-    github_client_id: str = "arve_demo_client_id"
-    GITHUB_CLIENT_ID: Optional[str] = None
-
-    github_client_secret: str = "arve_demo_client_secret"
-    GITHUB_CLIENT_SECRET: Optional[str] = None
-
-    github_redirect_uri: str = "http://localhost:8000/auth/github/callback"
-    GITHUB_REDIRECT_URI: Optional[str] = None
-
-    github_oauth_scope: str = "read:user user:email repo"
-    GITHUB_OAUTH_SCOPE: Optional[str] = None
+    GITHUB_CLIENT_ID: str = "arve_demo_client_id"
+    GITHUB_CLIENT_SECRET: str = "arve_demo_client_secret"
+    GITHUB_REDIRECT_URI: str = "http://localhost:8000/auth/github/callback"
+    GITHUB_OAUTH_SCOPE: str = "read:user user:email repo"
 
     # Frontend
-    frontend_url: str = "http://localhost:5173"
-    FRONTEND_URL: Optional[str] = None
+    FRONTEND_URL: str = "http://localhost:5173"
+
+    # Firebase Auth Settings
+    FIREBASE_PROJECT_ID: Optional[str] = "arve-fe63b"
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = None
+    FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
 
     BACKEND_CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
@@ -41,41 +45,64 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    class Config:
-        case_sensitive = False
-        env_file = ".env"
-        extra = "allow"
+    model_config = {
+        "case_sensitive": False,
+        "env_file": ENV_FILES,
+        "extra": "ignore",
+    }
+
+    # Lowercase properties matching standard settings pattern
+    @property
+    def github_client_id(self) -> str:
+        return self.GITHUB_CLIENT_ID
 
     @property
-    def effective_jwt_secret(self) -> str:
-        return self.jwt_secret or self.SECRET_KEY or "arve-secret-key-super-secure-change-in-production-2026"
+    def github_client_secret(self) -> str:
+        return self.GITHUB_CLIENT_SECRET
 
     @property
-    def effective_jwt_algorithm(self) -> str:
-        return self.jwt_algorithm or self.ALGORITHM or "HS256"
+    def github_redirect_uri(self) -> str:
+        return self.GITHUB_REDIRECT_URI
 
     @property
-    def effective_jwt_expire_minutes(self) -> int:
-        return self.jwt_expire_minutes or self.ACCESS_TOKEN_EXPIRE_MINUTES or 10080
+    def github_oauth_scope(self) -> str:
+        return self.GITHUB_OAUTH_SCOPE
 
+    # Effective getters for backward compatibility
     @property
     def effective_github_client_id(self) -> str:
-        return self.github_client_id or self.GITHUB_CLIENT_ID or "arve_demo_client_id"
+        return self.GITHUB_CLIENT_ID
 
     @property
     def effective_github_client_secret(self) -> str:
-        return self.github_client_secret or self.GITHUB_CLIENT_SECRET or "arve_demo_client_secret"
+        return self.GITHUB_CLIENT_SECRET
 
     @property
     def effective_github_redirect_uri(self) -> str:
-        return self.github_redirect_uri or self.GITHUB_REDIRECT_URI or "http://localhost:8000/auth/github/callback"
+        return self.GITHUB_REDIRECT_URI
 
     @property
     def effective_github_oauth_scope(self) -> str:
-        return self.github_oauth_scope or self.GITHUB_OAUTH_SCOPE or "read:user user:email repo"
+        return self.GITHUB_OAUTH_SCOPE
+
+    @property
+    def effective_jwt_secret(self) -> str:
+        return self.JWT_SECRET
+
+    @property
+    def effective_jwt_algorithm(self) -> str:
+        return self.JWT_ALGORITHM
+
+    @property
+    def effective_jwt_expire_minutes(self) -> int:
+        return self.JWT_EXPIRE_MINUTES
 
     @property
     def effective_frontend_url(self) -> str:
-        return self.frontend_url or self.FRONTEND_URL or "http://localhost:5173"
+        return self.FRONTEND_URL
+
+    @property
+    def effective_firebase_project_id(self) -> Optional[str]:
+        return self.FIREBASE_PROJECT_ID
 
 settings = Settings()

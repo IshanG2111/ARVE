@@ -74,7 +74,7 @@ export const DashboardPage: React.FC = () => {
         </div>
         <div className="stat-cell">
           <div className="stat-label">Scans</div>
-          <div className="stat-value" style={{ color: 'var(--ink-30)' }}>—</div>
+          <div className="stat-value" style={{ color: 'var(--dim)' }}>—</div>
         </div>
       </div>
 

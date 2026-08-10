@@ -41,7 +41,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
         <div className="modal-header">
           <div>
             <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Globe size={16} color="var(--cyan)" />
+              <Globe size={16} color="var(--accent)" />
               Add Target Domain
             </div>
             <div className="modal-sub">{projectName}</div>
@@ -74,7 +74,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
                 id="target-domain-input"
               />
             </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '4px' }}>
+            <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
               Only add domains you own or are explicitly authorized to test.
             </span>
           </div>

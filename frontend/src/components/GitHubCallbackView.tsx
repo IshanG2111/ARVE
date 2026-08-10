@@ -39,8 +39,8 @@ export const GitHubCallbackView: React.FC<GitHubCallbackViewProps> = ({ onSucces
       <div className="screen-center">
         <div style={{
           width: '40px', height: '40px', borderRadius: '10px',
-          background: 'var(--red-dim)', border: '1px solid rgba(248,81,73,0.25)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--red)'
+          background: 'var(--critical-bg)', border: '1px solid rgba(239,68,68,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--critical)'
         }}>
           <AlertCircle size={20} strokeWidth={2} />
         </div>
@@ -49,7 +49,7 @@ export const GitHubCallbackView: React.FC<GitHubCallbackViewProps> = ({ onSucces
           <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '6px' }}>
             Authentication Failed
           </h2>
-          <p style={{ fontSize: '13px', color: 'var(--text-2)', lineHeight: 1.55 }}>{error}</p>
+          <p style={{ fontSize: '13px', color: 'var(--secondary)', lineHeight: 1.55 }}>{error}</p>
         </div>
 
         <button className="btn btn-ghost" onClick={() => window.location.replace('/')}>
@@ -67,10 +67,10 @@ export const GitHubCallbackView: React.FC<GitHubCallbackViewProps> = ({ onSucces
       </div>
       <div className="spinner" />
       <div style={{ textAlign: 'center' }}>
-        <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-1)', marginBottom: '3px' }}>
+        <p style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginBottom: '3px' }}>
           Signing you in…
         </p>
-        <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+        <p style={{ fontSize: '12px', color: 'var(--muted)' }}>
           Exchanging GitHub authorization code
         </p>
       </div>

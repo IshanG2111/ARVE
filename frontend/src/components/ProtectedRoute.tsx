@@ -9,7 +9,7 @@ export function ProtectedRoute({ children }: { children?: React.ReactNode }) {
     return (
       <div className="screen-center">
         <div className="spinner" />
-        <p style={{ fontSize: '12px', color: 'var(--ink-30)' }}>Loading…</p>
+        <p style={{ fontSize: '12px', color: 'var(--dim)' }}>Loading…</p>
       </div>
     );
   }

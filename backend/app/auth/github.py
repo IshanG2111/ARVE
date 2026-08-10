@@ -10,9 +10,9 @@ GITHUB_EMAILS_URL = "https://api.github.com/user/emails"
 
 def build_authorize_url(state: str) -> str:
     params = {
-        "client_id": settings.effective_github_client_id,
-        "redirect_uri": settings.effective_github_redirect_uri,
-        "scope": settings.effective_github_oauth_scope,
+        "client_id": settings.github_client_id,
+        "redirect_uri": settings.github_redirect_uri,
+        "scope": settings.github_oauth_scope,
         "state": state,
         "allow_signup": "true",
     }
@@ -20,16 +20,17 @@ def build_authorize_url(state: str) -> str:
 
 
 async def exchange_code_for_token(code: str) -> str:
+    payload = {
+        "client_id": settings.github_client_id,
+        "client_secret": settings.github_client_secret,
+        "code": code,
+        "redirect_uri": settings.github_redirect_uri,
+    }
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             GITHUB_TOKEN_URL,
             headers={"Accept": "application/json"},
-            data={
-                "client_id": settings.effective_github_client_id,
-                "client_secret": settings.effective_github_client_secret,
-                "code": code,
-                "redirect_uri": settings.effective_github_redirect_uri,
-            },
+            data=payload,
         )
         resp.raise_for_status()
         data = resp.json()

@@ -107,3 +107,25 @@ def test_github_oauth_mock():
     assert repos_resp.status_code == 200
     assert len(repos_resp.json()) >= 1
 
+
+def test_firebase_auth():
+    # Test Firebase login with mock token
+    fb_resp = client.post(
+        "/api/auth/firebase",
+        json={
+            "id_token": "mock_firebase_token_test123",
+            "github_access_token": "mock_gh_token_456"
+        }
+    )
+    assert fb_resp.status_code == 200
+    token = fb_resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Verify user profile returned via /api/auth/me has firebase_uid
+    me_resp = client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    user_data = me_resp.json()
+    assert user_data["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
+    assert user_data["email"] == "octocat@github.com"
+
+

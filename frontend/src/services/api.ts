@@ -37,7 +37,22 @@ export async function getMe(): Promise<User> {
   return handleResponse<User>(res);
 }
 
+export async function loginWithFirebase(idToken: string, githubAccessToken?: string): Promise<{ access_token: string }> {
+  const res = await fetch(`${BASE}/auth/firebase`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ id_token: idToken, github_access_token: githubAccessToken }),
+  });
+  const data = await handleResponse<{ access_token: string }>(res);
+  if (data.access_token) {
+    localStorage.setItem('arve_token', data.access_token);
+  }
+  return data;
+}
+
 export async function getGitHubAuthUrl(): Promise<{ auth_url: string; is_configured: boolean }> {
+
   const res = await fetch(`${BASE}/github/auth-url`, { credentials: 'include' });
   return handleResponse(res);
 }

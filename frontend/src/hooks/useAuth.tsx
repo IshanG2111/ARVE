@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getMe, logout as apiLogout, API_URL } from "../services/api";
+import { signInWithPopup, GithubAuthProvider, signOut as fbSignOut } from "firebase/auth";
+import { auth, githubProvider, isFirebaseConfigured } from "../config/firebase";
+import { getMe, loginWithFirebase, logout as apiLogout, API_URL } from "../services/api";
 import type { User } from "../types";
 
 interface AuthContextType {
@@ -7,7 +9,7 @@ interface AuthContextType {
   loading: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: () => void;
+  login: () => Promise<void>;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
 }
@@ -34,12 +36,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fetchUser();
   }, []);
 
-  const login = () => {
-    // full page redirect — NOT a fetch/axios call
-    window.location.href = `${API_URL}/auth/github/login`;
+  const login = async () => {
+    setLoading(true);
+    try {
+      if (isFirebaseConfigured) {
+        const result = await signInWithPopup(auth, githubProvider);
+        const credential = GithubAuthProvider.credentialFromResult(result);
+        const githubToken = credential?.accessToken;
+        const firebaseIdToken = await result.user.getIdToken();
+
+        await loginWithFirebase(firebaseIdToken, githubToken);
+        await fetchUser();
+      } else {
+        // Direct OAuth / Demo redirect fallback if Firebase API credentials are not set in .env
+        window.location.href = `${API_URL}/auth/github/login`;
+      }
+    } catch (err: any) {
+      console.error("Firebase authentication error:", err);
+      // Fallback to direct backend OAuth redirect on popup block or error
+      if (err?.code !== "auth/popup-closed-by-user") {
+        window.location.href = `${API_URL}/auth/github/login`;
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const logout = async () => {
+    try {
+      await fbSignOut(auth);
+    } catch {
+      // Ignore firebase signout error
+    }
     await apiLogout();
     setUser(null);
   };

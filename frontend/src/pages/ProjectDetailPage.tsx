@@ -49,7 +49,7 @@ export const ProjectDetailPage: React.FC = () => {
       {/* Back */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '24px', paddingLeft: 0, color: 'var(--ink-50)', fontSize: '12px' }}
+        style={{ marginBottom: '24px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
@@ -82,7 +82,7 @@ export const ProjectDetailPage: React.FC = () => {
               target="_blank"
               rel="noreferrer"
               className="detail-field-val"
-              style={{ color: 'var(--black)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+              style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
             >
               {repoFull}
             </a>
@@ -106,7 +106,7 @@ export const ProjectDetailPage: React.FC = () => {
         <div className="detail-field">
           <span className="detail-field-key">Deployment URL</span>
           <span className="detail-field-val">
-            {project.deployment_url || <span style={{ color: 'var(--ink-30)' }}>—</span>}
+            {project.deployment_url || <span style={{ color: 'var(--dim)' }}>—</span>}
           </span>
         </div>
 
@@ -114,8 +114,8 @@ export const ProjectDetailPage: React.FC = () => {
           <span className="detail-field-key">Verification</span>
           <span className="detail-field-val">
             {project.verified
-              ? <span style={{ color: '#1a7a42' }}>Verified</span>
-              : <span style={{ color: 'var(--ink-30)' }}>Pending</span>
+              ? <span style={{ color: 'var(--success)' }}>Verified</span>
+              : <span style={{ color: 'var(--dim)' }}>Pending</span>
             }
           </span>
         </div>
@@ -132,7 +132,7 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* Future modules */}
       <div>
-        <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--ink-30)', marginBottom: '12px' }}>
+        <div style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)', marginBottom: '12px' }}>
           Upcoming modules
         </div>
         <div className="modules-grid">

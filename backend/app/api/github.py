@@ -18,11 +18,11 @@ class GitHubAuthCallback(BaseModel):
 
 @router.get("/auth-url")
 def get_github_auth_url():
-    url = f"https://github.com/login/oauth/authorize?client_id={settings.GITHUB_CLIENT_ID}&scope=user,repo&redirect_uri={settings.GITHUB_REDIRECT_URI}"
+    url = f"https://github.com/login/oauth/authorize?client_id={settings.github_client_id}&scope=user,repo&redirect_uri={settings.github_redirect_uri}"
     return {
         "auth_url": url,
-        "client_id": settings.GITHUB_CLIENT_ID,
-        "is_configured": settings.GITHUB_CLIENT_ID != "arve_demo_client_id"
+        "client_id": settings.github_client_id,
+        "is_configured": settings.github_client_id != "arve_demo_client_id"
     }
 
 @router.post("/callback", response_model=Token)
@@ -44,10 +44,10 @@ async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get
                 "https://github.com/login/oauth/access_token",
                 headers={"Accept": "application/json"},
                 data={
-                    "client_id": settings.GITHUB_CLIENT_ID,
-                    "client_secret": settings.GITHUB_CLIENT_SECRET,
+                    "client_id": settings.github_client_id,
+                    "client_secret": settings.github_client_secret,
                     "code": payload.code,
-                    "redirect_uri": settings.GITHUB_REDIRECT_URI,
+                    "redirect_uri": settings.github_redirect_uri,
                 }
             )
             token_data = token_resp.json()

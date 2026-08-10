@@ -1,0 +1,13 @@
+{
+  "name": "arve-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ARVE - AI Security Pattern & Attack Intelligence",
+  "scripts": {
+    "start": "python run.py",
+    "dev": "python run.py",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "python -m uvicorn app.main:app --reload --port 8000 --app-dir backend",
+    "test": "npm run build --prefix frontend && python -m pytest backend/tests"
+  }
+}

@@ -1,15 +1,24 @@
 from fastapi import FastAPI, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import init_db
 from app.api import api_router
 from app.api.auth import router as auth_router
 from app.api.deps import get_current_user
 from app.schemas.schemas import UserResponse
 from app.models.models import User
 
-# Create database tables automatically
-Base.metadata.create_all(bind=engine)
+# Create database tables & apply schema updates automatically
+init_db()
+
+# Safe startup debug check for .env loading
+print("==================================================")
+print("ARVE Backend Environment Check:")
+print("GitHub Client ID:", settings.github_client_id)
+print("GitHub Secret loaded:", bool(settings.github_client_secret and settings.github_client_secret != "arve_demo_client_secret"))
+print("GitHub Secret length:", len(settings.github_client_secret))
+print("GitHub Redirect:", settings.github_redirect_uri)
+print("==================================================")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

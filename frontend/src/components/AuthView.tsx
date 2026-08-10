@@ -81,16 +81,16 @@ export const AuthView: React.FC<AuthViewProps> = ({ onAuthSuccess }) => {
           {/* Trust row */}
           <div className="auth-trust">
             <span className="trust-item"><Lock size={10} /> OAuth 2.0</span>
-            <span style={{ color: 'var(--border-hi)', fontSize: '10px' }}>·</span>
+            <span style={{ color: 'var(--border-hover)', fontSize: '10px' }}>·</span>
             <span className="trust-item"><Shield size={10} /> No password stored</span>
-            <span style={{ color: 'var(--border-hi)', fontSize: '10px' }}>·</span>
+            <span style={{ color: 'var(--border-hover)', fontSize: '10px' }}>·</span>
             <span className="trust-item"><Zap size={10} /> Instant access</span>
           </div>
         </div>
 
         <p className="auth-footer">
           GitHub scopes:{' '}
-          <code style={{ color: 'var(--text-2)' }}>user, repo</code>
+          <code style={{ color: 'var(--secondary)' }}>user, repo</code>
         </p>
       </div>
     </div>

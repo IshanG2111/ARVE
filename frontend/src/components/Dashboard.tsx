@@ -58,16 +58,16 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
         </div>
         <div className="card metric-card">
           <div className="metric-label">Authorized</div>
-          <div className="metric-value" style={{ color: 'var(--green)' }}>
+          <div className="metric-value" style={{ color: 'var(--success)' }}>
             {verifiedTargets}
-            <span style={{ fontSize: '14px', color: 'var(--text-3)', fontWeight: 400 }}>
+            <span style={{ fontSize: '14px', color: 'var(--muted)', fontWeight: 400 }}>
               {' '}/{totalTargets}
             </span>
           </div>
         </div>
         <div className="card metric-card">
           <div className="metric-label">Auth Rate</div>
-          <div className="metric-value" style={{ color: verificationRate === 100 ? 'var(--green)' : 'var(--text-1)' }}>
+          <div className="metric-value" style={{ color: verificationRate === 100 ? 'var(--success)' : 'var(--primary)' }}>
             {verificationRate}%
           </div>
           <div className="metric-bar">
@@ -119,11 +119,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
 
                     {project.repo_name && (
                       <div className="repo-badge">
-                        <GitHubIcon size={12} color="var(--cyan)" />
+                        <GitHubIcon size={12} color="var(--accent)" />
                         <a href={project.repo_url || '#'} target="_blank" rel="noreferrer">
                           {project.repo_name}
                         </a>
-                        <span style={{ color: 'var(--text-3)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <span style={{ color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                           <GitBranch size={10} />
                           {project.default_branch || 'main'}
                         </span>
@@ -131,7 +131,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
                     )}
 
                     {project.description && (
-                      <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '5px' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '5px' }}>
                         {project.description}
                       </p>
                     )}
@@ -176,7 +176,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
                       border: '1px solid var(--border)',
                       borderRadius: 'var(--radius-md)',
                       fontSize: '12px',
-                      color: 'var(--text-3)',
+                      color: 'var(--muted)',
                       textAlign: 'center'
                     }}>
                       No target URL linked — click "Add Target" to configure a domain.
@@ -186,7 +186,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
                       <div key={target.id} className="target-row">
                         <div style={{ minWidth: 0 }}>
                           <div className="target-domain">
-                            <Globe size={13} color="var(--text-3)" />
+                            <Globe size={13} color="var(--muted)" />
                             {target.domain}
                             <a
                               href={`https://${target.domain}`}

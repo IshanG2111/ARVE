@@ -31,10 +31,10 @@ export const CallbackPage: React.FC = () => {
     return (
       <div className="screen-center">
         <div className="card" style={{ padding: '32px', maxWidth: '380px', textAlign: 'center' }}>
-          <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '8px', color: 'var(--black)' }}>
+          <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '8px', color: 'var(--primary)' }}>
             Authentication failed
           </div>
-          <p style={{ fontSize: '13px', color: 'var(--ink-50)', marginBottom: '20px' }}>{error}</p>
+          <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '20px' }}>{error}</p>
           <button className="btn btn-primary" onClick={() => navigate('/')} id="back-to-home">
             Back to home
           </button>
@@ -46,7 +46,7 @@ export const CallbackPage: React.FC = () => {
   return (
     <div className="screen-center">
       <div className="spinner" style={{ width: '24px', height: '24px' }} />
-      <p style={{ fontSize: '13px', color: 'var(--ink-50)' }}>Completing sign-in…</p>
+      <p style={{ fontSize: '13px', color: 'var(--muted)' }}>Completing sign-in…</p>
     </div>
   );
 };
