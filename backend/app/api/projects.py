@@ -60,12 +60,15 @@ def create_project(
     # ── Derive a display name ────────────────────────────────────────────────
     name = project_in.name or (project_in.repo_name or "").split("/")[-1] or "Untitled"
 
+    dep_url = project_in.deployment_url.strip() if project_in.deployment_url and project_in.deployment_url.strip() else None
+    target_url = dep_url or project_in.target_domain
+
     project = Project(
         user_id=current_user.id,
         owner_id=current_user.id,      # legacy alias
         repository_id=repository_id,
         branch=project_in.branch or project_in.default_branch or "main",
-        deployment_url=project_in.deployment_url or project_in.target_domain,
+        deployment_url=target_url,
         verified=False,
         # legacy passthrough fields
         name=name,
@@ -79,13 +82,13 @@ def create_project(
     db.commit()
     db.refresh(project)
 
-    # ── Legacy: auto-create TargetWebsite if domain supplied ────────────────
-    if project_in.target_domain:
+    # ── Legacy: auto-create TargetWebsite if domain / deployment URL supplied ────────────────
+    if target_url:
         try:
             from app.services.verifier import clean_domain
-            domain_cleaned = clean_domain(project_in.target_domain)
+            domain_cleaned = clean_domain(target_url)
         except Exception:
-            domain_cleaned = project_in.target_domain
+            domain_cleaned = target_url
 
         if domain_cleaned:
             from app.models.models import TargetWebsite

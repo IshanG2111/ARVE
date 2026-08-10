@@ -55,14 +55,15 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
   };
 
   const handleCreate = async () => {
-    if (!deploymentUrl.trim()) { setError('Enter a deployment URL'); return; }
     if (!selectedRepo) { setError('No repository selected'); return; }
     setError(null);
+
+    const trimmedUrl = deploymentUrl.trim();
 
     createProject.mutate(
       {
         branch: selectedBranch,
-        deployment_url: deploymentUrl.trim(),
+        deployment_url: trimmedUrl || undefined,
         name: selectedRepo.name,
         description: selectedRepo.description || undefined,
         repo_name: selectedRepo.full_name,
@@ -244,19 +245,21 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
             )}
 
             <div className="field" style={{ marginBottom: '20px' }}>
-              <label className="label" htmlFor="deployment-url-input">Deployment URL</label>
+              <label className="label" htmlFor="deployment-url-input">
+                Deployment URL <span style={{ color: 'var(--dim)', fontWeight: 400 }}>(optional)</span>
+              </label>
               <input
                 id="deployment-url-input"
                 type="url"
                 className="input"
-                placeholder="https://my-app.vercel.app"
+                placeholder="https://my-app.vercel.app (optional)"
                 value={deploymentUrl}
                 onChange={(e) => setDeploymentUrl(e.target.value)}
                 autoFocus
                 onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               />
               <span style={{ fontSize: '11px', color: 'var(--dim)', marginTop: '2px' }}>
-                The live deployment associated with this repository
+                The live deployment associated with this repository (optional)
               </span>
             </div>
 

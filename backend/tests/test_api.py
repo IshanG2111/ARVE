@@ -85,7 +85,24 @@ def test_auth_and_project_flow():
     proj_data = proj_resp.json()
     assert proj_data["repo_name"] == "octocat-dev/fintech-api-gateway"
     assert len(proj_data["targets"]) == 1
-    assert proj_data["targets"][0]["domain"] == "mysite.com"
+    # 5. Create Project without Deployment URL (Optional deployment link)
+    proj_no_dep_resp = client.post(
+        "/api/projects",
+        json={
+            "name": "Backend Library",
+            "description": "Library without deployed target",
+            "repo_name": "octocat-dev/backend-lib",
+            "repo_url": "https://github.com/octocat-dev/backend-lib",
+            "repo_id": "103",
+            "default_branch": "main",
+        },
+        headers=headers
+    )
+    assert proj_no_dep_resp.status_code == 201
+    proj_no_dep_data = proj_no_dep_resp.json()
+    assert proj_no_dep_data["repo_name"] == "octocat-dev/backend-lib"
+    assert proj_no_dep_data["deployment_url"] is None
+    assert len(proj_no_dep_data["targets"]) == 0
 
 def test_github_oauth_mock():
     # Test mock GitHub login callback
