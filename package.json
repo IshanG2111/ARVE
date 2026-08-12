@@ -6,8 +6,8 @@
   "scripts": {
     "start": "python run.py",
     "dev": "python run.py",
-    "dev:frontend": "npm run dev --prefix frontend",
-    "dev:backend": "python -m uvicorn app.main:app --reload --port 8000 --app-dir backend",
+    "dev:frontend": "infisical run --env=dev --path=/frontend -- npm run dev --prefix frontend",
+    "dev:backend": "infisical run --env=dev --path=/backend -- python -m uvicorn app.main:app --reload --port 8000 --app-dir backend",
     "test": "npm run build --prefix frontend && python -m pytest backend/tests"
   }
 }
