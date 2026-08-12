@@ -1,39 +1,36 @@
-import os
 from pathlib import Path
 from typing import List, Optional
-from pydantic_settings import BaseSettings
 
-# Absolute paths to backend/.env and workspace root/.env
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 ROOT_DIR = BASE_DIR.parent
-
 ENV_FILES = (
     str(BASE_DIR / ".env"),
     str(ROOT_DIR / ".env"),
 )
 
+
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ARVE - Adaptive Remediation & Verification Engine"
     API_V1_STR: str = "/api"
 
-    # JWT Settings
+    ARVE_ENV: str = "dev"
+
     JWT_SECRET: str = "arve-secret-key-super-secure-change-in-production-2026"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    JWT_EXPIRE_MINUTES: int = 10080
 
-    # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/arve_db"
 
-    # GitHub OAuth
     GITHUB_CLIENT_ID: str = "arve_demo_client_id"
     GITHUB_CLIENT_SECRET: str = "arve_demo_client_secret"
     GITHUB_REDIRECT_URI: str = "http://localhost:8000/auth/github/callback"
     GITHUB_OAUTH_SCOPE: str = "read:user user:email repo"
 
-    # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # Firebase Auth Settings
     FIREBASE_PROJECT_ID: Optional[str] = "arve-fe63b"
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
@@ -45,13 +42,29 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     ]
 
-    model_config = {
-        "case_sensitive": False,
-        "env_file": ENV_FILES,
-        "extra": "ignore",
-    }
+    model_config = SettingsConfigDict(
+        case_sensitive=False,
+        env_file=ENV_FILES,
+        extra="ignore",
+    )
 
-    # Lowercase properties matching standard settings pattern
+    @model_validator(mode="after")
+    def validate_runtime_security(self):
+        if self.ARVE_ENV.lower() in {"prod", "production"}:
+            if self.JWT_SECRET == "arve-secret-key-super-secure-change-in-production-2026":
+                raise ValueError("JWT_SECRET must be explicitly configured in production")
+            if self.GITHUB_CLIENT_ID == "arve_demo_client_id" or self.GITHUB_CLIENT_SECRET == "arve_demo_client_secret":
+                raise ValueError("Demo GitHub credentials cannot be used in production")
+        return self
+
+    @property
+    def is_development(self) -> bool:
+        return self.ARVE_ENV.lower() in {"dev", "development", "test"}
+
+    @property
+    def is_production(self) -> bool:
+        return self.ARVE_ENV.lower() in {"prod", "production"}
+
     @property
     def github_client_id(self) -> str:
         return self.GITHUB_CLIENT_ID
@@ -68,7 +81,6 @@ class Settings(BaseSettings):
     def github_oauth_scope(self) -> str:
         return self.GITHUB_OAUTH_SCOPE
 
-    # Effective getters for backward compatibility
     @property
     def effective_github_client_id(self) -> str:
         return self.GITHUB_CLIENT_ID
@@ -104,5 +116,10 @@ class Settings(BaseSettings):
     @property
     def effective_firebase_project_id(self) -> Optional[str]:
         return self.FIREBASE_PROJECT_ID
+
+    @property
+    def cookie_secure(self) -> bool:
+        return self.is_production or self.FRONTEND_URL.lower().startswith("https://")
+
 
 settings = Settings()
