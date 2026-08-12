@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="140" height="44" viewBox="0 0 140 44">
+<g fill="none" stroke="currentColor" stroke-width="1.5">
+  <rect x="2" y="4" width="36" height="36"/>
+  <path d="M8 32V12h8c5 0 8 3 8 7s-3 7-8 7h-8m8-7 10 13"/>
+  <path d="M5 8h30M5 36h30M8 5v34M32 5v34" opacity=".45"/>
+</g>
+<text x="50" y="29" font-family="Arial, sans-serif" font-size="22" letter-spacing="6" fill="currentColor">ARVE</text>
+</svg>

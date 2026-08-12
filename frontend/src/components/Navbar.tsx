@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { logout } from '../services/api';
+import { useAuth } from '../hooks/useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 import type { User } from '../types';
 
@@ -12,9 +12,10 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     queryClient.clear();
     navigate('/');
   };
@@ -31,33 +32,56 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           onClick={() => navigate(user ? '/dashboard' : '/')}
           id="brand-link"
         >
-          <div className="brand-icon">A</div>
-          ARVE
-          <span className="brand-version">v1.0</span>
+          <img
+            src="/assets/arve-mark.svg"
+            alt="ARVE"
+            style={{ height: '24px', filter: 'brightness(0) invert(1)', opacity: 0.9 }}
+          />
         </button>
 
-        {/* Navigation Links for Public View */}
+        {/* Public Navigation Links */}
         {!user && (
           <div className="nav-links">
-            <a href="#workbench-section" className="nav-link">Workflow</a>
-            <a href="#features-section" className="nav-link">Capabilities</a>
-            <a href="#trust-section" className="nav-link">Security &amp; OAuth</a>
+            <a
+              href="https://github.com/IshanG2111/ARVE"
+              target="_blank"
+              rel="noreferrer"
+              className="nav-link"
+            >
+              DOCS
+            </a>
+            <a
+              href="https://github.com/IshanG2111/ARVE"
+              target="_blank"
+              rel="noreferrer"
+              className="nav-link"
+            >
+              GITHUB
+            </a>
+            <span
+              className="nav-link"
+              style={{ cursor: 'default' }}
+            >
+              ABOUT
+            </span>
           </div>
         )}
 
-        {/* Authenticated User Navigation & Controls */}
+        {/* Authenticated User Navigation */}
         {user ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <button
-              className={`btn btn-ghost ${location.pathname === '/dashboard' ? 'active' : ''}`}
+              className="nav-link"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: location.pathname === '/dashboard' ? 'var(--primary)' : 'var(--muted)',
+              }}
               onClick={() => navigate('/dashboard')}
               id="nav-dashboard-link"
-              style={{ fontSize: '13px', color: location.pathname === '/dashboard' ? 'var(--primary)' : 'var(--muted)' }}
             >
-              Dashboard
+              DASHBOARD
             </button>
-
-            <div style={{ width: '1px', height: '18px', background: 'var(--border)' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div className="user-avatar">
@@ -70,16 +94,15 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                   (displayName || 'U')[0].toUpperCase()
                 )}
               </div>
-              <span className="nav-user-name">{displayName}</span>
             </div>
 
             <button
-              className="btn btn-ghost"
-              style={{ fontSize: '12px' }}
+              className="nav-link"
+              style={{ background: 'none', border: 'none', color: 'var(--dim)' }}
               onClick={handleLogout}
               id="logout-btn"
             >
-              Sign out
+              SIGN OUT
             </button>
           </div>
         ) : null}
@@ -87,4 +110,3 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     </header>
   );
 };
-

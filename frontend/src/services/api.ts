@@ -75,6 +75,7 @@ export async function logout() {
   localStorage.removeItem('arve_token');
   try {
     await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch (err) {
     // Ignore network error on logout
   }

@@ -181,7 +181,7 @@ async def github_callback(
 @router.post("/logout")
 async def logout(response: Response):
     """Clears the access_token httpOnly cookie."""
-    response.delete_cookie("access_token")
+    response.delete_cookie("access_token", path="/", samesite="lax", httponly=True)
     return {"ok": True}
 
 
