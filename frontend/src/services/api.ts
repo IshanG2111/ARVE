@@ -143,7 +143,7 @@ export async function deleteProject(id: string): Promise<void> {
 
 // ─── Targets ──────────────────────────────────────────────────────────────────
 export async function addTarget(projectId: string, domain: string): Promise<TargetWebsite> {
-  const res = await fetch(`${BASE}/targets/projects/${projectId}`, {
+  const res = await fetch(`${BASE}/projects/${projectId}/targets`, {
     method: 'POST',
     headers: authHeaders(),
     credentials: 'include',

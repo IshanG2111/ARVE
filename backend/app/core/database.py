@@ -5,10 +5,18 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from app.core.config import settings
 
-connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+db_url = settings.database_url
+
+connect_args = {}
+if db_url.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+elif db_url.startswith("postgresql"):
+    # Enable SSL for cloud database hosts if sslmode or remote host is detected
+    if "sslmode" in db_url or "neon.tech" in db_url or "supabase.co" in db_url or "render.com" in db_url:
+        connect_args["sslmode"] = "require"
 
 engine = create_engine(
-    settings.DATABASE_URL, connect_args=connect_args
+    db_url, connect_args=connect_args, pool_pre_ping=True
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -25,16 +33,20 @@ def get_db():
 
 
 def ensure_postgres_db_exists():
-    """Checks if target PostgreSQL database exists; creates it if missing."""
-    if not settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+    """Checks if target PostgreSQL database exists; creates it if missing (for local PG)."""
+    current_url = settings.database_url
+    if not current_url.startswith(("postgresql", "postgres")):
         return
 
-    url = make_url(settings.DATABASE_URL)
+    # Skip DB auto-creation attempt for cloud databases where permissions or ssl prohibit superuser connection
+    if any(cloud_domain in current_url for cloud_domain in ["neon.tech", "supabase.co", "render.com", "railway.app", "aivencloud.com"]):
+        return
+
+    url = make_url(current_url)
     db_name = url.database
     if not db_name:
         return
 
-    # Connection parameters to default postgres DB
     user = url.username or "postgres"
     password = url.password or ""
     host = url.host or "localhost"
@@ -46,7 +58,8 @@ def ensure_postgres_db_exists():
             user=user,
             password=password,
             host=host,
-            port=port
+            port=port,
+            connect_timeout=3
         )
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cur = conn.cursor()
@@ -69,13 +82,14 @@ def init_db():
     """Initializes PostgreSQL / SQLite database tables and applies migrations."""
     from app.models import models  # noqa: F401 - ensure models register with Base.metadata
 
-    if settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+    current_url = settings.database_url
+    if current_url.startswith(("postgresql", "postgres")):
         ensure_postgres_db_exists()
 
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
 
-    if settings.DATABASE_URL.startswith("sqlite"):
+    if current_url.startswith("sqlite"):
         with engine.begin() as conn:
             for table_name, table in Base.metadata.tables.items():
                 if inspector.has_table(table_name):
@@ -84,3 +98,4 @@ def init_db():
                         if col.name not in existing_cols:
                             col_type = col.type.compile(engine.dialect)
                             conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type} NULL'))
+
