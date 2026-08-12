@@ -1,5 +1,6 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+import secrets
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 import httpx
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ router = APIRouter(prefix="/github", tags=["github"])
 
 class GitHubAuthCallback(BaseModel):
     code: str
+    state: str | None = None
     is_mock: bool = False
 
 @router.get("/auth-url")
@@ -26,8 +28,18 @@ def get_github_auth_url():
     }
 
 @router.post("/callback", response_model=Token)
-async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get_db)):
-    if payload.is_mock or payload.code == "mock_github_code":
+async def github_callback(
+    payload: GitHubAuthCallback,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    expected_state = request.cookies.get("oauth_state")
+    if not expected_state or not payload.state or not secrets.compare_digest(payload.state, expected_state):
+        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state")
+
+    is_mock = settings.is_development and (payload.is_mock or payload.code == "mock_github_code")
+    if is_mock:
         # Demo mode login when no real GitHub App secret is configured
         gh_user = {
             "id": "gh_10293847",
@@ -38,6 +50,8 @@ async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get
         }
         access_token_gh = "mock_github_access_token_123"
     else:
+        if payload.is_mock or payload.code == "mock_github_code":
+            raise HTTPException(status_code=400, detail="Mock GitHub authentication is disabled outside development")
         # Real GitHub OAuth token exchange
         async with httpx.AsyncClient() as client:
             token_resp = await client.post(
@@ -117,6 +131,15 @@ async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get
     db.refresh(user)
 
     jwt_token = security.create_access_token(subject=user.id)
+    response.set_cookie(
+        "access_token",
+        jwt_token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+        max_age=settings.effective_jwt_expire_minutes * 60,
+    )
+    response.delete_cookie("oauth_state", path="/")
     return {"access_token": jwt_token, "token_type": "bearer"}
 
 
@@ -152,7 +175,10 @@ async def list_github_repositories(
                     for r in repos
                 ]
 
-    # Sample/Demo repositories for instant selection
+    if not (settings.is_development and current_user.github_access_token == "mock_github_access_token_123"):
+        raise HTTPException(status_code=403, detail="GitHub repository access is unavailable")
+
+    # Development-only sample repositories
     login = current_user.github_login or current_user.email.split("@")[0]
     return [
         GitHubRepo(
@@ -196,7 +222,7 @@ async def get_branches_by_full_name(
     """
     from app.schemas.schemas import BranchResponse
     token = current_user.github_access_token
-    is_real = token and token != "mock_github_access_token_123"
+    is_real = bool(token and token != "mock_github_access_token_123")
 
     if is_real and full_name:
         async with httpx.AsyncClient() as client:
@@ -210,7 +236,10 @@ async def get_branches_by_full_name(
                     for b in resp.json()
                 ]
 
-    # Demo fallback
+    if not (settings.is_development and token == "mock_github_access_token_123"):
+        raise HTTPException(status_code=403, detail="GitHub branch access is unavailable")
+
+    # Development-only fallback
     return [
         BranchResponse(name="main", protected=True),
         BranchResponse(name="develop", protected=False),
