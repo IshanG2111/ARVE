@@ -363,3 +363,13 @@ infisical run --env=dev --path=/frontend -- npm run dev
 ```
 
 ------------------------------------------------------------------------
+
+# 14. Database Upgrade with Alembic
+
+Before running the backend, apply any pending database migrations:
+
+``` cmd
+cd backend
+infisical run --env=dev --path=/backend -- alembic upgrade head
+```
+------------------------------------------------------------------------
