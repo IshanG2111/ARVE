@@ -1,8 +1,7 @@
 # Environment variables & secrets
-.env
+backend/.env
 .env.*
 !.env.example
-backend/.env
 frontend/.env
 
 # Databases & local SQLite
