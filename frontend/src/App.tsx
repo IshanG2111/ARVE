@@ -7,6 +7,7 @@ import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { CallbackPage } from './pages/CallbackPage';
+import { ToastProvider } from './components/ui/ToastProvider';
 
 /** Guard: redirect authenticated users away from landing */
 function PublicOnly({ children }: { children: React.ReactNode }) {
@@ -26,28 +27,30 @@ export const App: React.FC = () => {
   const { user } = useAuth();
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <Navbar user={user} />
-      <main style={{ flex: 1 }}>
-        <Routes>
-          <Route
-            path="/"
-            element={
-              <PublicOnly>
-                <LandingPage />
-              </PublicOnly>
-            }
-          />
-          <Route path="/auth/github/callback" element={<CallbackPage />} />
-          <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/projects/:id" element={<ProjectDetailPage />} />
-          </Route>
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <ToastProvider>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Navbar user={user} />
+        <main style={{ flex: 1 }}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <PublicOnly>
+                  <LandingPage />
+                </PublicOnly>
+              }
+            />
+            <Route path="/auth/github/callback" element={<CallbackPage />} />
+            <Route element={<ProtectedRoute />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            </Route>
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    </ToastProvider>
   );
 };
 

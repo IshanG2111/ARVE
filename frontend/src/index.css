@@ -873,3 +873,85 @@ code, pre {
   .modules-grid { grid-template-columns: 1fr; }
   .dashboard-header { flex-direction: column; align-items: flex-start; }
 }
+
+/* ── Interactive Effects & Spinners ────────────────────────────────────────── */
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.glow-pill {
+  box-shadow: 0 0 12px var(--accent-muted);
+}
+
+.dashboard-nav-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.dashboard-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: var(--font-code);
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  transition: all 200ms ease;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboard-tab-btn:hover {
+  color: var(--primary);
+}
+.dashboard-tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: rgba(126, 139, 245, 0.05);
+  border-radius: 4px 4px 0 0;
+}
+
+.target-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: all 200ms ease;
+}
+.target-pill:hover {
+  border-color: var(--border-hover);
+  background: var(--elevated);
+}
+
+.badge-verified {
+  background: rgba(81, 207, 102, 0.1);
+  color: var(--success);
+  border: 1px solid rgba(81, 207, 102, 0.25);
+}
+.badge-pending {
+  background: rgba(255, 169, 77, 0.1);
+  color: var(--high);
+  border: 1px solid rgba(255, 169, 77, 0.25);
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-green { background: var(--success); boxShadow: 0 0 6px var(--success); }
+.dot-amber { background: var(--high); boxShadow: 0 0 6px var(--high); }
+
