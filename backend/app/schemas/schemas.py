@@ -1,22 +1,23 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, model_validator
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
-# ─── Token ────────────────────────────────────────────────────────────────────
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
 
 class TokenData(BaseModel):
     user_id: Optional[str] = None
 
 
-# ─── User ──────────────────────────────────────────────────────────────────────
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -27,18 +28,18 @@ class FirebaseLogin(BaseModel):
     id_token: str
     github_access_token: Optional[str] = None
 
+
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
     firebase_uid: Optional[str] = None
     full_name: Optional[str] = None
-    username: Optional[str] = None        # GitHub login
-    github_login: Optional[str] = None   # alias
+    username: Optional[str] = None
+    github_login: Optional[str] = None
     avatar_url: Optional[str] = None
-    github_avatar: Optional[str] = None  # alias
+    github_avatar: Optional[str] = None
     is_active: bool
     created_at: datetime
-
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,7 +56,6 @@ class UserResponse(BaseModel):
         return self
 
 
-# ─── GitHub (raw API passthrough) ─────────────────────────────────────────────
 class GitHubRepo(BaseModel):
     id: str
     name: str
@@ -73,7 +73,6 @@ class BranchResponse(BaseModel):
     protected: bool = False
 
 
-# ─── Repository ───────────────────────────────────────────────────────────────
 class RepositoryCreate(BaseModel):
     github_repo_id: str
     owner: str
@@ -84,6 +83,7 @@ class RepositoryCreate(BaseModel):
     language: Optional[str] = None
     description: Optional[str] = None
     private: bool = False
+
 
 class RepositoryResponse(BaseModel):
     id: str
@@ -101,9 +101,9 @@ class RepositoryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ─── Target Website (retained) ────────────────────────────────────────────────
 class TargetCreate(BaseModel):
     domain: str
+
 
 class TargetResponse(BaseModel):
     id: str
@@ -116,6 +116,7 @@ class TargetResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class VerificationResult(BaseModel):
     target_id: str
     domain: str
@@ -125,7 +126,6 @@ class VerificationResult(BaseModel):
     verified_at: Optional[datetime] = None
 
 
-# ─── Scan ─────────────────────────────────────────────────────────────────────
 class ScanResponse(BaseModel):
     id: str
     project_id: str
@@ -135,41 +135,46 @@ class ScanResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# ─── Project ──────────────────────────────────────────────────────────────────
 class ProjectCreate(BaseModel):
-    # Sprint 1 canonical fields
-    repository_id: Optional[str] = None   # internal Repository.id (if pre-stored)
-    branch: Optional[str] = "main"
-    deployment_url: Optional[str] = None
+    """Canonical project creation contract.
 
-    # Legacy / wizard passthrough — populate if repository not yet stored
+    A project may be created without a repository for legacy/manual use, but
+    the GitHub wizard should send the normalized `repository` object.
+    """
+
     name: Optional[str] = None
     description: Optional[str] = None
-    repo_name: Optional[str] = None
-    repo_url: Optional[str] = None
-    repo_id: Optional[str] = None         # GitHub numeric ID
-    default_branch: Optional[str] = "main"
-    target_domain: Optional[str] = None  # backward compat
+    repository_id: Optional[str] = None
+    repository: Optional[RepositoryCreate] = None
+    branch: Optional[str] = None
+    deployment_url: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_repository_reference(self):
+        if self.repository_id and self.repository:
+            raise ValueError("Provide either repository_id or repository, not both")
+        return self
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    branch: Optional[str] = None
+    deployment_url: Optional[str] = None
+
 
 class ProjectResponse(BaseModel):
     id: str
-    user_id: Optional[str] = None
-    owner_id: Optional[str] = None
+    user_id: str
     repository_id: Optional[str] = None
-    branch: Optional[str] = "main"
-    deployment_url: Optional[str] = None
-    verified: bool = False
-    created_at: datetime
-
-    # Legacy fields surfaced for the existing UI
     name: Optional[str] = None
     description: Optional[str] = None
-    repo_name: Optional[str] = None
-    repo_url: Optional[str] = None
-    repo_id: Optional[str] = None
-    default_branch: Optional[str] = "main"
-    targets: List[TargetResponse] = []
-    scans: List[ScanResponse] = []
+    branch: str
+    deployment_url: Optional[str] = None
+    verified: bool
+    created_at: datetime
+    targets: List[TargetResponse] = Field(default_factory=list)
+    scans: List[ScanResponse] = Field(default_factory=list)
     repository: Optional[RepositoryResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
