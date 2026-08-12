@@ -1,6 +1,8 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
+import { LoadingAnimation } from '../components/ui/LoadingAnimation';
+import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 
 const FUTURE_MODULES = [
   { title: 'Static Analysis', desc: 'Scan source code for security vulnerabilities.' },
@@ -17,7 +19,7 @@ export const ProjectDetailPage: React.FC = () => {
   if (isLoading) {
     return (
       <div className="screen-center">
-        <div className="spinner" />
+        <LoadingAnimation label="ANALYZING ARVE PROJECT AST GRAPH…" fullScreen={false} />
       </div>
     );
   }
@@ -45,11 +47,12 @@ export const ProjectDetailPage: React.FC = () => {
 
   return (
     <div className="project-detail anim-fade-up">
+      <HalftoneBackground interactive={false} showHero={false} />
 
       {/* Back */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '24px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px' }}
+        style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
@@ -59,20 +62,17 @@ export const ProjectDetailPage: React.FC = () => {
       {/* Header */}
       <div className="project-detail-header">
         <h1 className="project-detail-name">{name}</h1>
-        <div className="project-detail-meta">
-          <span className="badge badge-neutral">{branch}</span>
-          {language && <span className="badge badge-neutral">{language}</span>}
-          {isPrivate && <span className="badge badge-lock">Private</span>}
-          {project.verified
-            ? <span className="badge badge-ok">Verified</span>
-            : <span className="badge badge-warn">Unverified</span>
-          }
+        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+          <span>{branch}</span>
+          {language && <>• <span>{language}</span></>}
+          {isPrivate && <>• <span>Private</span></>}
+          • <span style={{ color: project.verified ? 'var(--success)' : 'var(--muted)' }}>{project.verified ? 'Verified' : 'Pending'}</span>
         </div>
       </div>
 
       {/* Repository info */}
       <div className="detail-section card card-flat" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-        <div className="detail-section-title">Repository</div>
+        <div className="detail-section-title">Repository Metadata</div>
 
         <div className="detail-field">
           <span className="detail-field-key">Repository</span>
@@ -82,7 +82,7 @@ export const ProjectDetailPage: React.FC = () => {
               target="_blank"
               rel="noreferrer"
               className="detail-field-val"
-              style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+              style={{ color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
             >
               {repoFull}
             </a>
@@ -132,17 +132,14 @@ export const ProjectDetailPage: React.FC = () => {
 
       {/* Future modules */}
       <div>
-        <div style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--dim)', marginBottom: '12px' }}>
+        <div style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '12px', fontFamily: 'var(--font-code)' }}>
           Upcoming modules
         </div>
         <div className="modules-grid">
           {FUTURE_MODULES.map((m) => (
-            <div key={m.title} className="card module-card" title="Coming in a future sprint">
+            <div key={m.title} className="module-card">
               <div className="module-card-title">{m.title}</div>
               <div className="module-card-sub">{m.desc}</div>
-              <div style={{ marginTop: '10px' }}>
-                <span className="badge badge-neutral" style={{ fontSize: '10px' }}>Coming soon</span>
-              </div>
             </div>
           ))}
         </div>

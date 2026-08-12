@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 10080  # 7 days
 
     # Database
-    DATABASE_URL: str = "sqlite:///./arve.db"
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/arve_db"
 
     # GitHub OAuth
     GITHUB_CLIENT_ID: str = "arve_demo_client_id"

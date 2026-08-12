@@ -1,5 +1,8 @@
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.orm import declarative_base, sessionmaker
+import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from app.core.config import settings
 
 connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
@@ -21,9 +24,54 @@ def get_db():
         db.close()
 
 
+def ensure_postgres_db_exists():
+    """Checks if target PostgreSQL database exists; creates it if missing."""
+    if not settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+        return
+
+    url = make_url(settings.DATABASE_URL)
+    db_name = url.database
+    if not db_name:
+        return
+
+    # Connection parameters to default postgres DB
+    user = url.username or "postgres"
+    password = url.password or ""
+    host = url.host or "localhost"
+    port = url.port or 5432
+
+    try:
+        conn = psycopg2.connect(
+            dbname="postgres",
+            user=user,
+            password=password,
+            host=host,
+            port=port
+        )
+        conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        cur = conn.cursor()
+
+        cur.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (db_name,))
+        exists = cur.fetchone()
+
+        if not exists:
+            print(f"[DB] PostgreSQL database '{db_name}' does not exist. Creating database...")
+            cur.execute(f'CREATE DATABASE "{db_name}";')
+            print(f"[DB] PostgreSQL database '{db_name}' created successfully.")
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[DB] Note on PostgreSQL auto-create check: {e}")
+
+
 def init_db():
-    """Initializes tables and automatically adds missing columns to existing SQLite DB tables."""
+    """Initializes PostgreSQL / SQLite database tables and applies migrations."""
     from app.models import models  # noqa: F401 - ensure models register with Base.metadata
+
+    if settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+        ensure_postgres_db_exists()
+
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
 
