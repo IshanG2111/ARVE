@@ -1,22 +1,23 @@
+import uuid
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import uuid
-
-from app.main import app
-from app.core.database import Base, get_db
-
 from sqlalchemy.pool import StaticPool
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+from app.core.database import Base, get_db
+from app.main import app
+from app.models.models import Project, Repository, TargetWebsite
 
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False},
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 
 def override_get_db():
     db = TestingSessionLocal()
@@ -25,7 +26,10 @@ def override_get_db():
     finally:
         db.close()
 
+
 app.dependency_overrides[get_db] = override_get_db
+client = TestClient(app)
+
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
@@ -33,116 +37,207 @@ def setup_db():
     yield
     Base.metadata.drop_all(bind=engine)
 
-client = TestClient(app)
+
+def register_and_login():
+    email = f"test_{uuid.uuid4().hex[:8]}@example.com"
+    password = "secretpassword123"
+
+    register = client.post(
+        "/api/auth/register",
+        json={"email": email, "password": password, "full_name": "Security Tester"},
+    )
+    assert register.status_code == 201, register.text
+
+    login = client.post(
+        "/api/auth/login/json",
+        json={"email": email, "password": password},
+    )
+    assert login.status_code == 200, login.text
+    token = login.json()["access_token"]
+    db = TestingSessionLocal()
+    try:
+        from app.models.models import User
+        user = db.query(User).filter(User.email == email).first()
+        user.github_access_token = "mock_github_access_token_123"
+        user.username = "test-user"
+        db.commit()
+    finally:
+        db.close()
+    return {"Authorization": f"Bearer {token}"}
+
 
 def test_root_endpoint():
     response = client.get("/")
     assert response.status_code == 200
     assert response.json()["status"] == "online"
 
-def test_auth_and_project_flow():
-    random_email = f"test_{uuid.uuid4().hex[:6]}@example.com"
-    password = "secretpassword123"
 
-    # 1. Register User
-    reg_resp = client.post(
-        "/api/auth/register",
-        json={"email": random_email, "password": password, "full_name": "Security Tester"}
-    )
-    assert reg_resp.status_code == 201, reg_resp.text
-    user_data = reg_resp.json()
-    assert user_data["email"] == random_email
+def test_project_full_crud_and_database_state():
+    headers = register_and_login()
 
-    # 2. Login
-    login_resp = client.post(
-        "/api/auth/login/json",
-        json={"email": random_email, "password": password}
-    )
-    assert login_resp.status_code == 200, login_resp.text
-    token = login_resp.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # 3. Get /me
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    assert me_resp.json()["email"] == random_email
-
-    # 4. Create Project with GitHub Repository
-    proj_resp = client.post(
+    create = client.post(
         "/api/projects",
+        headers=headers,
         json={
             "name": "Fintech Portal",
             "description": "Security audit project",
-            "repo_name": "octocat-dev/fintech-api-gateway",
-            "repo_url": "https://github.com/octocat-dev/fintech-api-gateway",
-            "repo_id": "102",
-            "default_branch": "main",
-            "target_domain": "https://mysite.com"
+            "branch": "main",
+            "repository": {
+                "github_repo_id": "test-102",
+                "owner": "octocat-dev",
+                "name": "fintech-api-gateway",
+                "full_name": "octocat-dev/fintech-api-gateway",
+                "html_url": "https://github.com/octocat-dev/fintech-api-gateway",
+                "default_branch": "main",
+                "language": "TypeScript",
+                "description": "Test repository",
+                "private": False,
+            },
+            "deployment_url": "https://example.com",
         },
-        headers=headers
     )
-    assert proj_resp.status_code == 201
-    proj_data = proj_resp.json()
-    assert proj_data["repo_name"] == "octocat-dev/fintech-api-gateway"
-    assert len(proj_data["targets"]) == 1
-    # 5. Create Project without Deployment URL (Optional deployment link)
-    proj_no_dep_resp = client.post(
-        "/api/projects",
-        json={
-            "name": "Backend Library",
-            "description": "Library without deployed target",
-            "repo_name": "octocat-dev/backend-lib",
-            "repo_url": "https://github.com/octocat-dev/backend-lib",
-            "repo_id": "103",
-            "default_branch": "main",
-        },
-        headers=headers
-    )
-    assert proj_no_dep_resp.status_code == 201
-    proj_no_dep_data = proj_no_dep_resp.json()
-    assert proj_no_dep_data["repo_name"] == "octocat-dev/backend-lib"
-    assert proj_no_dep_data["deployment_url"] is None
-    assert len(proj_no_dep_data["targets"]) == 0
+    assert create.status_code == 201, create.text
+    project = create.json()
+    project_id = project["id"]
+    repository_id = project["repository_id"]
+    assert project["repository"]["github_repo_id"] == "test-102"
+    assert len(project["targets"]) == 1
 
-def test_github_oauth_mock():
-    # Test mock GitHub login callback
-    login_resp = client.post(
-        "/api/github/callback",
-        json={"code": "mock_code", "is_mock": True}
+    get_response = client.get(f"/api/projects/{project_id}", headers=headers)
+    assert get_response.status_code == 200
+    assert get_response.json()["branch"] == "main"
+
+    update = client.patch(
+        f"/api/projects/{project_id}",
+        headers=headers,
+        json={"name": "Updated Fintech Portal", "branch": "develop"},
     )
-    assert login_resp.status_code == 200
-    token = login_resp.json()["access_token"]
+    assert update.status_code == 200, update.text
+    assert update.json()["name"] == "Updated Fintech Portal"
+    assert update.json()["branch"] == "develop"
+
+    db = TestingSessionLocal()
+    try:
+        db_project = db.query(Project).filter(Project.id == project_id).first()
+        assert db_project is not None
+        assert db_project.name == "Updated Fintech Portal"
+        assert db_project.branch == "develop"
+    finally:
+        db.close()
+
+    delete = client.delete(f"/api/projects/{project_id}", headers=headers)
+    assert delete.status_code == 204, delete.text
+
+    get_after_delete = client.get(f"/api/projects/{project_id}", headers=headers)
+    assert get_after_delete.status_code == 404
+
+    db = TestingSessionLocal()
+    try:
+        assert db.query(Project).filter(Project.id == project_id).first() is None
+        assert db.query(TargetWebsite).filter(TargetWebsite.project_id == project_id).first() is None
+        # Repository is deliberately retained as an independent resource.
+        assert db.query(Repository).filter(Repository.id == repository_id).first() is not None
+    finally:
+        db.close()
+
+
+def test_target_crud_and_ownership():
+    headers = register_and_login()
+
+    create = client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "Target Test Project"},
+    )
+    assert create.status_code == 201
+    project_id = create.json()["id"]
+
+    add = client.post(
+        f"/api/projects/{project_id}/targets",
+        headers=headers,
+        json={"domain": "https://example.com"},
+    )
+    assert add.status_code == 201, add.text
+    target = add.json()
+
+    get_targets = client.get(f"/api/projects/{project_id}/targets", headers=headers)
+    assert get_targets.status_code == 200
+    assert len(get_targets.json()) == 1
+
+    duplicate = client.post(
+        f"/api/projects/{project_id}/targets",
+        headers=headers,
+        json={"domain": "example.com"},
+    )
+    assert duplicate.status_code == 409
+
+    delete = client.delete(f"/api/targets/{target['id']}", headers=headers)
+    assert delete.status_code == 204
+
+    get_after_delete = client.get(f"/api/projects/{project_id}/targets", headers=headers)
+    assert get_after_delete.status_code == 200
+    assert get_after_delete.json() == []
+
+
+def test_repository_access_is_scoped_to_owner():
+    owner_headers = register_and_login()
+    other_headers = register_and_login()
+
+    create = client.post(
+        "/api/projects",
+        headers=owner_headers,
+        json={
+            "name": "Owner Project",
+            "repository": {
+                "github_repo_id": "scoped-repo-1",
+                "owner": "octocat-dev",
+                "name": "private-test",
+                "full_name": "octocat-dev/private-test",
+                "html_url": "https://github.com/octocat-dev/private-test",
+                "default_branch": "main",
+                "private": False,
+            },
+        },
+    )
+    assert create.status_code == 201
+    repository_id = create.json()["repository_id"]
+
+    response = client.get(f"/api/repositories/{repository_id}", headers=other_headers)
+    assert response.status_code == 404
+
+    branches = client.get(f"/api/repositories/{repository_id}/branches", headers=other_headers)
+    assert branches.status_code == 404
+
+
+def test_github_mock_oauth_requires_and_accepts_state():
+    start = client.get("/auth/github/login", follow_redirects=False)
+    assert start.status_code == 307
+    state = start.cookies.get("oauth_state")
+    assert state
+
+    callback = client.post(
+        "/api/github/callback",
+        json={"code": "mock_github_code", "state": state, "is_mock": True},
+    )
+    assert callback.status_code == 200, callback.text
+    token = callback.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # Verify user profile has github_login
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    assert me_resp.json()["github_login"] == "octocat-dev"
-
-    # Verify repos endpoint
-    repos_resp = client.get("/api/github/repos", headers=headers)
-    assert repos_resp.status_code == 200
-    assert len(repos_resp.json()) >= 1
+    me = client.get("/api/auth/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["github_login"] == "octocat-dev"
 
 
-def test_firebase_auth():
-    # Test Firebase login with mock token
-    fb_resp = client.post(
+def test_firebase_mock_is_development_only_path():
+    response = client.post(
         "/api/auth/firebase",
         json={
             "id_token": "mock_firebase_token_test123",
-            "github_access_token": "mock_gh_token_456"
-        }
+            "github_access_token": "mock_gh_token_456",
+        },
     )
-    assert fb_resp.status_code == 200
-    token = fb_resp.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # Verify user profile returned via /api/auth/me has firebase_uid
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    user_data = me_resp.json()
-    assert user_data["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
-    assert user_data["email"] == "octocat@github.com"
-
-
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
