@@ -117,15 +117,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
                   <div style={{ minWidth: 0 }}>
                     <div className="project-name">{project.name}</div>
 
-                    {project.repo_name && (
+                    {project.repository && (
                       <div className="repo-badge">
                         <GitHubIcon size={12} color="var(--accent)" />
-                        <a href={project.repo_url || '#'} target="_blank" rel="noreferrer">
-                          {project.repo_name}
+                        <a href={project.repository.html_url || '#'} target="_blank" rel="noreferrer">
+                          {project.repository.full_name}
                         </a>
                         <span style={{ color: 'var(--muted)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
                           <GitBranch size={10} />
-                          {project.default_branch || 'main'}
+                          {project.branch}
                         </span>
                       </div>
                     )}

@@ -12,6 +12,7 @@ export const GitHubCallbackView: React.FC<GitHubCallbackViewProps> = ({ onSucces
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const state = urlParams.get('state') || undefined;
     const errorParam = urlParams.get('error');
     const errorDescription = urlParams.get('error_description');
 
@@ -27,7 +28,7 @@ export const GitHubCallbackView: React.FC<GitHubCallbackViewProps> = ({ onSucces
 
     window.history.replaceState({}, document.title, '/');
 
-    api.githubCallback(code)
+    api.githubCallback(code, state)
       .then(() => onSuccess())
       .catch((err: Error) => {
         setError(err.message || 'GitHub authentication failed. Please try again.');

@@ -66,10 +66,17 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
         deployment_url: trimmedUrl || undefined,
         name: selectedRepo.name,
         description: selectedRepo.description || undefined,
-        repo_name: selectedRepo.full_name,
-        repo_url: selectedRepo.html_url,
-        repo_id: selectedRepo.id,
-        default_branch: selectedRepo.default_branch,
+        repository: {
+          github_repo_id: selectedRepo.id,
+          owner: selectedRepo.full_name.split('/')[0] || 'unknown',
+          name: selectedRepo.name,
+          full_name: selectedRepo.full_name,
+          html_url: selectedRepo.html_url,
+          default_branch: selectedRepo.default_branch,
+          language: selectedRepo.language,
+          description: selectedRepo.description,
+          private: selectedRepo.private,
+        },
       },
       {
         onSuccess: () => {
