@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 
 interface LoadingAnimationProps {
   label?: string;
@@ -11,6 +11,19 @@ const BOOT_MESSAGES = [
   'Mapping AST graph…',
   'Synthesizing…',
 ];
+
+const dotVariants: Variants = {
+  animate: (i: number) => ({
+    opacity: [0.2, 0.8, 0.2],
+    scale: [0.8, 1.2, 0.8],
+    transition: {
+      duration: 1.8,
+      repeat: Infinity,
+      delay: i * 0.25,
+      ease: 'easeInOut',
+    },
+  }),
+};
 
 export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   label,
@@ -27,19 +40,6 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
 
   const activeText = label || BOOT_MESSAGES[logIndex];
 
-  const dotVariants = {
-    animate: (i: number) => ({
-      opacity: [0.2, 0.8, 0.2],
-      scale: [0.8, 1.2, 0.8],
-      transition: {
-        duration: 1.8,
-        repeat: Infinity,
-        delay: i * 0.25,
-        ease: 'easeInOut',
-      },
-    }),
-  };
-
   return (
     <div
       style={{
@@ -53,7 +53,6 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         userSelect: 'none',
       }}
     >
-      {/* Three breathing halftone dots */}
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
         {[0, 1, 2].map((i) => (
           <motion.div
