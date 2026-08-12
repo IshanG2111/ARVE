@@ -27,6 +27,8 @@ The intended end-to-end pipeline is:
 ``` text
 GitHub Auth
     ↓
+Repository Selection
+    ↓
 Repository Ingestion
     ↓
 Commit-Pinned Snapshot
@@ -50,7 +52,39 @@ AI Triage / Explanation
 Dashboard / Reports
 ```
 
-The broader system-design view also represents the pipeline as:
+The GitHub-first ingestion path is:
+
+```text
+GitHub OAuth
+     ↓
+Access Token
+     ↓
+Repository Selection
+     ↓
+Create Analysis Run
+     ↓
+GitHub API Client
+     ↓
+Repository Metadata + Default Branch + Exact Commit SHA
+     ↓
+Repository Tree
+     ↓
+File Filtering
+     ↓
+Language Detection
+     ↓
+Relevant File Contents
+     ↓
+SHA-256
+     ↓
+ARVE Normalizer
+     ↓
+PostgreSQL
+     ↓
+AST Engine + Security Engines
+```
+
+The broader system-design view also represents the analysis pipeline as:
 
 ``` text
 Repository
@@ -304,39 +338,175 @@ A failed scanner must not silently produce `COMPLETED`.
 
 ## 6. Repository Ingestion
 
-Repository ingestion creates an isolated, reproducible workspace.
+Repository ingestion is the first data-processing layer after GitHub authentication.
 
-The snapshot includes:
+Its responsibility is to:
 
-``` text
-Repository Snapshot
-├── Source Files
-├── Dependency Files
-├── Configuration
-├── Infrastructure
-└── Project Metadata + File Manifest
+- Connect to GitHub using the authenticated user's access token.
+- Verify repository accessibility.
+- Fetch repository metadata.
+- Determine the default/requested branch.
+- Resolve the exact commit SHA.
+- Fetch the repository tree.
+- Filter irrelevant/generated/binary files.
+- Detect programming languages.
+- Fetch relevant source/configuration contents.
+- Validate file size/type.
+- Calculate SHA-256 hashes.
+- Normalize GitHub data into the ARVE format.
+- Store normalized repository data.
+- Create and update an analysis run.
+- Provide clean input to AST and security engines.
+
+The ingestion engine **does not perform vulnerability detection or AST analysis**.
+
+### Ingestion boundary
+
+```text
+GitHub
+  ↓
+GitHub Connector
+  ↓
+Ingestion Engine
+  ↓
+ARVE Normalized Repository
+  ↓
++-------------------+
+|                   |
+▼                   ▼
+AST Engine      Security Engines
 ```
 
-The ingestion layer is responsible for:
+### GitHub client
 
--   Shallow cloning.
--   Resolving an exact commit SHA.
--   Creating `/workspaces/{scan_id}/`.
--   Enforcing file-count, byte-size, and clone-time guards.
--   Filtering `node_modules/`, `dist/`, `build/`, `.git/`, binaries, and
-    lockfile-only directories.
--   Detecting languages by file-extension counts.
--   Detecting Express/Next/React from `package.json` dependencies.
--   Detecting package managers from lockfiles.
--   Identifying dependency/configuration/infrastructure files.
--   Storing metadata and SHA-256 file hashes.
--   Cleaning the workspace after scanning, with a development
-    `KEEP_WORKSPACE` option.
+The GitHub client is responsible only for GitHub communication:
 
-v1 does not require submodule handling, monorepo workspace resolution,
-or private-registry authentication.
+```text
+GitHubClient
+├── get_repository()
+├── get_repository_metadata()
+├── get_default_branch()
+├── get_latest_commit()
+├── get_repository_tree()
+└── get_file()
+```
 
-------------------------------------------------------------------------
+It must not contain file-filtering, AST, vulnerability-detection, or database-persistence logic.
+
+### File filtering
+
+The ingestion layer can recognize a broader set of source/configuration files so the repository structure remains useful for future expansion:
+
+```text
+.js  .jsx  .ts  .tsx
+.py  .java  .go  .rs
+.c   .h    .cpp .hpp
+.php .rb
+
+package.json
+requirements.txt
+pyproject.toml
+pom.xml
+go.mod
+Cargo.toml
+Dockerfile
+docker-compose.yml
+.github/workflows/*.yml
+```
+
+The executable v1 security-analysis scope remains **JavaScript and TypeScript**. Broader language recognition does not expand the v1 security-analysis commitment.
+
+Initially ignored content includes:
+
+```text
+.git/
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+target/
+coverage/
+vendor/
+.cache/
+```
+
+Binary/media/archive files such as images, videos, PDFs, ZIPs, and TAR files are also ignored.
+
+Filtering must remain in a dedicated filtering component rather than inside the GitHub client.
+
+### File validation
+
+A configurable maximum file size is enforced.
+
+Files exceeding the limit are represented as skipped rather than silently discarded:
+
+```text
+status = SKIPPED
+reason = file_too_large
+```
+
+The ingestion result reports skipped files and their reasons.
+
+### Language detection
+
+Language detection is performed after filtering:
+
+```text
+auth.py       → Python
+login.js      → JavaScript
+server.ts     → TypeScript
+Main.java     → Java
+main.go       → Go
+parser.rs     → Rust
+```
+
+The detected language is stored with each normalized file.
+
+### File representation
+
+A normalized repository file conceptually contains:
+
+```text
+RepositoryFile
+├── id
+├── repository_id
+├── path
+├── filename
+├── extension
+├── language
+├── size
+├── sha256
+├── content
+└── status
+```
+
+### SHA-256
+
+Each ingested file is hashed from its content:
+
+```text
+SHA-256(file_content)
+```
+
+This provides reproducibility and enables future incremental analysis.
+
+### Normalization
+
+GitHub API data must not become the permanent internal contract:
+
+```text
+GitHub API
+     ↓
+GitHub Adapter
+     ↓
+ARVE Normalized Repository
+     ↓
+PostgreSQL
+```
+
+This boundary allows future sources such as GitLab, ZIP, or local repositories to feed the same AST/security pipeline.
 
 ## 7. Code Intelligence
 

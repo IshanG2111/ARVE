@@ -54,6 +54,7 @@ Build the first working ARVE security-analysis pipeline:
 
 ``` text
 GitHub Auth
+→ Repository Selection
 → Repository Ingestion
 → Scan Orchestration
 → Security Engines
@@ -108,76 +109,503 @@ receives a `scan_id`.
 
 ------------------------------------------------------------------------
 
-# 3. Phase 2 --- Repository Ingestion
+# 3. Phase 2 — GitHub Repository Ingestion
 
-**Owner:** Backend/Auth\
-**Estimate:** 1 week
+**Owner:** Backend/Auth  
+**Estimate:** 1 week  
+**Blocks:** scan orchestration and downstream analysis
 
 ## Goal
 
-Create an isolated, reproducible workspace containing the selected
-repository.
+Create a reproducible, normalized repository representation using the authenticated GitHub API.
 
-## Tasks
+The ingestion engine is responsible for:
 
--   Shallow clone selected repository with `--depth 1` unless lineage
-    requires more history.
--   Resolve branch to an exact commit SHA.
--   Check out exact commit.
--   Create `/workspaces/{scan_id}/`.
--   Enforce:
-    -   file-count guard
-    -   total-byte guard
-    -   clone timeout
--   Filter:
-    -   `node_modules/`
-    -   `dist/`
-    -   `build/`
-    -   `.git/`
-    -   binaries
-    -   lockfile-only directories
--   Detect languages using file-extension counts.
--   Detect frameworks from `package.json` dependencies:
-    -   Express
-    -   Next.js
-    -   React
--   Detect package manager from:
-    -   `package-lock.json`
-    -   `yarn.lock`
-    -   `pnpm-lock.yaml`
--   Identify dependency/config/infra files.
--   Store repository metadata and manifest.
--   Calculate SHA-256 per file.
--   Clean workspace after scan, with `KEEP_WORKSPACE` for development.
+- GitHub authentication reuse
+- Repository access validation
+- Repository metadata retrieval
+- Branch resolution
+- Exact commit SHA resolution
+- Repository tree retrieval
+- File filtering
+- Language detection
+- Relevant file-content retrieval
+- File-size/type validation
+- SHA-256 hashing
+- ARVE normalization
+- PostgreSQL persistence
+- Analysis-run status updates
 
-## Output
+It does **not** perform AST parsing or vulnerability detection.
 
-``` text
-Repository Snapshot
-├── Source Files
-├── Dependency Files
-├── Configuration
-├── Infrastructure
-└── Project Metadata + File Manifest
+## 3.1 GitHub client
+
+Create a dedicated GitHub client with responsibilities such as:
+
+```text
+GitHubClient
+├── get_repository()
+├── get_repository_metadata()
+├── get_default_branch()
+├── get_latest_commit()
+├── get_repository_tree()
+└── get_file()
 ```
 
-## Non-goals
+The GitHub client must not contain:
 
--   Submodule handling
--   Monorepo workspace resolution
--   Private-registry authentication
+- file filtering logic
+- AST logic
+- vulnerability detection
+- database persistence
+
+## 3.2 Repository selection and authorization
+
+The selected repository must be verified using the authenticated user's GitHub access token.
+
+Conceptual flow:
+
+```text
+User
+ ↓
+GitHub OAuth
+ ↓
+Access Token
+ ↓
+Repository Selection
+ ↓
+Verify Access
+ ↓
+Create Analysis Run
+```
+
+Do not trust arbitrary repository access without validation.
+
+## 3.3 Repository metadata and commit pinning
+
+Retrieve:
+
+```text
+GitHub ID
+Name
+Full Name
+Owner
+URL
+Default Branch
+Visibility
+```
+
+Most importantly, record:
+
+```text
+branch
+commit SHA
+```
+
+Every analysis run must be associated with the exact commit SHA.
+
+## 3.4 Repository tree
+
+Fetch the repository tree before downloading file contents.
+
+Conceptually:
+
+```text
+project/
+├── src/
+│   ├── auth.ts
+│   ├── database.ts
+│   └── utils.ts
+├── tests/
+├── package.json
+└── README.md
+```
+
+Convert tree entries into internal file records before content retrieval.
+
+## 3.5 File filtering
+
+Initially relevant source/configuration types include:
+
+```text
+.js
+.jsx
+.ts
+.tsx
+.py
+.java
+.go
+.rs
+.c
+.h
+.cpp
+.hpp
+.php
+.rb
+
+package.json
+requirements.txt
+pyproject.toml
+pom.xml
+go.mod
+Cargo.toml
+Dockerfile
+docker-compose.yml
+.github/workflows/*.yml
+```
+
+The executable v1 security-analysis scope remains JavaScript/TypeScript.
+
+Ignore:
+
+```text
+.git/
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+target/
+coverage/
+vendor/
+.cache/
+```
+
+Ignore binary/media/archive files such as:
+
+```text
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.zip
+*.tar
+*.pdf
+```
+
+Filtering must live in a dedicated component such as:
+
+```text
+ingestion/filters/file_filter.py
+```
+
+## 3.6 File-size validation
+
+Define:
+
+```text
+MAX_FILE_SIZE
+```
+
+If a file exceeds the limit:
+
+```text
+status = SKIPPED
+reason = file_too_large
+```
+
+The ingestion result must report skipped files and reasons.
+
+## 3.7 Language detection
+
+Implement a dedicated language detector:
+
+```text
+auth.py       → Python
+login.js      → JavaScript
+server.ts     → TypeScript
+Main.java     → Java
+main.go       → Go
+parser.rs     → Rust
+```
+
+The broader detector may recognize languages beyond v1 so future support does not require redesigning ingestion.
+
+## 3.8 File content retrieval
+
+Fetch only relevant files after filtering.
+
+Normalized representation:
+
+```text
+RepositoryFile
+├── id
+├── repository_id
+├── path
+├── filename
+├── extension
+├── language
+├── size
+├── sha256
+├── content
+└── status
+```
+
+## 3.9 SHA-256
+
+Calculate:
+
+```text
+SHA-256(file_content)
+```
+
+for every ingested file.
+
+This provides reproducibility and enables future incremental analysis.
+
+## 3.10 ARVE normalization
+
+GitHub API data should not be exposed as the permanent internal contract:
+
+```text
+GitHub API
+     ↓
+GitHub Adapter
+     ↓
+ARVE Normalized Repository
+     ↓
+PostgreSQL
+```
+
+Future sources can therefore become:
+
+```text
+GitHub ──┐
+GitLab ──┼──> ARVE Normalized Format
+ZIP ─────┤
+Local ───┘
+```
+
+without rewriting the AST/security engines.
+
+## 3.11 Database model
+
+Initial ingestion tables:
+
+### `repositories`
+
+```text
+id
+github_id
+owner
+name
+full_name
+url
+default_branch
+visibility
+created_at
+updated_at
+```
+
+### `analysis_runs`
+
+```text
+id
+repository_id
+commit_sha
+status
+started_at
+completed_at
+```
+
+Initial ingestion statuses may include:
+
+```text
+PENDING
+FETCHING
+PROCESSING
+COMPLETED
+FAILED
+```
+
+These map into the broader scan state machine later.
+
+### `repository_files`
+
+```text
+id
+repository_id
+path
+filename
+extension
+language
+size
+sha256
+content
+status
+created_at
+```
+
+Possible file statuses:
+
+```text
+INGESTED
+SKIPPED
+FAILED
+```
+
+## 3.12 Pipeline
+
+Implement:
+
+```text
+start_ingestion(repository)
+        ↓
+Create analysis_run
+        ↓
+Verify repository access
+        ↓
+Get repository metadata
+        ↓
+Get branch
+        ↓
+Get exact commit SHA
+        ↓
+Get repository tree
+        ↓
+Filter files
+        ↓
+Detect languages
+        ↓
+Fetch file contents
+        ↓
+Validate files
+        ↓
+Calculate SHA-256
+        ↓
+Normalize
+        ↓
+Store in DB
+        ↓
+Mark ingestion complete
+```
+
+## 3.13 Result
+
+Return useful metadata:
+
+```json
+{
+  "repository_id": "123",
+  "analysis_run_id": "run_001",
+  "commit_sha": "abc123",
+  "files_found": 248,
+  "files_ingested": 181,
+  "files_skipped": 67,
+  "languages": {
+    "JavaScript": 120,
+    "TypeScript": 42
+  },
+  "status": "completed"
+}
+```
+
+## 3.14 API
+
+Initial ingestion contracts:
+
+```text
+POST /repositories/{repository_id}/ingest
+GET /analysis-runs/{run_id}
+```
+
+These can later be consolidated into the main scan API so ingestion remains an internal stage of an ARVE scan.
+
+## 3.15 Error handling
+
+Handle at least:
+
+```text
+Invalid repository
+Repository not accessible
+GitHub API failure
+GitHub rate limit
+Missing file
+File too large
+Unsupported file type
+Database failure
+Network failure
+```
+
+Never leave an analysis permanently stuck in `PROCESSING`.
+
+## 3.16 Logging
+
+Include:
+
+```text
+scan_id / analysis_run_id
+repository
+commit_sha
+```
+
+Example:
+
+```text
+[INFO] Starting ingestion
+[INFO] Repository: owner/project
+[INFO] Commit: abc123
+[INFO] Files discovered: 248
+[INFO] Files filtered: 67
+[INFO] Files ingested: 181
+[INFO] Languages: JavaScript, TypeScript
+[INFO] Ingestion completed
+```
+
+## 3.17 Tests
+
+Repository tests:
+
+```text
+[ ] Repository metadata extraction
+[ ] Default branch detection
+[ ] Commit SHA extraction
+[ ] Repository tree retrieval
+```
+
+File tests:
+
+```text
+[ ] Source file detection
+[ ] Binary file rejection
+[ ] Ignored directory handling
+[ ] Large file handling
+[ ] Language detection
+[ ] SHA-256 generation
+```
+
+Database tests:
+
+```text
+[ ] Repository insertion
+[ ] File insertion
+[ ] Analysis run creation
+[ ] Duplicate handling
+[ ] Failed run handling
+```
+
+Failure tests:
+
+```text
+[ ] Invalid repository
+[ ] Inaccessible repository
+[ ] GitHub API failure
+[ ] Rate limit
+[ ] Missing file
+[ ] Database failure
+```
 
 ## Done When
 
-Scanning the same commit twice produces the same:
+The same repository commit produces the same:
 
--   SHA
--   file list
--   file hashes
+- commit SHA
+- file list
+- file hashes
 
-This must be an automated reproducibility test.
-
-------------------------------------------------------------------------
+and the normalized repository is persisted with a clear execution status.
 
 # 4. Phase 3 --- Scan Orchestration
 
@@ -1109,25 +1537,30 @@ Deliverable:
 
 ------------------------------------------------------------------------
 
-## Week 2 --- Repository Snapshot
+## Week 2 — Repository Ingestion
 
 Implement:
 
-``` text
-GitHub URL validation
-clone
+```text
+GitHub API client
+repository authorization check
+metadata retrieval
 branch resolution
 commit resolution
-checkout
+repository tree
 file filtering
-hashing
+file-size guards
 language detection
-manifest
+file-content retrieval
+SHA-256 hashing
+ARVE normalization
+database persistence
+ingestion status
 ```
 
-Test same commit twice:
+Test the same commit twice:
 
-``` text
+```text
 same SHA
 same files
 same hashes
@@ -1135,9 +1568,7 @@ same hashes
 
 Deliverable:
 
-> Reproducible repository snapshot.
-
-------------------------------------------------------------------------
+> Reproducible normalized repository snapshot.
 
 ## Week 3 --- AST Foundation
 
