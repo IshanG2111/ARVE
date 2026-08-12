@@ -173,3 +173,51 @@ class ProjectResponse(BaseModel):
     repository: Optional[RepositoryResponse] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ─── Ingestion Engine ────────────────────────────────────────────────────────
+class AnalysisRunCreate(BaseModel):
+    commit_sha: Optional[str] = None
+
+class AnalysisRunResponse(BaseModel):
+    id: str
+    repository_id: str
+    commit_sha: Optional[str] = None
+    status: str
+    files_found: int = 0
+    files_ingested: int = 0
+    files_skipped: int = 0
+    languages_summary: Optional[str] = None
+    error_message: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RepositoryFileResponse(BaseModel):
+    id: str
+    repository_id: str
+    analysis_run_id: str
+    path: str
+    filename: str
+    extension: Optional[str] = None
+    language: Optional[str] = None
+    size: int = 0
+    sha256: Optional[str] = None
+    content: Optional[str] = None
+    status: str
+    skip_reason: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class IngestionSummaryResponse(BaseModel):
+    repository_id: str
+    commit_sha: Optional[str] = None
+    files_found: int
+    files_ingested: int
+    files_skipped: int
+    languages: dict
+    status: str
+    run_id: str
+

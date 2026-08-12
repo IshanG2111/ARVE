@@ -46,9 +46,57 @@ class Repository(Base):
     language = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     private = Column(Boolean, default=False)
+    visibility = Column(String, default="public")
+    size_kb = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     projects = relationship("Project", back_populates="repository")
+    analysis_runs = relationship("AnalysisRun", back_populates="repository", cascade="all, delete-orphan")
+    files = relationship("RepositoryFile", back_populates="repository", cascade="all, delete-orphan")
+
+
+class AnalysisRun(Base):
+    """Tracks a single repository ingestion or analysis execution."""
+    __tablename__ = "analysis_runs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    repository_id = Column(String, ForeignKey("repositories.id"), nullable=False, index=True)
+    commit_sha = Column(String, nullable=True)
+    status = Column(String, default="PENDING")  # PENDING | FETCHING | PROCESSING | COMPLETED | FAILED
+    files_found = Column(Integer, default=0)
+    files_ingested = Column(Integer, default=0)
+    files_skipped = Column(Integer, default=0)
+    languages_summary = Column(Text, nullable=True)  # JSON formatted summary
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    repository = relationship("Repository", back_populates="analysis_runs")
+    files = relationship("RepositoryFile", back_populates="analysis_run", cascade="all, delete-orphan")
+
+
+class RepositoryFile(Base):
+    """Normalized file content and metadata extracted during repository ingestion."""
+    __tablename__ = "repository_files"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    repository_id = Column(String, ForeignKey("repositories.id"), nullable=False, index=True)
+    analysis_run_id = Column(String, ForeignKey("analysis_runs.id"), nullable=False, index=True)
+    path = Column(String, nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    extension = Column(String, nullable=True)
+    language = Column(String, nullable=True)
+    size = Column(Integer, default=0)
+    sha256 = Column(String, index=True, nullable=True)
+    content = Column(Text, nullable=True)
+    status = Column(String, default="INGESTED")  # INGESTED | SKIPPED | FAILED
+    skip_reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    repository = relationship("Repository", back_populates="files")
+    analysis_run = relationship("AnalysisRun", back_populates="files")
+
 
 
 class Project(Base):
