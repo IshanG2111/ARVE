@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
@@ -38,10 +38,10 @@ export const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  const name = project.name || project.repository?.name || project.repo_name?.split('/').pop() || 'Untitled';
-  const repoFull = project.repository?.full_name || project.repo_name || '—';
-  const branch = project.branch || project.default_branch || 'main';
-  const repoUrl = project.repository?.html_url || project.repo_url;
+  const name = project.name || project.repository?.name || 'Untitled project';
+  const repoFull = project.repository?.full_name || '—';
+  const branch = project.branch || 'main';
+  const repoUrl = project.repository?.html_url;
   const language = project.repository?.language;
   const isPrivate = project.repository?.private;
 
@@ -49,7 +49,6 @@ export const ProjectDetailPage: React.FC = () => {
     <div className="project-detail anim-fade-up">
       <HalftoneBackground interactive={false} showHero={false} />
 
-      {/* Back */}
       <button
         className="btn btn-ghost"
         style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px' }}
@@ -59,18 +58,18 @@ export const ProjectDetailPage: React.FC = () => {
         ← Dashboard
       </button>
 
-      {/* Header */}
       <div className="project-detail-header">
         <h1 className="project-detail-name">{name}</h1>
         <div style={{ display: 'flex', gap: '12px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
           <span>{branch}</span>
           {language && <>• <span>{language}</span></>}
           {isPrivate && <>• <span>Private</span></>}
-          • <span style={{ color: project.verified ? 'var(--success)' : 'var(--muted)' }}>{project.verified ? 'Verified' : 'Pending'}</span>
+          • <span style={{ color: project.verified ? 'var(--success)' : 'var(--muted)' }}>
+            {project.verified ? 'Verified' : 'Pending'}
+          </span>
         </div>
       </div>
 
-      {/* Repository info */}
       <div className="detail-section card card-flat" style={{ padding: '20px 24px', marginBottom: '20px' }}>
         <div className="detail-section-title">Repository Metadata</div>
 
@@ -115,8 +114,7 @@ export const ProjectDetailPage: React.FC = () => {
           <span className="detail-field-val">
             {project.verified
               ? <span style={{ color: 'var(--success)' }}>Verified</span>
-              : <span style={{ color: 'var(--dim)' }}>Pending</span>
-            }
+              : <span style={{ color: 'var(--dim)' }}>Pending</span>}
           </span>
         </div>
 
@@ -124,22 +122,21 @@ export const ProjectDetailPage: React.FC = () => {
           <span className="detail-field-key">Created</span>
           <span className="detail-field-val">
             {new Date(project.created_at).toLocaleDateString('en-US', {
-              month: 'long', day: 'numeric', year: 'numeric'
+              month: 'long', day: 'numeric', year: 'numeric',
             })}
           </span>
         </div>
       </div>
 
-      {/* Future modules */}
       <div>
         <div style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '12px', fontFamily: 'var(--font-code)' }}>
           Upcoming modules
         </div>
         <div className="modules-grid">
-          {FUTURE_MODULES.map((m) => (
-            <div key={m.title} className="module-card">
-              <div className="module-card-title">{m.title}</div>
-              <div className="module-card-sub">{m.desc}</div>
+          {FUTURE_MODULES.map((module) => (
+            <div key={module.title} className="module-card">
+              <div className="module-card-title">{module.title}</div>
+              <div className="module-card-sub">{module.desc}</div>
             </div>
           ))}
         </div>

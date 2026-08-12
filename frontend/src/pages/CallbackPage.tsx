@@ -11,13 +11,14 @@ export const CallbackPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
+    const state = params.get('state') || undefined;
 
     if (!code) {
       setError('No authorization code received from GitHub.');
       return;
     }
 
-    githubCallback(code)
+    githubCallback(code, state)
       .then(async () => {
         await refetch();
         navigate('/dashboard');

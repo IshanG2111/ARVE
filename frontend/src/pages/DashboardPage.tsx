@@ -11,13 +11,11 @@ import type { Project } from '../types';
 function projectDisplayName(p: Project): string {
   if (p.name) return p.name;
   if (p.repository?.name) return p.repository.name;
-  if (p.repo_name) return p.repo_name.split('/').pop() || p.repo_name;
   return 'Untitled project';
 }
 
 function projectRepoLabel(p: Project): string {
   if (p.repository?.full_name) return p.repository.full_name;
-  if (p.repo_name) return p.repo_name;
   return '';
 }
 
@@ -133,10 +131,10 @@ export const DashboardPage: React.FC = () => {
 
                 <div className="project-card-footer">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>
-                    {(project.branch || project.default_branch) && (
+                    {project.branch && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <GitBranch size={10} />
-                        {project.branch || project.default_branch}
+                        {project.branch}
                       </span>
                     )}
                     <span style={{ color: project.verified ? 'var(--success)' : 'var(--dim)' }}>
