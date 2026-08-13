@@ -191,7 +191,7 @@ exists.
 
 ------------------------------------------------------------------------
 
-# 7. Verify the Project Configurationn
+# 7. Verify the Project Configuration
 
 From the ARVE root:
 
