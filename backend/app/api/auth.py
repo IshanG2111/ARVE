@@ -1,17 +1,13 @@
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.auth.firebase_auth import verify_firebase_token
 from app.auth.jwt import create_access_token
-from app.core import security
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.models import User
-from app.schemas.schemas import FirebaseLogin, Token, UserCreate, UserLogin, UserResponse
+from app.schemas.schemas import FirebaseLogin, Token, UserResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -99,54 +95,3 @@ async def logout(response: Response):
 async def me(user: User = Depends(get_current_user)):
     return user
 
-
-# Legacy direct-auth endpoints are retained for existing local development data.
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user_in.email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="A user with this email already exists.")
-
-    new_user = User(
-        email=user_in.email,
-        hashed_password=security.get_password_hash(user_in.password),
-        full_name=user_in.full_name,
-        username=user_in.email.split("@", 1)[0],
-    )
-    db.add(new_user)
-    try:
-        db.commit()
-        db.refresh(new_user)
-    except Exception:
-        db.rollback()
-        raise
-    return new_user
-
-
-@router.post("/login", response_model=Token)
-def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    response: Response = None,
-    db: Session = Depends(get_db),
-):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not user.hashed_password or not security.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token = create_access_token(user.id)
-    if response:
-        response.set_cookie("access_token", access_token, **COOKIE_KWARGS)
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@router.post("/login/json", response_model=Token)
-def login_json(user_in: UserLogin, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == user_in.email).first()
-    if not user or not user.hashed_password or not security.verify_password(user_in.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password")
-    access_token = create_access_token(user.id)
-    response.set_cookie("access_token", access_token, **COOKIE_KWARGS)
-    return {"access_token": access_token, "token_type": "bearer"}

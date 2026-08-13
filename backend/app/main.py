@@ -1,22 +1,18 @@
-from fastapi import Depends, FastAPI, Response
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import api_router
-from app.api.auth import router as auth_router
-from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import init_db
-from app.models.models import User
-from app.schemas.schemas import UserResponse
 
-# Register SQLAlchemy models only. Schema changes are handled by Alembic.
+# Register SQLAlchemy models. Shared schema changes are managed by Alembic.
 init_db()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     description="Adaptive Remediation & Verification Engine (ARVE) API",
-    version="0.1.5 - Foundation Stabilization",
+    version="0.2.0 - Foundation + Repository Ingestion",
 )
 
 allowed_origins = list(dict.fromkeys([
@@ -33,13 +29,6 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
-app.include_router(auth_router)
-
-
-@app.get("/me", response_model=UserResponse, tags=["me"])
-@app.get(f"{settings.API_V1_STR}/me", response_model=UserResponse, tags=["me"])
-def read_me(current_user: User = Depends(get_current_user)):
-    return current_user
 
 
 @app.get("/")
@@ -48,7 +37,7 @@ def root():
         "status": "online",
         "app": settings.PROJECT_NAME,
         "docs": "/docs",
-        "version": "0.1.5 - Foundation Stabilization",
+        "version": "0.2.0 - Foundation + Repository Ingestion",
     }
 
 
