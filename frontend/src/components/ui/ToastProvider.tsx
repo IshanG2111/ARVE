@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -52,58 +51,53 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           pointerEvents: 'none',
         }}
       >
-        <AnimatePresence>
-          {toasts.map((t) => (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, y: 20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.95 }}
-              transition={{ duration: 0.25, ease: [0.23, 1, 0.32, 1] }}
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className="anim-fade-up"
+            style={{
+              pointerEvents: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              background: 'rgba(13, 16, 24, 0.95)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: t.type === 'success'
+                ? '1px solid rgba(81, 207, 102, 0.3)'
+                : t.type === 'error'
+                ? '1px solid rgba(255, 107, 107, 0.3)'
+                : '1px solid var(--border-strong)',
+              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.5)',
+              color: 'var(--primary)',
+              fontSize: '13px',
+              fontFamily: 'var(--font-ui)',
+            }}
+          >
+            {t.type === 'success' && <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />}
+            {t.type === 'error' && <AlertTriangle size={16} color="var(--critical)" style={{ flexShrink: 0 }} />}
+            {t.type === 'info' && <Info size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
+
+            <span style={{ flex: 1, lineHeight: 1.4 }}>{t.message}</span>
+
+            <button
+              onClick={() => removeToast(t.id)}
               style={{
-                pointerEvents: 'auto',
+                background: 'none',
+                border: 'none',
+                color: 'var(--muted)',
+                cursor: 'pointer',
+                padding: '2px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                background: 'rgba(13, 16, 24, 0.95)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                border: t.type === 'success'
-                  ? '1px solid rgba(81, 207, 102, 0.3)'
-                  : t.type === 'error'
-                  ? '1px solid rgba(255, 107, 107, 0.3)'
-                  : '1px solid var(--border-strong)',
-                boxShadow: '0 12px 32px rgba(0, 0, 0, 0.5)',
-                color: 'var(--primary)',
-                fontSize: '13px',
-                fontFamily: 'var(--font-ui)',
               }}
             >
-              {t.type === 'success' && <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />}
-              {t.type === 'error' && <AlertTriangle size={16} color="var(--critical)" style={{ flexShrink: 0 }} />}
-              {t.type === 'info' && <Info size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
-
-              <span style={{ flex: 1, lineHeight: 1.4 }}>{t.message}</span>
-
-              <button
-                onClick={() => removeToast(t.id)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
-                  padding: '2px',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <X size={14} />
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
+              <X size={14} />
+            </button>
+          </div>
+        ))}
       </div>
     </ToastContext.Provider>
   );

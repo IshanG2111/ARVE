@@ -94,6 +94,8 @@ class RepositoryResponse(BaseModel):
     html_url: Optional[str] = None
     default_branch: str
     language: Optional[str] = None
+    frameworks: Optional[str] = None
+    package_manager: Optional[str] = None
     description: Optional[str] = None
     private: bool
     created_at: datetime
@@ -188,6 +190,8 @@ class AnalysisRunResponse(BaseModel):
     files_ingested: int = 0
     files_skipped: int = 0
     languages_summary: Optional[str] = None
+    frameworks: Optional[str] = None
+    package_manager: Optional[str] = None
     error_message: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -218,6 +222,8 @@ class IngestionSummaryResponse(BaseModel):
     files_ingested: int
     files_skipped: int
     languages: dict
+    frameworks: Optional[str] = None
+    package_manager: Optional[str] = None
     status: str
     run_id: str
 

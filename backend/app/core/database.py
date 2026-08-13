@@ -89,13 +89,27 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     inspector = inspect(engine)
 
-    if current_url.startswith("sqlite"):
-        with engine.begin() as conn:
-            for table_name, table in Base.metadata.tables.items():
-                if inspector.has_table(table_name):
-                    existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
-                    for col in table.columns:
-                        if col.name not in existing_cols:
-                            col_type = col.type.compile(engine.dialect)
-                            conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type} NULL'))
+    # Dynamic column additions for SQLite and PostgreSQL schema updates
+    with engine.begin() as conn:
+        for table_name, table in Base.metadata.tables.items():
+            if inspector.has_table(table_name):
+                existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                for col in table.columns:
+                    if col.name not in existing_cols:
+                        col_type = col.type.compile(engine.dialect)
+                        conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type}'))
+
+    # Clean up orphaned repository & analysis records left behind by deleted projects
+    from app.core.database import SessionLocal
+    with SessionLocal() as db:
+        try:
+            from app.models.models import Project, Repository
+            all_repo_ids = {r.id for r in db.query(Repository.id).all()}
+            active_repo_ids = {p.repository_id for p in db.query(Project.repository_id).filter(Project.repository_id.isnot(None)).all()}
+            orphaned_repo_ids = all_repo_ids - active_repo_ids
+            if orphaned_repo_ids:
+                db.query(Repository).filter(Repository.id.in_(orphaned_repo_ids)).delete(synchronize_session=False)
+                db.commit()
+        except Exception:
+            pass
 

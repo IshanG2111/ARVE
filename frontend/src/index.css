@@ -2,7 +2,51 @@
 @import "tailwindcss";
 
 :root {
-  /* ── ARVE-HT — Dark Navy Editorial Halftone ──────────────────────────── */
+  /* ── Default Light Mode ────────────────────────────────────────────── */
+  --bg:            #F8F9FA;
+  --surface:       #FFFFFF;
+  --elevated:      #F1F3F5;
+  --elevated-2:    #E9ECEF;
+
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-hover:  rgba(0, 0, 0, 0.16);
+  --border-strong: rgba(0, 0, 0, 0.28);
+
+  --primary:       #111827;
+  --secondary:     #4B5563;
+  --muted:         #6B7280;
+  --dim:           #9CA3AF;
+
+  --accent:        #5B67EA;
+  --accent-muted:  rgba(91, 103, 234, 0.10);
+
+  --critical:      #E03131;
+  --critical-bg:   rgba(224, 49, 49, 0.08);
+  --high:          #F76707;
+  --high-bg:       rgba(247, 103, 7, 0.08);
+  --medium:        #F59F00;
+  --medium-bg:     rgba(245, 159, 0, 0.08);
+  --low:           #1C7ED6;
+  --low-bg:        rgba(28, 126, 214, 0.08);
+  --success:       #2B8A3E;
+  --success-bg:    rgba(43, 138, 62, 0.08);
+
+  --font-display:  'Playfair Display', 'Georgia', 'Times New Roman', serif;
+  --font-ui:       'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-code:     'Geist Mono', ui-monospace, SFMono-Regular, monospace;
+
+  --shadow-subtle: 0 8px 32px rgba(0, 0, 0, 0.06);
+  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
+  --radius-sm:     4px;
+  --radius-md:     6px;
+  --radius-lg:     10px;
+
+  --brand-filter:  none;
+  --navbar-bg:     rgba(255, 255, 255, 0.88);
+}
+
+html.dark {
+  /* ── Dark Mode ──────────────────────────────────────────────────────── */
   --bg:            #080B12;
   --surface:       #0D1018;
   --elevated:      #131720;
@@ -31,15 +75,25 @@
   --success:       #51CF66;
   --success-bg:    rgba(81, 207, 102, 0.08);
 
-  --font-display:  'Playfair Display', 'Georgia', 'Times New Roman', serif;
-  --font-ui:       'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-code:     'Geist Mono', ui-monospace, SFMono-Regular, monospace;
-
   --shadow-subtle: 0 8px 32px rgba(0, 0, 0, 0.6);
-  --ease-out:      cubic-bezier(0.23, 1, 0.32, 1);
-  --radius-sm:     4px;
-  --radius-md:     6px;
-  --radius-lg:     10px;
+  --brand-filter:  brightness(0) invert(1);
+  --navbar-bg:     rgba(13, 16, 24, 0.88);
+}
+
+/* ── View Transitions Theme Animation ────────────────────────────────────── */
+::view-transition-group(root) {
+  animation: none;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-old(root) {
+  z-index: 1;
+}
+::view-transition-new(root) {
+  z-index: 9999;
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -196,6 +250,7 @@ code, pre {
 
 /* ── Hero CTA — Outline style matching reference ─────────────────────── */
 .hero-cta {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -206,14 +261,19 @@ code, pre {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--primary);
-  background: transparent;
+  background: var(--border);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   transition: all 300ms var(--ease-out);
   cursor: pointer;
+  transform: translate3d(0, 0, 0);
 }
 .hero-cta:hover {
-  background: rgba(210, 206, 196, 0.06);
+  background: var(--border-hover);
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
   border-color: var(--primary);
 }
 .hero-cta:disabled { opacity: 0.3; pointer-events: none; }
@@ -313,9 +373,9 @@ code, pre {
   line-height: 1.3;
 }
 .badge-neutral { background: var(--elevated); color: var(--secondary); border: 1px solid var(--border); }
-.badge-ok { background: transparent; color: var(--success); border: 1px solid rgba(81, 207, 102, 0.2); }
-.badge-warn { background: transparent; color: var(--medium); border: 1px solid rgba(255, 212, 59, 0.2); }
-.badge-critical { background: transparent; color: var(--critical); border: 1px solid rgba(255, 107, 107, 0.2); }
+.badge-ok { background: var(--success-bg); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 20%, transparent); }
+.badge-warn { background: var(--medium-bg); color: var(--medium); border: 1px solid color-mix(in srgb, var(--medium) 20%, transparent); }
+.badge-critical { background: var(--critical-bg); color: var(--critical); border: 1px solid color-mix(in srgb, var(--critical) 20%, transparent); }
 .badge-lock { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 
 /* ── Alerts ─────────────────────────────────────────────────────────────── */
@@ -329,8 +389,8 @@ code, pre {
   line-height: 1.5;
   border: 1px solid var(--border);
 }
-.alert-error { background: var(--critical-bg); border-color: rgba(255, 107, 107, 0.2); color: var(--critical); }
-.alert-success { background: var(--success-bg); border-color: rgba(81, 207, 102, 0.2); color: var(--success); }
+.alert-error { background: var(--critical-bg); border-color: color-mix(in srgb, var(--critical) 20%, transparent); color: var(--critical); }
+.alert-success { background: var(--success-bg); border-color: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); }
 .alert-info { background: var(--surface); border-color: var(--border); color: var(--secondary); }
 
 
@@ -341,10 +401,11 @@ code, pre {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(8, 11, 18, 0.8);
+  background: var(--navbar-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
+  transition: background-color 300ms var(--ease-out), border-color 300ms var(--ease-out);
 }
 .navbar-inner {
   display: flex;
@@ -805,7 +866,7 @@ code, pre {
 }
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 .anim-slide-in {
@@ -813,7 +874,7 @@ code, pre {
 }
 @keyframes slide-in {
   from { opacity: 0; transform: translateX(-8px); }
-  to { opacity: 1; transform: translateX(0); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ── Utility resets ─────────────────────────────────────────────────────── */
@@ -937,14 +998,14 @@ code, pre {
 }
 
 .badge-verified {
-  background: rgba(81, 207, 102, 0.1);
+  background: var(--success-bg);
   color: var(--success);
-  border: 1px solid rgba(81, 207, 102, 0.25);
+  border: 1px solid color-mix(in srgb, var(--success) 25%, transparent);
 }
 .badge-pending {
-  background: rgba(255, 169, 77, 0.1);
+  background: var(--high-bg);
   color: var(--high);
-  border: 1px solid rgba(255, 169, 77, 0.25);
+  border: 1px solid color-mix(in srgb, var(--high) 25%, transparent);
 }
 .dot {
   width: 6px;
@@ -952,6 +1013,6 @@ code, pre {
   border-radius: 50%;
   display: inline-block;
 }
-.dot-green { background: var(--success); boxShadow: 0 0 6px var(--success); }
-.dot-amber { background: var(--high); boxShadow: 0 0 6px var(--high); }
+.dot-green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.dot-amber { background: var(--high); box-shadow: 0 0 6px var(--high); }
 

@@ -173,6 +173,43 @@ export async function verifyTarget(targetId: string): Promise<VerificationResult
   return handleResponse<VerificationResult>(res);
 }
 
+// ─── Ingestion ────────────────────────────────────────────────────────────────
+export async function triggerIngestion(repoId: string): Promise<any> {
+  const res = await fetch(`${BASE}/repositories/${repoId}/ingest`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<any>(res);
+}
+
+export async function getAnalysisRuns(repoId: string): Promise<any[]> {
+  const res = await fetch(`${BASE}/repositories/${repoId}/analysis-runs`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<any[]>(res);
+}
+
+export async function getAnalysisSummary(runId: string): Promise<any> {
+  const res = await fetch(`${BASE}/analysis-runs/${runId}/summary`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<any>(res);
+}
+
+export async function getAnalysisFiles(runId: string, statusFilter?: string): Promise<any[]> {
+  const url = statusFilter 
+    ? `${BASE}/analysis-runs/${runId}/files?status_filter=${statusFilter}`
+    : `${BASE}/analysis-runs/${runId}/files`;
+  const res = await fetch(url, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<any[]>(res);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -185,4 +222,8 @@ Object.assign(api, {
   addTarget,
   deleteTarget,
   verifyTarget,
+  triggerIngestion,
+  getAnalysisRuns,
+  getAnalysisSummary,
+  getAnalysisFiles,
 });

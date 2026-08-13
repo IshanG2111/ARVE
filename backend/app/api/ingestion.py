@@ -37,13 +37,8 @@ async def trigger_repository_ingestion(
     Trigger repository ingestion against the real GitHub API.
     Requires the authenticated user to have a valid GitHub access token.
     """
-    # Validate GitHub access token exists
+    # GitHub access token (optional for public repositories)
     token = current_user.github_access_token
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="GitHub access token not found. Authenticate via GitHub OAuth first.",
-        )
 
     # Validate repository exists in DB
     repo = db.query(Repository).filter(Repository.id == repo_id).first()
@@ -93,6 +88,8 @@ def get_analysis_run_summary(
         files_ingested=run.files_ingested,
         files_skipped=run.files_skipped,
         languages=languages,
+        frameworks=run.frameworks,
+        package_manager=run.package_manager,
         status=run.status,
         run_id=run.id,
     )
@@ -114,7 +111,14 @@ def list_analysis_run_files(
     if status_filter:
         query = query.filter(RepositoryFile.status == status_filter.upper())
 
-    return query.all()
+    files = query.all()
+    if not files and run.repository_id:
+        fallback_query = db.query(RepositoryFile).filter(RepositoryFile.repository_id == run.repository_id)
+        if status_filter:
+            fallback_query = fallback_query.filter(RepositoryFile.status == status_filter.upper())
+        files = fallback_query.all()
+
+    return files
 
 
 @router.get("/repositories/{repo_id}/analysis-runs", response_model=List[AnalysisRunResponse])

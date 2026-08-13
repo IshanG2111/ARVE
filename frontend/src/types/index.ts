@@ -34,6 +34,8 @@ export interface Repository {
   html_url?: string;
   default_branch: string;
   language?: string;
+  frameworks?: string;
+  package_manager?: string;
   description?: string;
   private: boolean;
   created_at: string;

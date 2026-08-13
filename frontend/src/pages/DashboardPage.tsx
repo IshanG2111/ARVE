@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
 import { useProjects, useDeleteProject } from '../hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
 import { ProjectWizardModal } from '../components/ProjectWizardModal';
@@ -23,14 +22,12 @@ import {
   Globe,
   ExternalLink,
   ShieldCheck,
-  Activity,
   Layers,
   Cpu,
   Zap,
   Copy,
   Check,
   Filter,
-  CheckCircle2,
 } from 'lucide-react';
 import type { Project } from '../types';
 
@@ -49,14 +46,13 @@ function projectRepoLabel(p: Project): string {
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const queryClient = useQueryClient();
   const toast = useToast();
 
   const { data: projects = [], isLoading } = useProjects();
   const deleteProject = useDeleteProject();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'scans' | 'workbench' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'scans' | 'workbench'>('overview');
   const [showWizard, setShowWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,21 +94,17 @@ export const DashboardPage: React.FC = () => {
   const copyToken = (token: string, targetId: string) => {
     navigator.clipboard.writeText(token);
     setCopiedTokenId(targetId);
-    toast.success('Verification token copied to clipboard');
+    toast.success('Verification token copied');
     setTimeout(() => setCopiedTokenId(null), 2000);
   };
 
-  const displayName = user?.username || user?.github_login || user?.email?.split('@')[0] || 'Operator';
-
   const filteredProjects = useMemo(() => {
     return projects.filter((p) => {
-      // Search text query
       const name = projectDisplayName(p).toLowerCase();
       const repo = projectRepoLabel(p).toLowerCase();
       const targets = p.targets || [];
       const matchesSearch = !searchTerm || name.includes(searchTerm.toLowerCase()) || repo.includes(searchTerm.toLowerCase());
 
-      // Status filter
       const isVerified = p.verified || targets.some((t) => t.is_verified);
       if (statusFilter === 'verified' && !isVerified) return false;
       if (statusFilter === 'pending' && isVerified) return false;
@@ -129,22 +121,17 @@ export const DashboardPage: React.FC = () => {
         {/* Workspace Header */}
         <div className="dashboard-header">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 className="dashboard-title">{displayName}'s Security Command Center</h1>
-              <span className="status-pulse" style={{ background: 'rgba(81, 207, 102, 0.1)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(81, 207, 102, 0.2)' }}>
-                <span className="pulse-dot" /> Operational
-              </span>
-            </div>
+            <h1 className="dashboard-title">Dashboard</h1>
             <p className="dashboard-sub">
-              {projects.length} connected repository workspace{projects.length !== 1 ? 's' : ''} • Real-time AST pattern monitoring
+              {projects.length} connected repository workspace{projects.length !== 1 ? 's' : ''}
             </p>
           </div>
 
           <button
-            className="hero-cta glow-pill"
+            className="btn btn-primary"
             onClick={() => setShowWizard(true)}
             id="create-project-btn"
-            style={{ fontSize: '12.5px', padding: '10px 20px', gap: '8px' }}
+            style={{ fontSize: '12.5px', padding: '8px 16px', gap: '8px' }}
           >
             <Plus size={15} />
             Connect Repository
@@ -168,7 +155,7 @@ export const DashboardPage: React.FC = () => {
             onClick={() => setActiveTab('scans')}
             id="tab-scans"
           >
-            <Cpu size={14} /> Interactive Security Scans
+            <Cpu size={14} /> Security Scans
           </button>
           <button
             className={`dashboard-tab-btn ${activeTab === 'workbench' ? 'active' : ''}`}
@@ -176,13 +163,6 @@ export const DashboardPage: React.FC = () => {
             id="tab-workbench"
           >
             <Zap size={14} /> Remediation Workbench
-          </button>
-          <button
-            className={`dashboard-tab-btn ${activeTab === 'activity' ? 'active' : ''}`}
-            onClick={() => setActiveTab('activity')}
-            id="tab-activity"
-          >
-            <Activity size={14} /> Security Telemetry Logs
           </button>
         </div>
 
@@ -234,19 +214,19 @@ export const DashboardPage: React.FC = () => {
                 <LoadingAnimation fullScreen={false} />
               </div>
             ) : projects.length === 0 ? (
-              <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
-                <div className="empty-state anim-fade-up" style={{ padding: '64px 24px' }}>
-                  <ShieldCheck size={42} color="var(--accent)" style={{ marginBottom: '16px', opacity: 0.8 }} />
+              <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.06)">
+                <div className="empty-state anim-fade-up" style={{ padding: '56px 24px' }}>
+                  <ShieldCheck size={40} color="var(--accent)" style={{ marginBottom: '14px', opacity: 0.8 }} />
                   <h2 className="empty-title">No GitHub repositories connected yet</h2>
                   <p className="empty-sub">
-                    Link your GitHub repository and configure its live target web URL to start active AST security analysis and patch generation.
+                    Link your GitHub repository and configure target domain URLs for security analysis.
                   </p>
                   <button
-                    className="hero-cta glow-pill"
+                    className="btn btn-primary"
                     onClick={() => setShowWizard(true)}
                     id="empty-create-btn"
                   >
-                    <Plus size={14} /> Connect First Repository
+                    <Plus size={14} /> Connect Repository
                   </button>
                 </div>
               </SpotlightCard>
@@ -262,7 +242,7 @@ export const DashboardPage: React.FC = () => {
                 </button>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {filteredProjects.map((project) => {
                   const targets = project.targets || [];
                   const name = projectDisplayName(project);
@@ -270,14 +250,14 @@ export const DashboardPage: React.FC = () => {
                   const branch = project.branch || project.default_branch || 'main';
 
                   return (
-                    <SpotlightCard key={project.id} spotlightColor="rgba(126, 139, 245, 0.08)">
-                      <div style={{ padding: '24px' }}>
+                    <SpotlightCard key={project.id} spotlightColor="rgba(126, 139, 245, 0.06)">
+                      <div style={{ padding: '22px 24px' }}>
                         {/* Card Header */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '18px' }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                               <h3
-                                style={{ fontSize: '17px', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
+                                style={{ fontSize: '16px', fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}
                                 onClick={() => navigate(`/projects/${project.id}`)}
                               >
                                 {name}
@@ -337,16 +317,16 @@ export const DashboardPage: React.FC = () => {
                         </div>
 
                         {/* Targets Section */}
-                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px' }}>
-                            Configured Deployed Targets ({targets.length})
+                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '14px' }}>
+                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
+                            Configured Target Domains ({targets.length})
                           </div>
 
                           {targets.length === 0 ? (
                             <div
                               style={{
-                                padding: '14px',
-                                background: 'rgba(8, 11, 18, 0.6)',
+                                padding: '12px 14px',
+                                background: 'var(--elevated)',
                                 border: '1px dashed var(--border)',
                                 borderRadius: 'var(--radius-md)',
                                 fontSize: '12.5px',
@@ -356,13 +336,13 @@ export const DashboardPage: React.FC = () => {
                                 justifyContent: 'space-between',
                               }}
                             >
-                              <span>No web target domain connected. Connect a domain URL to prove authorization.</span>
+                              <span>No target domain connected.</span>
                               <button
                                 className="btn btn-ghost"
                                 style={{ fontSize: '11.5px', padding: '4px 10px', color: 'var(--accent)' }}
                                 onClick={() => setAddTargetProjectId({ id: project.id, name })}
                               >
-                                + Configure Target
+                                + Add Target
                               </button>
                             </div>
                           ) : (
@@ -399,7 +379,7 @@ export const DashboardPage: React.FC = () => {
                                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <span className={`badge ${target.is_verified ? 'badge-verified' : 'badge-pending'}`}>
                                       <span className={`dot ${target.is_verified ? 'dot-green' : 'dot-amber'}`} />
-                                      {target.is_verified ? 'Authorized' : 'Pending Verification'}
+                                      {target.is_verified ? 'Authorized' : 'Pending Auth'}
                                     </span>
 
                                     <button
@@ -408,7 +388,7 @@ export const DashboardPage: React.FC = () => {
                                       onClick={() => setSelectedTarget(target)}
                                       id={`verify-target-${target.id}`}
                                     >
-                                      {target.is_verified ? 'Check Info' : 'Verify Domain'}
+                                      {target.is_verified ? 'Details' : 'Verify'}
                                     </button>
 
                                     <button
@@ -435,56 +415,14 @@ export const DashboardPage: React.FC = () => {
           </div>
         )}
 
-        {/* TAB 2: LIVE AST SCANS */}
+        {/* TAB 2: SCANS */}
         {activeTab === 'scans' && (
-          <LiveScanSimulator projectName={projects[0] ? projectDisplayName(projects[0]) : 'ARVE Core Repository'} />
+          <LiveScanSimulator projectName={projects[0] ? projectDisplayName(projects[0]) : 'ARVE Repository'} />
         )}
 
-        {/* TAB 3: REMEDIATION WORKBENCH */}
+        {/* TAB 3: WORKBENCH */}
         {activeTab === 'workbench' && (
           <RemediationWorkbench />
-        )}
-
-        {/* TAB 4: ACTIVITY & SIGNAL TELEMETRY LOGS */}
-        {activeTab === 'activity' && (
-          <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Activity size={16} color="var(--accent)" /> Real-Time Telemetry & Verification Audit Stream
-              </h3>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {[
-                  { time: 'Just now', title: 'AST Graph Ingress Parsing Complete', desc: 'Analyzed 42 controllers and ingress route handlers across active repositories.', type: 'info' },
-                  { time: '2 mins ago', title: 'Target Authorization Verified', desc: 'Domain verification token validated via .well-known HTTP response.', type: 'success' },
-                  { time: '15 mins ago', title: 'Deterministic Remediation Generated', desc: 'OWASP-A01 IDOR patch synthesized for request parameters authorization check.', type: 'success' },
-                  { time: '1 hour ago', title: 'GitHub Webhook Synced', desc: 'Branch commit updated AST node graph representation.', type: 'info' },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      padding: '12px 16px',
-                      background: 'var(--bg)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <CheckCircle2 size={15} color={item.type === 'success' ? 'var(--success)' : 'var(--accent)'} />
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--primary)' }}>{item.title}</div>
-                        <div style={{ fontSize: '12px', color: 'var(--muted)' }}>{item.desc}</div>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>{item.time}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </SpotlightCard>
         )}
 
         {/* Modals */}
@@ -494,7 +432,7 @@ export const DashboardPage: React.FC = () => {
             onCreated={() => {
               setShowWizard(false);
               refreshProjects();
-              toast.success('New repository connected to workspace!');
+              toast.success('New repository connected!');
             }}
           />
         )}
@@ -507,7 +445,7 @@ export const DashboardPage: React.FC = () => {
             onTargetAdded={() => {
               setAddTargetProjectId(null);
               refreshProjects();
-              toast.success('New target domain added! Ready for verification.');
+              toast.success('Target domain added!');
             }}
           />
         )}
@@ -518,7 +456,7 @@ export const DashboardPage: React.FC = () => {
             onClose={() => setSelectedTarget(null)}
             onTargetUpdated={() => {
               refreshProjects();
-              toast.success('Target authorization status updated!');
+              toast.success('Authorization status updated!');
             }}
           />
         )}

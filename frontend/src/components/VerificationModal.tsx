@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Copy, Check, ShieldCheck, AlertCircle, RefreshCw, Globe, ExternalLink } from 'lucide-react';
+import { X, ShieldCheck, AlertCircle, RefreshCw, Globe, ExternalLink } from 'lucide-react';
 import { api, type TargetWebsite, type VerificationResult } from '../services/api';
+import { CodeBlock } from '@/components/ui/code-block';
 
 interface VerificationModalProps {
   target: TargetWebsite;
@@ -9,24 +10,11 @@ interface VerificationModalProps {
 }
 
 export const VerificationModal: React.FC<VerificationModalProps> = ({ target, onClose, onTargetUpdated }) => {
-  const [copiedFile, setCopiedFile] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
 
   const fileName = 'arve-verification.txt';
-  const expectedUrl = `http(s)://${target.domain}/.well-known/${fileName}`;
-
-  const copy = (text: string, type: 'file' | 'token') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'file') {
-      setCopiedFile(true);
-      setTimeout(() => setCopiedFile(false), 2000);
-    } else {
-      setCopiedToken(true);
-      setTimeout(() => setCopiedToken(false), 2000);
-    }
-  };
+  const expectedUrl = `http://${target.domain}/.well-known/${fileName}`;
 
   const handleVerify = async () => {
     setVerifying(true);
@@ -81,35 +69,31 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
           padding: '16px',
           marginBottom: '16px'
         }}>
-          <p style={{ fontSize: '12px', color: 'var(--secondary)', marginBottom: '12px' }}>
-            Upload <code style={{ color: 'var(--accent)' }}>arve-verification.txt</code> to{' '}
-            <code style={{ color: 'var(--primary)' }}>{target.domain}/.well-known/</code>
+          <p style={{ fontSize: '12px', color: 'var(--secondary)', marginBottom: '16px' }}>
+            Upload <code style={{ color: 'var(--accent)' }}>{fileName}</code> containing the token to the path below:
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div>
-              <div className="label" style={{ marginBottom: '4px' }}>Filename</div>
-              <div className="code-box">
-                <span>{fileName}</span>
-                <button className="btn btn-ghost btn-icon" onClick={() => copy(fileName, 'file')} title="Copy filename">
-                  {copiedFile ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
-                </button>
-              </div>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <CodeBlock
+              tabs={[
+                {
+                  label: fileName,
+                  code: target.verification_token,
+                  language: 'txt',
+                },
+                {
+                  label: 'cURL test',
+                  code: `curl -I ${expectedUrl}`,
+                  language: 'bash',
+                },
+              ]}
+            />
 
             <div>
-              <div className="label" style={{ marginBottom: '4px' }}>File content (token)</div>
-              <div className="code-box">
-                <span style={{ wordBreak: 'break-all', flex: 1 }}>{target.verification_token}</span>
-                <button className="btn btn-ghost btn-icon" onClick={() => copy(target.verification_token, 'token')} title="Copy token">
-                  {copiedToken ? <Check size={13} color="var(--success)" /> : <Copy size={13} />}
-                </button>
+              <div className="label" style={{ marginBottom: '4px', fontSize: '11px', color: 'var(--muted)' }}>
+                Target verification URL
               </div>
-            </div>
-
-            <div>
-              <div className="label" style={{ marginBottom: '4px' }}>Must be accessible at</div>
-              <div style={{ fontFamily: 'var(--font-code)', fontSize: '11.5px', color: 'var(--muted)', wordBreak: 'break-all', padding: '6px 0' }}>
+              <div style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: 'var(--dim)', wordBreak: 'break-all', background: 'rgba(210,206,196,0.02)', padding: '8px 12px', borderRadius: '6px', border: '1px dashed var(--border)' }}>
                 {expectedUrl}
               </div>
             </div>

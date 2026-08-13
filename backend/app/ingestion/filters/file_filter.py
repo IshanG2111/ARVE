@@ -12,27 +12,37 @@ DEFAULT_MAX_FILE_SIZE = 1_048_576  # 1 MB in bytes
 
 # Source code extensions to include
 ALLOWED_EXTENSIONS = {
-    ".py",
-    ".js", ".jsx", ".ts", ".tsx",
-    ".java",
-    ".go",
-    ".rs",
-    ".c", ".h", ".cpp", ".hpp",
-    ".php",
-    ".rb",
+    # Core Languages
+    ".py", ".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs",
+    ".java", ".go", ".rs", ".c", ".h", ".cpp", ".hpp",
+    ".php", ".rb", ".kt", ".swift", ".cs", ".ex", ".exs", ".scala",
+    # Web & UI Frameworks
+    ".html", ".css", ".scss", ".sass", ".less",
+    ".vue", ".svelte", ".astro",
+    # Config, Data & Queries
+    ".json", ".yaml", ".yml", ".toml", ".env", ".env.example",
+    ".sql", ".graphql", ".gql", ".sh", ".bash", ".ps1",
+    ".md", ".markdown",
 }
 
 # Important configuration / build manifest files to include regardless of extension
 ALLOWED_FILENAMES = {
     "package.json",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
     "requirements.txt",
     "pyproject.toml",
+    "pipfile",
     "pom.xml",
+    "build.gradle",
     "go.mod",
-    "Cargo.toml",
-    "Dockerfile",
+    "cargo.toml",
+    "dockerfile",
     "docker-compose.yml",
     "docker-compose.yaml",
+    "makefile",
+    ".gitignore",
 }
 
 # Directories to strictly ignore anywhere in the path
@@ -61,7 +71,7 @@ IGNORED_EXTENSIONS = {
     ".exe", ".dll", ".so", ".dylib", ".bin",
     ".woff", ".woff2", ".ttf", ".eot",
     ".pyc", ".pyo", ".pyd", ".db", ".sqlite", ".sqlite3",
-    ".lock", ".log"
+    ".log"
 }
 
 
@@ -97,6 +107,7 @@ class FileFilter:
         """
         normalized_path = path.replace("\\", "/").strip("/")
         filename = os.path.basename(normalized_path)
+        filename_lower = filename.lower()
         _, ext = os.path.splitext(filename)
         ext = ext.lower()
 
@@ -104,17 +115,17 @@ class FileFilter:
         if self.is_ignored_directory(normalized_path):
             return FilterResult(should_ingest=False, skip_reason="ignored_directory")
 
-        # 2. Check binary / ignored extension
-        if ext in IGNORED_EXTENSIONS:
-            return FilterResult(should_ingest=False, skip_reason="binary_or_media_file")
-
-        # 3. Check file size limit
+        # 2. Check file size limit
         if size > self.max_file_size:
             return FilterResult(should_ingest=False, skip_reason="file_too_large")
 
-        # 4. Check if exact allowed filename or workflow configuration
-        if filename in ALLOWED_FILENAMES or self.is_workflow_file(normalized_path):
+        # 3. Check exact manifest filename or workflow file (takes priority over binary extension check)
+        if filename_lower in ALLOWED_FILENAMES or self.is_workflow_file(normalized_path):
             return FilterResult(should_ingest=True)
+
+        # 4. Check binary / ignored extension
+        if ext in IGNORED_EXTENSIONS:
+            return FilterResult(should_ingest=False, skip_reason="binary_or_media_file")
 
         # 5. Check allowed source extension
         if ext in ALLOWED_EXTENSIONS:

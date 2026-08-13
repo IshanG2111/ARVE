@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
@@ -31,6 +31,73 @@ export const ProjectDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'scanner'>('details');
   const [showAddTarget, setShowAddTarget] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
+
+  // Ingestion history states
+  const [runs, setRuns] = useState<any[]>([]);
+  const [selectedRun, setSelectedRun] = useState<any | null>(null);
+  const [runFiles, setRunFiles] = useState<any[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(false);
+  const [triggeringIngest, setTriggeringIngest] = useState(false);
+
+  const repoId = project?.repository?.id;
+
+  const fetchRuns = async () => {
+    if (!repoId) return;
+    setLoadingRuns(true);
+    try {
+      const data = await api.getAnalysisRuns(repoId);
+      setRuns(data);
+      if (data.length > 0) {
+        setSelectedRun(data[0]);
+      } else {
+        setSelectedRun(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch runs:', err);
+    } finally {
+      setLoadingRuns(false);
+    }
+  };
+
+  const fetchRunFiles = async () => {
+    if (!selectedRun?.id) return;
+    try {
+      const data = await api.getAnalysisFiles(selectedRun.id);
+      setRunFiles(data);
+    } catch (err) {
+      console.error('Failed to fetch run files:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (repoId) {
+      fetchRuns();
+    }
+  }, [repoId]);
+
+  useEffect(() => {
+    if (selectedRun?.id) {
+      fetchRunFiles();
+    } else {
+      setRunFiles([]);
+    }
+  }, [selectedRun?.id]);
+
+  const handleTriggerIngest = async () => {
+    if (!repoId) return;
+    setTriggeringIngest(true);
+    try {
+      await api.triggerIngestion(repoId);
+      toast.success('Ingestion pipeline triggered.');
+      setTimeout(() => {
+        fetchRuns();
+      }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger ingestion');
+    } finally {
+      setTriggeringIngest(false);
+    }
+  };
 
   const handleDeleteTarget = async (targetId: string, domain: string) => {
     if (!window.confirm(`Remove target domain "${domain}"?`)) return;
@@ -177,6 +244,18 @@ export const ProjectDetailPage: React.FC = () => {
               </div>
 
               <div className="detail-field">
+                <span className="detail-field-key">Detected Frameworks</span>
+                <span className="detail-field-val">{project.repository?.frameworks || 'None Detected'}</span>
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Package Manager</span>
+                <span className="detail-field-val" style={{ textTransform: 'uppercase' }}>
+                  {project.repository?.package_manager || 'None'}
+                </span>
+              </div>
+
+              <div className="detail-field">
                 <span className="detail-field-key">Created Date</span>
                 <span className="detail-field-val">
                   {new Date(project.created_at).toLocaleDateString('en-US', {
@@ -184,6 +263,151 @@ export const ProjectDetailPage: React.FC = () => {
                   })}
                 </span>
               </div>
+            </div>
+          </SpotlightCard>
+
+          {/* Repository Ingestion Details Card */}
+          <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div className="detail-section-title" style={{ margin: 0 }}>
+                  Repository Ingestion & Discovery
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '6px 12px' }}
+                  onClick={handleTriggerIngest}
+                  disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
+                >
+                  {triggeringIngest ? 'Triggering...' : 'Trigger Re-Ingestion'}
+                </button>
+              </div>
+
+              {loadingRuns ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>Loading ingestion history...</p>
+                </div>
+              ) : runs.length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '12px' }}>
+                    No ingestion runs found. Trigger an ingestion to analyze this repository's codebase.
+                  </p>
+                  <button className="btn btn-primary" onClick={handleTriggerIngest} disabled={triggeringIngest}>
+                    Start Ingestion
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '20px' }}>
+                  {/* Left Column: List of Runs */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', borderRight: '1px solid var(--border)', paddingRight: '15px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '4px' }}>
+                      Ingestion Runs
+                    </div>
+                    {runs.map((r) => {
+                      const isActive = selectedRun?.id === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => setSelectedRun(r)}
+                          style={{
+                            padding: '10px',
+                            borderRadius: '6px',
+                            background: isActive ? 'var(--elevated)' : 'transparent',
+                            border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)' }}>
+                              {r.commit_sha ? r.commit_sha.substring(0, 7) : 'Latest'}
+                            </span>
+                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                              {r.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)' }}>
+                            {new Date(r.started_at).toLocaleString()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right Column: Selected Run Details */}
+                  {selectedRun && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {/* Run Header / Counters */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--primary)' }}>{selectedRun.files_found}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Files Found</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#4ade80' }}>{selectedRun.files_ingested}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Ingested</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#fbbf24' }}>{selectedRun.files_skipped}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Skipped</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--accent)' }}>{selectedRun.package_manager || 'None'}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Package Mgr</div>
+                        </div>
+                      </div>
+
+                      {selectedRun.error_message && (
+                        <div style={{ padding: '12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(248, 113, 113, 0.5)', color: '#fca5a5', fontSize: '12px' }}>
+                          <strong>Ingestion Error:</strong> {selectedRun.error_message}
+                        </div>
+                      )}
+
+                      {/* File Tabs / Lists */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)' }}>
+                          File Manifest Analysis
+                        </div>
+
+                        {runFiles.length === 0 ? (
+                          <p style={{ color: 'var(--dim)', fontSize: '12px' }}>No files indexed in this run.</p>
+                        ) : (
+                          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+                              <thead>
+                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '28px' }}>
+                                  <th style={{ padding: '6px 12px' }}>File Path</th>
+                                  <th style={{ padding: '6px 12px' }}>Language</th>
+                                  <th style={{ padding: '6px 12px' }}>Size</th>
+                                  <th style={{ padding: '6px 12px' }}>Status / Reason</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {runFiles.map((f: any) => (
+                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '26px' }}>
+                                    <td style={{ padding: '6px 12px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {f.path}
+                                    </td>
+                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{f.language}</td>
+                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
+                                    <td style={{ padding: '6px 12px' }}>
+                                      {f.status === 'INGESTED' ? (
+                                        <span style={{ color: '#4ade80' }}>Ingested</span>
+                                      ) : (
+                                        <span style={{ color: '#fbbf24' }} title={f.skip_reason}>Skipped ({f.skip_reason})</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </SpotlightCard>
 

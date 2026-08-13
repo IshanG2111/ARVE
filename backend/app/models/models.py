@@ -44,6 +44,8 @@ class Repository(Base):
     html_url = Column(String, nullable=True)          # https://github.com/owner/name
     default_branch = Column(String, default="main")
     language = Column(String, nullable=True)
+    frameworks = Column(String, nullable=True)
+    package_manager = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     private = Column(Boolean, default=False)
     visibility = Column(String, default="public")
@@ -68,6 +70,8 @@ class AnalysisRun(Base):
     files_ingested = Column(Integer, default=0)
     files_skipped = Column(Integer, default=0)
     languages_summary = Column(Text, nullable=True)  # JSON formatted summary
+    frameworks = Column(String, nullable=True)
+    package_manager = Column(String, nullable=True)
     error_message = Column(Text, nullable=True)
     started_at = Column(DateTime, default=datetime.datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)

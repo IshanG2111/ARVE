@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React from 'react';
 
 interface LoadingAnimationProps {
   label?: string;
@@ -7,39 +6,21 @@ interface LoadingAnimationProps {
   size?: number;
 }
 
-const BOOT_MESSAGES = [
-  'Initializing security matrix…',
-  'Mapping AST graph representation…',
-  'Analyzing ingress endpoints…',
-  'Synthesizing security posture…',
-];
-
 export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
-  label,
   fullScreen = false,
-  size = 56,
+  size = 38,
 }) => {
-  const [logIndex, setLogIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLogIndex((prev) => (prev + 1) % BOOT_MESSAGES.length);
-    }, 2400);
-    return () => clearInterval(interval);
-  }, []);
-
-  const activeText = label || BOOT_MESSAGES[logIndex];
+  const isInline = size <= 24;
 
   return (
     <div
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '20px',
-        padding: fullScreen ? '0' : '48px 24px',
-        minHeight: fullScreen ? '75vh' : 'auto',
+        padding: isInline ? '0' : fullScreen ? '0' : '28px 16px',
+        minHeight: fullScreen ? '70vh' : 'auto',
         userSelect: 'none',
       }}
     >
@@ -48,55 +29,53 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 56 56"
         role="img"
-        aria-label="Compile"
+        aria-label="Loading"
         style={{ width: `${size}px`, height: `${size}px` }}
       >
-        <title>Compile</title>
-        <desc>Each column fills bottom-up, then releases as one.</desc>
+        <title>Loading</title>
         <defs>
-          <circle id="b" r="2.4" fill="#ffffff" opacity="0.07" />
-          <circle id="l" r="3.1" />
+          <circle id="b" r="2.2" fill="rgba(210, 206, 196, 0.12)" />
+          <circle id="l" r="2.8" fill="var(--accent, #7E8BF5)" />
         </defs>
         <style>{`
           .l {
-            fill: #ffffff;
             opacity: 0;
-            animation: icon-28-k 2400ms cubic-bezier(0.65, 0, 0.35, 1) infinite both;
+            animation: matrix-wave 2000ms cubic-bezier(0.4, 0, 0.2, 1) infinite both;
           }
-          @keyframes icon-28-k {
-            0% { opacity: 0.08; }
-            14% { opacity: 1; }
-            72% { opacity: 0.95; }
-            100% { opacity: 0.08; }
+          @keyframes matrix-wave {
+            0% { opacity: 0.1; transform: scale(0.9); }
+            18% { opacity: 1; transform: scale(1.05); }
+            70% { opacity: 0.85; transform: scale(1); }
+            100% { opacity: 0.1; transform: scale(0.9); }
           }
           @media (prefers-reduced-motion: reduce) {
-            .l { animation: none; opacity: 0.45; }
+            .l { animation: none; opacity: 0.5; }
           }
-          .d00 { animation-delay: 960ms; }
-          .d01 { animation-delay: 1056ms; }
-          .d02 { animation-delay: 1152ms; }
-          .d03 { animation-delay: 1248ms; }
-          .d04 { animation-delay: 1344ms; }
-          .d10 { animation-delay: 720ms; }
-          .d11 { animation-delay: 816ms; }
-          .d12 { animation-delay: 912ms; }
-          .d13 { animation-delay: 1008ms; }
-          .d14 { animation-delay: 1104ms; }
-          .d20 { animation-delay: 480ms; }
-          .d21 { animation-delay: 576ms; }
-          .d22 { animation-delay: 672ms; }
-          .d23 { animation-delay: 768ms; }
-          .d24 { animation-delay: 864ms; }
-          .d30 { animation-delay: 240ms; }
-          .d31 { animation-delay: 336ms; }
-          .d32 { animation-delay: 432ms; }
-          .d33 { animation-delay: 528ms; }
-          .d34 { animation-delay: 624ms; }
+          .d00 { animation-delay: 800ms; }
+          .d01 { animation-delay: 880ms; }
+          .d02 { animation-delay: 960ms; }
+          .d03 { animation-delay: 1040ms; }
+          .d04 { animation-delay: 1120ms; }
+          .d10 { animation-delay: 600ms; }
+          .d11 { animation-delay: 680ms; }
+          .d12 { animation-delay: 760ms; }
+          .d13 { animation-delay: 840ms; }
+          .d14 { animation-delay: 920ms; }
+          .d20 { animation-delay: 400ms; }
+          .d21 { animation-delay: 480ms; }
+          .d22 { animation-delay: 560ms; }
+          .d23 { animation-delay: 640ms; }
+          .d24 { animation-delay: 720ms; }
+          .d30 { animation-delay: 200ms; }
+          .d31 { animation-delay: 280ms; }
+          .d32 { animation-delay: 360ms; }
+          .d33 { animation-delay: 440ms; }
+          .d34 { animation-delay: 520ms; }
           .d40 { animation-delay: 0ms; }
-          .d41 { animation-delay: 96ms; }
-          .d42 { animation-delay: 192ms; }
-          .d43 { animation-delay: 288ms; }
-          .d44 { animation-delay: 384ms; }
+          .d41 { animation-delay: 80ms; }
+          .d42 { animation-delay: 160ms; }
+          .d43 { animation-delay: 240ms; }
+          .d44 { animation-delay: 320ms; }
         `}</style>
         <use href="#b" x="6" y="6" />
         <use href="#b" x="17" y="6" />
@@ -149,22 +128,6 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         <use className="l d43" href="#l" x="39" y="50" />
         <use className="l d44" href="#l" x="50" y="50" />
       </svg>
-
-      <motion.span
-        key={activeText}
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 0.8, y: 0 }}
-        transition={{ duration: 0.4 }}
-        style={{
-          fontSize: '11px',
-          color: 'var(--secondary)',
-          fontFamily: 'var(--font-code)',
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}
-      >
-        {activeText}
-      </motion.span>
     </div>
   );
 };

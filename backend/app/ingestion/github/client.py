@@ -40,15 +40,14 @@ class GitHubClient:
     BASE_URL = "https://api.github.com"
     TIMEOUT = 30.0  # seconds per request
 
-    def __init__(self, access_token: str):
-        if not access_token:
-            raise GitHubAuthenticationError("GitHub access token is required for ingestion")
+    def __init__(self, access_token: Optional[str] = None):
         self.access_token = access_token
         self.headers = {
             "Accept": "application/vnd.github.v3+json",
             "User-Agent": "ARVE-Ingestion-Engine/1.0",
-            "Authorization": f"Bearer {self.access_token}",
         }
+        if self.access_token and not self.access_token.startswith("mock_"):
+            self.headers["Authorization"] = f"Bearer {self.access_token}"
 
     def _check_response(self, res: httpx.Response, context: str):
         """Standardized response validation with structured error handling."""
@@ -133,9 +132,28 @@ class GitHubClient:
             logger.info(f"[GitHub] Tree contains {len(entries)} entries")
             return entries
 
-    async def get_file_content(self, owner: str, repo: str, path: str, ref: str) -> GitHubFileContent:
+    async def get_file_content(
+        self, owner: str, repo: str, path: str, ref: str, client: Optional[httpx.AsyncClient] = None
+    ) -> GitHubFileContent:
         """Fetch and decode the content of a single file from GitHub."""
-        async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
+        close_client = False
+        if client is None:
+            client = httpx.AsyncClient(timeout=self.TIMEOUT, follow_redirects=True)
+            close_client = True
+
+        try:
+            if not self.access_token or self.access_token.startswith("mock_"):
+                raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}"
+                res = await client.get(raw_url)
+                if res.status_code == 200:
+                    content_text = res.text
+                    return GitHubFileContent(
+                        path=path,
+                        sha="",
+                        size=len(content_text.encode("utf-8")),
+                        content=content_text,
+                    )
+
             url = f"{self.BASE_URL}/repos/{owner}/{repo}/contents/{path}?ref={ref}"
             res = await client.get(url, headers=self.headers)
             self._check_response(res, f"get_file_content({owner}/{repo}/{path})")
@@ -162,6 +180,9 @@ class GitHubClient:
                 size=data.get("size", len(content_text.encode("utf-8"))),
                 content=content_text,
             )
+        finally:
+            if close_client:
+                await client.aclose()
 
     async def validate_token(self) -> dict:
         """Verify the access token is valid and return rate limit info."""
@@ -175,3 +196,12 @@ class GitHubClient:
                 "remaining": core.get("remaining", 0),
                 "used": core.get("used", 0),
             }
+
+    async def download_repository_tarball(self, owner: str, repo: str, ref: str) -> bytes:
+        """Download the repository tarball archive (gzipped tar) for a commit/ref in 1 request."""
+        logger.info(f"[GitHub] Downloading tarball archive for {owner}/{repo}@{ref[:12]}")
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            url = f"{self.BASE_URL}/repos/{owner}/{repo}/tarball/{ref}"
+            res = await client.get(url, headers=self.headers)
+            self._check_response(res, f"download_repository_tarball({owner}/{repo}@{ref[:12]})")
+            return res.content

@@ -125,6 +125,20 @@ def delete_project(
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    repo_id = project.repository_id
+
+    # 1. Delete project (cascades to linked target_websites & scans)
     db.delete(project)
+    db.flush()
+
+    # 2. If the associated Repository is orphaned, delete it (cascades to analysis_runs & repository_files)
+    if repo_id:
+        other_projects_count = db.query(Project).filter(Project.repository_id == repo_id).count()
+        if other_projects_count == 0:
+            repo = db.query(Repository).filter(Repository.id == repo_id).first()
+            if repo:
+                db.delete(repo)
+
     db.commit()
     return None
