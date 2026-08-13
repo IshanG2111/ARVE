@@ -2,15 +2,26 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 import { motion } from 'framer-motion';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export const LandingPage: React.FC = () => {
   const { login, loading } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 80);
     return () => clearTimeout(t);
   }, []);
+
+  const handleLogin = async () => {
+    setLoginError(null);
+    try {
+      await login();
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Firebase sign-in failed. Please try again.');
+    }
+  };
 
   return (
     <div className="landing-page">
@@ -49,7 +60,7 @@ export const LandingPage: React.FC = () => {
 
           <motion.button
             className="hero-cta"
-            onClick={login}
+            onClick={handleLogin}
             disabled={loading}
             id="github-signin-btn"
             initial={{ opacity: 0, y: 16 }}
@@ -74,6 +85,17 @@ export const LandingPage: React.FC = () => {
           <strong> SECURING WHAT MATTERS.</strong>
         </span>
       </motion.div>
+
+      {loginError && (
+        <ConfirmModal
+          title="Sign-in failed"
+          message={loginError}
+          confirmText="Close"
+          cancelText=""
+          onConfirm={() => setLoginError(null)}
+          onCancel={() => setLoginError(null)}
+        />
+      )}
     </div>
   );
 };

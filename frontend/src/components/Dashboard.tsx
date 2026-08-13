@@ -4,6 +4,7 @@ import { GitHubIcon } from './GitHubIcon';
 import { type Project, type TargetWebsite, api } from '../services/api';
 import { VerificationModal } from './VerificationModal';
 import { AddTargetModal } from './AddTargetModal';
+import { ConfirmModal } from './ConfirmModal';
 
 interface DashboardProps {
   projects: Project[];
@@ -15,31 +16,37 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
   const [addTargetProjectId, setAddTargetProjectId] = useState<{ id: string; name: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteProjectId, setConfirmDeleteProjectId] = useState<string | null>(null);
+  const [confirmDeleteTargetId, setConfirmDeleteTargetId] = useState<string | null>(null);
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
   const totalTargets = projects.reduce((a, p) => a + (p.targets?.length || 0), 0);
   const verifiedTargets = projects.reduce((a, p) => a + (p.targets?.filter((t: TargetWebsite) => t.is_verified).length || 0), 0);
   const verificationRate = totalTargets > 0 ? Math.round((verifiedTargets / totalTargets) * 100) : 0;
 
   const handleDeleteProject = async (projectId: string) => {
-    if (!window.confirm('Delete this project and all its targets?')) return;
     setDeletingId(projectId);
+    setDialogError(null);
     try {
       await api.deleteProject(projectId);
       onRefresh();
-    } catch {
-      alert('Failed to delete project');
+    } catch (err) {
+      setDialogError(err instanceof Error ? err.message : 'Failed to delete project');
     } finally {
       setDeletingId(null);
+      setConfirmDeleteProjectId(null);
     }
   };
 
   const handleDeleteTarget = async (targetId: string) => {
-    if (!window.confirm('Remove this target domain?')) return;
+    setDialogError(null);
     try {
       await api.deleteTarget(targetId);
       onRefresh();
-    } catch {
-      alert('Failed to remove target');
+    } catch (err) {
+      setDialogError(err instanceof Error ? err.message : 'Failed to remove target');
+    } finally {
+      setConfirmDeleteTargetId(null);
     }
   };
 
@@ -153,7 +160,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
                     </button>
                     <button
                       className="btn btn-danger btn-icon"
-                      onClick={() => handleDeleteProject(project.id)}
+                      onClick={() => setConfirmDeleteProjectId(project.id)}
                       disabled={deletingId === project.id}
                       title="Delete project"
                       id={`delete-project-${project.id}`}
@@ -219,7 +226,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
 
                           <button
                             className="btn btn-danger btn-icon"
-                            onClick={() => handleDeleteTarget(target.id)}
+                            onClick={() => setConfirmDeleteTargetId(target.id)}
                             title="Remove target"
                             id={`delete-target-${target.id}`}
                           >
@@ -259,6 +266,40 @@ export const Dashboard: React.FC<DashboardProps> = ({ projects, onRefresh, onOpe
           projectName={addTargetProjectId.name}
           onClose={() => setAddTargetProjectId(null)}
           onTargetAdded={() => { onRefresh(); }}
+        />
+      )}
+
+      {confirmDeleteProjectId && (
+        <ConfirmModal
+          title="Delete project"
+          message="Delete this project and all its targets? This action cannot be undone."
+          confirmText="Delete project"
+          onConfirm={() => handleDeleteProject(confirmDeleteProjectId)}
+          onCancel={() => setConfirmDeleteProjectId(null)}
+          danger
+          busy={deletingId === confirmDeleteProjectId}
+        />
+      )}
+
+      {confirmDeleteTargetId && (
+        <ConfirmModal
+          title="Remove target"
+          message="Remove this target domain from the project?"
+          confirmText="Remove target"
+          onConfirm={() => handleDeleteTarget(confirmDeleteTargetId)}
+          onCancel={() => setConfirmDeleteTargetId(null)}
+          danger
+        />
+      )}
+
+      {dialogError && (
+        <ConfirmModal
+          title="Action failed"
+          message={dialogError}
+          confirmText="Close"
+          cancelText=""
+          onConfirm={() => setDialogError(null)}
+          onCancel={() => setDialogError(null)}
         />
       )}
     </div>

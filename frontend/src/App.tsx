@@ -6,7 +6,6 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
-import { CallbackPage } from './pages/CallbackPage';
 
 /** Guard: redirect authenticated users away from landing */
 function PublicOnly({ children }: { children: React.ReactNode }) {
@@ -38,7 +37,6 @@ export const App: React.FC = () => {
               </PublicOnly>
             }
           />
-          <Route path="/auth/github/callback" element={<CallbackPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/projects/:id" element={<ProjectDetailPage />} />

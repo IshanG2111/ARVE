@@ -70,36 +70,6 @@ export async function loginWithFirebase(
   return data;
 }
 
-export async function getGitHubAuthUrl(): Promise<{ auth_url: string; is_configured: boolean }> {
-  const res = await fetch(`${BASE}/github/auth-url`, { credentials: 'include' });
-  return handleResponse(res);
-}
-
-export async function githubCallback(
-  code: string,
-  state?: string,
-  isMock = false,
-): Promise<{ access_token: string }> {
-  const res = await fetch(`${BASE}/github/callback`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ code, state, is_mock: isMock }),
-  });
-  const data = await handleResponse<{ access_token: string }>(res);
-  if (data.access_token) localStorage.setItem('arve_token', data.access_token);
-  return data;
-}
-
-export async function logout() {
-  localStorage.removeItem('arve_token');
-  try {
-    await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
-  } catch {
-    // Local token is already cleared; network errors are safe to ignore.
-  }
-}
-
 // ─── GitHub repositories ───────────────────────────────────────────────────
 export async function getGitHubRepos(): Promise<GitHubRepo[]> {
   const res = await fetch(`${BASE}/repositories/github/list`, {
@@ -219,7 +189,6 @@ Object.assign(api, {
   createProject,
   updateProject,
   deleteProject,
-  githubCallback,
   logout,
   addTarget,
   getTargets,
