@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { signInWithPopup, GithubAuthProvider, signOut as fbSignOut } from "firebase/auth";
 import { auth, githubProvider, isFirebaseConfigured } from "../config/firebase";
-import { getMe, loginWithFirebase, logout as apiLogout, API_URL } from "../services/api";
+import { getMe, loginWithFirebase } from "../services/api";
 import type { User } from "../types";
 
 interface AuthContextType {
@@ -39,24 +39,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async () => {
     setLoading(true);
     try {
-      if (isFirebaseConfigured) {
-        const result = await signInWithPopup(auth, githubProvider);
-        const credential = GithubAuthProvider.credentialFromResult(result);
-        const githubToken = credential?.accessToken;
-        const firebaseIdToken = await result.user.getIdToken();
+      if (!isFirebaseConfigured) {
+        throw new Error("Firebase authentication is not configured.");
+      }
 
-        await loginWithFirebase(firebaseIdToken, githubToken);
-        await fetchUser();
-      } else {
-        // Direct OAuth / Demo redirect fallback if Firebase API credentials are not set in .env
-        window.location.href = `${API_URL}/auth/github/login`;
-      }
-    } catch (err: any) {
+      const result = await signInWithPopup(auth, githubProvider);
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const githubToken = credential?.accessToken;
+      const firebaseIdToken = await result.user.getIdToken();
+
+      await loginWithFirebase(firebaseIdToken, githubToken);
+      await fetchUser();
+    } catch (err) {
       console.error("Firebase authentication error:", err);
-      // Fallback to direct backend OAuth redirect on popup block or error
-      if (err?.code !== "auth/popup-closed-by-user") {
-        window.location.href = `${API_URL}/auth/github/login`;
-      }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -65,11 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await fbSignOut(auth);
-    } catch {
-      // Ignore firebase signout error
+    } finally {
+      localStorage.removeItem("arve_token");
+      setUser(null);
     }
-    await apiLogout();
-    setUser(null);
   };
 
   return (

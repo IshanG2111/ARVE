@@ -1,20 +1,26 @@
-"""
-Repository endpoints — Sprint 1.
-GET  /repositories            — list repositories for authenticated user
-GET  /repositories/{id}       — get single repository by internal ID
-GET  /repositories/{id}/branches — list branches from GitHub API
-"""
+"""Repository read/access endpoints."""
+
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+
 import httpx
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
-from app.models.models import User, Repository
-from app.schemas.schemas import RepositoryResponse, BranchResponse
 from app.api.deps import get_current_user
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.models import Project, Repository, User
+from app.schemas.schemas import BranchResponse, RepositoryResponse
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
+
+
+def _owned_repository_query(db: Session, repo_id: str, user_id: str):
+    return (
+        db.query(Repository)
+        .join(Project, Project.repository_id == Repository.id)
+        .filter(Repository.id == repo_id, Project.user_id == user_id)
+    )
 
 
 @router.get("", response_model=List[RepositoryResponse])
@@ -22,17 +28,14 @@ def list_repositories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Return all Repository records that belong to projects owned by
-    the current user, de-duplicated by github_repo_id.
-    If the user has connected repositories via the wizard those appear here.
-    """
-    # Collect unique repos linked to this user's projects
-    from app.models.models import Project
-    projects = db.query(Project).filter(Project.user_id == current_user.id).all()
-    repo_ids = {p.repository_id for p in projects if p.repository_id}
-    repos = db.query(Repository).filter(Repository.id.in_(repo_ids)).all()
-    return repos
+    return (
+        db.query(Repository)
+        .join(Project, Project.repository_id == Repository.id)
+        .filter(Project.user_id == current_user.id)
+        .distinct()
+        .order_by(Repository.name.asc())
+        .all()
+    )
 
 
 @router.get("/{repo_id}", response_model=RepositoryResponse)
@@ -41,7 +44,7 @@ def get_repository(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    repo = db.query(Repository).filter(Repository.id == repo_id).first()
+    repo = _owned_repository_query(db, repo_id, current_user.id).first()
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repo
@@ -53,40 +56,38 @@ async def list_branches(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Proxy GitHub API to return available branches for the repository.
-    Falls back to [main, develop] demo list if no real token is configured.
-    """
-    repo = db.query(Repository).filter(Repository.id == repo_id).first()
-
-    # GitHub API branch list via full_name
-    full_name = None
-    if repo:
-        full_name = repo.full_name
+    repo = _owned_repository_query(db, repo_id, current_user.id).first()
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found")
 
     token = current_user.github_access_token
-    is_real_token = token and token != "mock_github_access_token_123"
+    if settings.is_development and token == "mock_github_access_token_123":
+        return [
+            BranchResponse(name="main", protected=True),
+            BranchResponse(name="develop", protected=False),
+            BranchResponse(name="staging", protected=False),
+        ]
 
-    if full_name and is_real_token:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"https://api.github.com/repos/{full_name}/branches?per_page=50",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code == 200:
-                return [
-                    BranchResponse(
-                        name=b["name"],
-                        protected=b.get("protected", False),
-                    )
-                    for b in resp.json()
-                ]
+    if not token:
+        raise HTTPException(status_code=403, detail="GitHub access token is unavailable")
 
-    # Demo / fallback branches
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            f"https://api.github.com/repos/{repo.full_name}/branches?per_page=50",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+
+    if response.status_code in {401, 403}:
+        raise HTTPException(status_code=403, detail="GitHub access to this repository was denied")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Unable to retrieve GitHub branches")
+
     return [
-        BranchResponse(name="main", protected=True),
-        BranchResponse(name="develop", protected=False),
-        BranchResponse(name="staging", protected=False),
+        BranchResponse(name=item["name"], protected=item.get("protected", False))
+        for item in response.json()
     ]
 
 
@@ -94,67 +95,75 @@ async def list_branches(
 async def list_github_repos_for_wizard(
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Return GitHub repos for the wizard repo-picker (raw GitHub API passthrough).
-    """
+    """Return repositories accessible through the authenticated GitHub token."""
     token = current_user.github_access_token
-    login = current_user.username or current_user.github_login or "user"
 
-    if token and token != "mock_github_access_token_123":
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://api.github.com/user/repos?sort=updated&per_page=50",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code == 200:
-                return [
-                    {
-                        "id": str(r["id"]),
-                        "name": r["name"],
-                        "full_name": r["full_name"],
-                        "html_url": r["html_url"],
-                        "default_branch": r.get("default_branch", "main"),
-                        "private": r.get("private", False),
-                        "language": r.get("language"),
-                        "description": r.get("description"),
-                        "updated_at": r.get("updated_at", ""),
-                    }
-                    for r in resp.json()
-                ]
+    if settings.is_development and token == "mock_github_access_token_123":
+        login = current_user.username or current_user.github_login or "user"
+        return [
+            {
+                "id": "101",
+                "name": "arve-demo-app",
+                "full_name": f"{login}/arve-demo-app",
+                "html_url": f"https://github.com/{login}/arve-demo-app",
+                "default_branch": "main",
+                "private": False,
+                "language": "TypeScript",
+                "description": "Next.js app requiring security analysis",
+                "updated_at": "2026-08-01T00:00:00Z",
+            },
+            {
+                "id": "102",
+                "name": "fintech-api",
+                "full_name": f"{login}/fintech-api",
+                "html_url": f"https://github.com/{login}/fintech-api",
+                "default_branch": "main",
+                "private": False,
+                "language": "Python",
+                "description": "FastAPI gateway for financial services",
+                "updated_at": "2026-07-28T00:00:00Z",
+            },
+            {
+                "id": "103",
+                "name": "auth-portal",
+                "full_name": f"{login}/auth-portal",
+                "html_url": f"https://github.com/{login}/auth-portal",
+                "default_branch": "develop",
+                "private": True,
+                "language": "JavaScript",
+                "description": "Identity and access management portal",
+                "updated_at": "2026-07-15T00:00:00Z",
+            },
+        ]
 
-    # Demo repos
+    if not token:
+        raise HTTPException(status_code=403, detail="GitHub access token is unavailable")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            "https://api.github.com/user/repos?sort=updated&per_page=50",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+
+    if response.status_code in {401, 403}:
+        raise HTTPException(status_code=403, detail="GitHub access was denied")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Unable to retrieve GitHub repositories")
+
     return [
         {
-            "id": "101",
-            "name": "arve-demo-app",
-            "full_name": f"{login}/arve-demo-app",
-            "html_url": f"https://github.com/{login}/arve-demo-app",
-            "default_branch": "main",
-            "private": False,
-            "language": "TypeScript",
-            "description": "Next.js app requiring security analysis",
-            "updated_at": "2026-08-01T00:00:00Z",
-        },
-        {
-            "id": "102",
-            "name": "fintech-api",
-            "full_name": f"{login}/fintech-api",
-            "html_url": f"https://github.com/{login}/fintech-api",
-            "default_branch": "main",
-            "private": False,
-            "language": "Python",
-            "description": "FastAPI gateway for financial services",
-            "updated_at": "2026-07-28T00:00:00Z",
-        },
-        {
-            "id": "103",
-            "name": "auth-portal",
-            "full_name": f"{login}/auth-portal",
-            "html_url": f"https://github.com/{login}/auth-portal",
-            "default_branch": "develop",
-            "private": True,
-            "language": "JavaScript",
-            "description": "Identity and access management portal",
-            "updated_at": "2026-07-15T00:00:00Z",
-        },
+            "id": str(repo["id"]),
+            "name": repo["name"],
+            "full_name": repo["full_name"],
+            "html_url": repo["html_url"],
+            "default_branch": repo.get("default_branch", "main"),
+            "private": repo.get("private", False),
+            "language": repo.get("language"),
+            "description": repo.get("description"),
+            "updated_at": repo.get("updated_at", ""),
+        }
+        for repo in response.json()
     ]

@@ -48,6 +48,8 @@ ARVE is therefore not an LLM-only vulnerability scanner.
 ``` text
 GitHub Auth
      ↓
+Repository Selection
+     ↓
 Repository Ingestion
      ↓
 Pinned Commit
@@ -168,6 +170,163 @@ Repository limits:
 ```
 
 ------------------------------------------------------------------------
+
+# 3. GitHub Ingestion Engine
+
+The ingestion engine is the first data-processing layer after GitHub authentication.
+
+Its job is to convert GitHub repository data into a stable ARVE repository representation.
+
+```text
+GitHub OAuth
+     ↓
+Repository Selection
+     ↓
+GitHub API
+     ↓
+Repository Metadata
+     ↓
+Exact Commit SHA
+     ↓
+Repository Tree
+     ↓
+File Filtering
+     ↓
+Language Detection
+     ↓
+File Contents
+     ↓
+SHA-256
+     ↓
+ARVE Normalization
+     ↓
+PostgreSQL
+     ↓
+AST + Security Engines
+```
+
+The ingestion engine:
+
+- verifies repository access
+- retrieves repository metadata
+- resolves the exact commit SHA
+- retrieves the repository tree before downloading files
+- filters irrelevant/generated/binary files
+- detects languages
+- retrieves relevant file contents
+- validates file size/type
+- calculates SHA-256 hashes
+- normalizes GitHub data into ARVE's internal format
+- stores the normalized repository
+- creates/updates an analysis run
+
+It does **not** perform vulnerability detection or AST analysis.
+
+### Why tree-first ingestion?
+
+ARVE should not blindly download every repository file.
+
+The tree is used to identify relevant files first:
+
+```text
+Repository Tree
+      ↓
+File Filter
+      ↓
+Relevant Files
+      ↓
+File Content Fetch
+```
+
+This reduces unnecessary API requests and processing.
+
+### Normalized repository boundary
+
+```text
+GitHub API
+     ↓
+GitHub Connector
+     ↓
+Ingestion Engine
+     ↓
+ARVE Normalized Repository
+     ↓
++-------------------+
+|                   |
+▼                   ▼
+AST Engine      Security Engines
+```
+
+Downstream engines should not depend directly on GitHub API response formats or GitHub tokens.
+
+### File recognition
+
+The ingestion layer can recognize broader source/configuration files such as:
+
+```text
+.js  .jsx  .ts  .tsx
+.py  .java  .go  .rs
+.c   .h    .cpp .hpp
+.php .rb
+```
+
+and important configuration files such as:
+
+```text
+package.json
+requirements.txt
+pyproject.toml
+pom.xml
+go.mod
+Cargo.toml
+Dockerfile
+docker-compose.yml
+.github/workflows/*.yml
+```
+
+The executable v1 security-analysis scope remains **JavaScript and TypeScript**.
+
+Ignored/generated content includes:
+
+```text
+.git/
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+target/
+coverage/
+vendor/
+.cache/
+```
+
+Binary/media/archive files are also ignored.
+
+### File hashing
+
+Every ingested file receives:
+
+```text
+SHA-256(file_content)
+```
+
+This supports reproducibility and future incremental analysis.
+
+### Example normalized file
+
+```text
+RepositoryFile
+├── path
+├── filename
+├── extension
+├── language
+├── size
+├── sha256
+├── content
+└── status
+```
 
 # 3. Security Analysis
 
@@ -761,7 +920,7 @@ The project is organized into the following major phases:
 
 ``` text
 Phase 1  — GitHub Authentication
-Phase 2  — Repository Ingestion
+Phase 2  — GitHub Repository Ingestion
 Phase 3  — Scan Orchestration
 Phase 4  — Security Engines
 Phase 5  — Finding Normalization
@@ -786,7 +945,9 @@ GitHub Login
      ↓
 Select Repository + Commit
      ↓
-Clone Repository
+GitHub API Ingestion
+     ↓
+Normalized Repository
      ↓
 Async Scan
      ↓
@@ -1030,6 +1191,12 @@ ARVE/
 ├── backend/
 │   ├── app/
 │   │   ├── core/
+│   │   ├── ingestion/
+│   │   │   ├── github/
+│   │   │   ├── filters/
+│   │   │   ├── detector/
+│   │   │   ├── normalizer/
+│   │   │   └── service.py
 │   │   ├── models/
 │   │   ├── schemas/
 │   │   ├── routes/
@@ -1069,7 +1236,11 @@ advanced features.
 The order is:
 
 ``` text
-Reliable repository snapshot
+Reliable GitHub repository access
+        ↓
+Reliable repository ingestion
+        ↓
+Reproducible commit snapshot
         ↓
 Reliable asynchronous scan
         ↓

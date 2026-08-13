@@ -191,7 +191,7 @@ exists.
 
 ------------------------------------------------------------------------
 
-# 7. Verify the Project Configurationn
+# 7. Verify the Project Configuration
 
 From the ARVE root:
 
@@ -362,4 +362,14 @@ infisical secrets --env=dev --path=/frontend
 infisical run --env=dev --path=/frontend -- npm run dev
 ```
 
+------------------------------------------------------------------------
+
+# 14. Database Upgrade with Alembic
+
+Before running the backend, apply any pending database migrations:
+
+``` cmd
+cd backend
+infisical run --env=dev --path=/backend -- alembic upgrade head
+```
 ------------------------------------------------------------------------

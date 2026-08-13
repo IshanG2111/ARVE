@@ -7,17 +7,16 @@ import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
 import { Plus, Search, GitBranch, Trash2, ArrowUpRight } from 'lucide-react';
 import type { Project } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 function projectDisplayName(p: Project): string {
   if (p.name) return p.name;
   if (p.repository?.name) return p.repository.name;
-  if (p.repo_name) return p.repo_name.split('/').pop() || p.repo_name;
   return 'Untitled project';
 }
 
 function projectRepoLabel(p: Project): string {
   if (p.repository?.full_name) return p.repository.full_name;
-  if (p.repo_name) return p.repo_name;
   return '';
 }
 
@@ -29,11 +28,19 @@ export const DashboardPage: React.FC = () => {
   const [showWizard, setShowWizard] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this project?')) return;
     setDeletingId(id);
-    deleteProject.mutate(id, { onSettled: () => setDeletingId(null) });
+    setDeleteError(null);
+    deleteProject.mutate(id, {
+      onError: (err) => setDeleteError(err instanceof Error ? err.message : 'Failed to delete project'),
+      onSettled: () => {
+        setDeletingId(null);
+        setConfirmDeleteId(null);
+      },
+    });
   };
 
   const displayName = user?.username || user?.github_login || user?.email?.split('@')[0] || 'you';
@@ -133,10 +140,10 @@ export const DashboardPage: React.FC = () => {
 
                 <div className="project-card-footer">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>
-                    {(project.branch || project.default_branch) && (
+                    {project.branch && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <GitBranch size={10} />
-                        {project.branch || project.default_branch}
+                        {project.branch}
                       </span>
                     )}
                     <span style={{ color: project.verified ? 'var(--success)' : 'var(--dim)' }}>
@@ -155,7 +162,7 @@ export const DashboardPage: React.FC = () => {
                     <button
                       className="btn btn-danger"
                       style={{ fontSize: '11px', padding: '3px 6px' }}
-                      onClick={(e) => { e.stopPropagation(); handleDelete(project.id); }}
+                      onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(project.id); }}
                       disabled={deletingId === project.id}
                       id={`delete-project-${project.id}`}
                     >
@@ -172,6 +179,29 @@ export const DashboardPage: React.FC = () => {
           <ProjectWizardModal
             onClose={() => setShowWizard(false)}
             onCreated={() => setShowWizard(false)}
+          />
+        )}
+
+        {confirmDeleteId && (
+          <ConfirmModal
+            title="Delete project"
+            message="This will delete the project and its associated targets. This action cannot be undone."
+            confirmText="Delete project"
+            onConfirm={() => handleDelete(confirmDeleteId)}
+            onCancel={() => setConfirmDeleteId(null)}
+            danger
+            busy={deletingId === confirmDeleteId}
+          />
+        )}
+
+        {deleteError && (
+          <ConfirmModal
+            title="Delete failed"
+            message={deleteError}
+            confirmText="Close"
+            cancelText=""
+            onConfirm={() => setDeleteError(null)}
+            onCancel={() => setDeleteError(null)}
           />
         )}
       </div>
