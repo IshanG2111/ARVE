@@ -8,7 +8,10 @@ import type {
   UpdateProjectPayload,
   TargetWebsite,
   VerificationResult,
-} from '../types';
+  AnalysisRun,
+  AnalysisSummary,
+  RepositoryFile,
+} from '@/types';
 
 export type {
   User,
@@ -19,6 +22,9 @@ export type {
   UpdateProjectPayload,
   TargetWebsite,
   VerificationResult,
+  AnalysisRun,
+  AnalysisSummary,
+  RepositoryFile,
 };
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -42,9 +48,7 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
-  if (res.status === 204) {
-    return undefined as T;
-  }
+  if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
@@ -72,21 +76,13 @@ export async function loginWithFirebase(
   return data;
 }
 
-// ─── GitHub repositories ───────────────────────────────────────────────────
+// ─── GitHub repository discovery ────────────────────────────────────────────
 export async function getGitHubRepos(): Promise<GitHubRepo[]> {
   const res = await fetch(`${BASE}/repositories/github/list`, {
     headers: authHeaders(),
     credentials: 'include',
   });
   return handleResponse<GitHubRepo[]>(res);
-}
-
-export async function getBranches(repoId: string): Promise<Branch[]> {
-  const res = await fetch(`${BASE}/repositories/${repoId}/branches`, {
-    headers: authHeaders(),
-    credentials: 'include',
-  });
-  return handleResponse<Branch[]>(res);
 }
 
 export async function getBranchesByFullName(fullName: string): Promise<Branch[]> {
@@ -183,9 +179,46 @@ export async function verifyTarget(targetId: string): Promise<VerificationResult
   return handleResponse<VerificationResult>(res);
 }
 
+// ─── Phase 2: Repository ingestion ─────────────────────────────────────────
+export async function triggerIngestion(projectId: string): Promise<AnalysisRun> {
+  const res = await fetch(`${BASE}/projects/${projectId}/ingest`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({}),
+  });
+  return handleResponse<AnalysisRun>(res);
+}
+
+export async function getAnalysisRuns(projectId: string): Promise<AnalysisRun[]> {
+  const res = await fetch(`${BASE}/projects/${projectId}/analysis-runs`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<AnalysisRun[]>(res);
+}
+
+export async function getAnalysisSummary(runId: string): Promise<AnalysisSummary> {
+  const res = await fetch(`${BASE}/analysis-runs/${runId}/summary`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<AnalysisSummary>(res);
+}
+
+export async function getAnalysisFiles(runId: string, statusFilter?: string): Promise<RepositoryFile[]> {
+  const query = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : '';
+  const res = await fetch(`${BASE}/analysis-runs/${runId}/files${query}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<RepositoryFile[]>(res);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
+  getBranchesByFullName,
   getProjects,
   getProject,
   createProject,
@@ -195,4 +228,8 @@ Object.assign(api, {
   getTargets,
   deleteTarget,
   verifyTarget,
+  triggerIngestion,
+  getAnalysisRuns,
+  getAnalysisSummary,
+  getAnalysisFiles,
 });
