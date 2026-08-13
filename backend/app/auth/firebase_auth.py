@@ -15,11 +15,11 @@ try:
     from firebase_admin import auth as fb_auth, credentials
 
     if not firebase_admin._apps:
-        if settings.firebase_service_account_json:
-            cred_dict = json.loads(settings.firebase_service_account_json)
+        if settings.FIREBASE_SERVICE_ACCOUNT_JSON:
+            cred_dict = json.loads(settings.FIREBASE_SERVICE_ACCOUNT_JSON)
             firebase_admin.initialize_app(credentials.Certificate(cred_dict))
-        elif settings.firebase_credentials_path:
-            firebase_admin.initialize_app(credentials.Certificate(settings.firebase_credentials_path))
+        elif settings.FIREBASE_CREDENTIALS_PATH:
+            firebase_admin.initialize_app(credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH))
         elif settings.effective_firebase_project_id:
             firebase_admin.initialize_app(options={"projectId": settings.effective_firebase_project_id})
         else:
