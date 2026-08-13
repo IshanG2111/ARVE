@@ -1,14 +1,11 @@
-import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.auth.firebase_auth import verify_firebase_token
-from app.auth.github import build_authorize_url, exchange_code_for_token, fetch_github_user
 from app.auth.jwt import create_access_token
 from app.core import security
 from app.core.config import settings
@@ -90,102 +87,6 @@ async def firebase_login(
     jwt_token = create_access_token(user.id)
     response.set_cookie("access_token", jwt_token, **COOKIE_KWARGS)
     return {"access_token": jwt_token, "token_type": "bearer"}
-
-
-@router.get("/github/login")
-async def github_login():
-    state = secrets.token_urlsafe(24)
-    is_demo = settings.is_development and settings.effective_github_client_id == "arve_demo_client_id"
-
-    if is_demo:
-        redirect_target = (
-            f"{settings.effective_github_redirect_uri}"
-            f"?code=mock_github_code&state={state}"
-        )
-    else:
-        redirect_target = build_authorize_url(state)
-
-    response = RedirectResponse(redirect_target)
-    response.set_cookie("oauth_state", state, httponly=True, secure=settings.cookie_secure, samesite="lax", max_age=600)
-    return response
-
-
-@router.get("/github/callback")
-async def github_callback(
-    request: Request,
-    code: str,
-    state: Optional[str] = None,
-    db: Session = Depends(get_db),
-):
-    expected_state = request.cookies.get("oauth_state") if request else None
-
-    # State is mandatory for every browser OAuth callback, including dev mode.
-    if not expected_state or not state or not secrets.compare_digest(state, expected_state):
-        raise HTTPException(status_code=400, detail="Invalid or missing OAuth state")
-
-    is_demo = settings.is_development and settings.effective_github_client_id == "arve_demo_client_id"
-    if is_demo and code in {"mock_github_code", "mock_code"}:
-        gh_user = {
-            "id": 10293847,
-            "login": "octocat-dev",
-            "email": "octocat@github.com",
-            "name": "Octocat Security Tester",
-            "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
-        }
-        access_token = "mock_github_access_token_123"
-    else:
-        if code in {"mock_github_code", "mock_code"}:
-            raise HTTPException(status_code=400, detail="Mock OAuth is disabled outside development")
-        try:
-            access_token = await exchange_code_for_token(code)
-            gh_user = await fetch_github_user(access_token)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="GitHub authentication failed") from exc
-
-    gh_id_str = str(gh_user["id"])
-    email = gh_user.get("email") or f"{gh_user['login']}@users.noreply.github.com"
-    login = gh_user["login"]
-    avatar = gh_user.get("avatar_url")
-
-    user = db.query(User).filter(
-        (User.github_id == gh_id_str) | (User.email == email)
-    ).first()
-
-    if not user:
-        user = User(
-            email=email,
-            full_name=gh_user.get("name") or login,
-            github_id=gh_id_str,
-            github_login=login,
-            github_avatar=avatar,
-            username=login,
-            avatar_url=avatar,
-            github_access_token=access_token,
-        )
-        db.add(user)
-    else:
-        user.github_id = gh_id_str
-        user.github_login = login
-        user.github_avatar = avatar
-        user.username = login
-        user.avatar_url = avatar
-        user.github_access_token = access_token
-
-    try:
-        db.commit()
-        db.refresh(user)
-    except Exception:
-        db.rollback()
-        raise
-
-    jwt_token = create_access_token(user.id)
-    redirect = RedirectResponse(
-        f"{settings.effective_frontend_url}/dashboard",
-        status_code=status.HTTP_302_FOUND,
-    )
-    redirect.set_cookie("access_token", jwt_token, **COOKIE_KWARGS)
-    redirect.delete_cookie("oauth_state", path="/")
-    return redirect
 
 
 @router.post("/logout")

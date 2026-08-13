@@ -24,10 +24,6 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/arve_db"
 
-    GITHUB_CLIENT_ID: str = "arve_demo_client_id"
-    GITHUB_CLIENT_SECRET: str = "arve_demo_client_secret"
-    GITHUB_REDIRECT_URI: str = "http://localhost:8000/auth/github/callback"
-    GITHUB_OAUTH_SCOPE: str = "read:user user:email repo"
 
     FRONTEND_URL: str = "http://localhost:5173"
 
@@ -53,8 +49,6 @@ class Settings(BaseSettings):
         if self.ARVE_ENV.lower() in {"prod", "production"}:
             if self.JWT_SECRET == "arve-secret-key-super-secure-change-in-production-2026":
                 raise ValueError("JWT_SECRET must be explicitly configured in production")
-            if self.GITHUB_CLIENT_ID == "arve_demo_client_id" or self.GITHUB_CLIENT_SECRET == "arve_demo_client_secret":
-                raise ValueError("Demo GitHub credentials cannot be used in production")
         return self
 
     @property
@@ -65,37 +59,6 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ARVE_ENV.lower() in {"prod", "production"}
 
-    @property
-    def github_client_id(self) -> str:
-        return self.GITHUB_CLIENT_ID
-
-    @property
-    def github_client_secret(self) -> str:
-        return self.GITHUB_CLIENT_SECRET
-
-    @property
-    def github_redirect_uri(self) -> str:
-        return self.GITHUB_REDIRECT_URI
-
-    @property
-    def github_oauth_scope(self) -> str:
-        return self.GITHUB_OAUTH_SCOPE
-
-    @property
-    def effective_github_client_id(self) -> str:
-        return self.GITHUB_CLIENT_ID
-
-    @property
-    def effective_github_client_secret(self) -> str:
-        return self.GITHUB_CLIENT_SECRET
-
-    @property
-    def effective_github_redirect_uri(self) -> str:
-        return self.GITHUB_REDIRECT_URI
-
-    @property
-    def effective_github_oauth_scope(self) -> str:
-        return self.GITHUB_OAUTH_SCOPE
 
     @property
     def effective_jwt_secret(self) -> str:

@@ -209,25 +209,6 @@ def test_repository_access_is_scoped_to_owner():
     assert branches.status_code == 404
 
 
-def test_github_mock_oauth_requires_and_accepts_state():
-    start = client.get("/auth/github/login", follow_redirects=False)
-    assert start.status_code == 307
-    state = start.cookies.get("oauth_state")
-    assert state
-
-    callback = client.post(
-        "/api/github/callback",
-        json={"code": "mock_github_code", "state": state, "is_mock": True},
-    )
-    assert callback.status_code == 200, callback.text
-    token = callback.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    me = client.get("/api/auth/me", headers=headers)
-    assert me.status_code == 200
-    assert me.json()["github_login"] == "octocat-dev"
-
-
 def test_firebase_mock_is_development_only_path():
     response = client.post(
         "/api/auth/firebase",
