@@ -1,32 +1,15 @@
-# AI Security Code Discovery Engine
+# ARVE --- AI Security Code Discovery Engine
 
-## Detailed Implementation Plan + System Design
+> **Discover vulnerabilities. Trace the evidence. Understand the code.**
 
-### 14--15 Week Group Project \| 6 Members
+ARVE is an AI-assisted security code discovery engine designed to
+analyze a GitHub or local repository and produce an evidence-backed
+security assessment.
 
-> **Source basis:** This plan follows the uploaded project brief:
-> repository ingestion, commit-pinned snapshots, AST/code intelligence,
-> Semgrep, CodeQL, finding correlation, deduplication, CWE/OWASP
-> enrichment, deterministic confidence, AI-assisted triage, FastAPI,
-> dashboard and benchmark evaluation. The design below expands the
-> implementation and visualization details needed for the team to build
-> the system.
->
-> **Important scope decision:** The project has **two different
-> visualizations for a vulnerability**:
->
-> 1.  **Security Relationship Graph** --- an Obsidian-style node graph
->     showing what code/security components are connected to the
->     vulnerability.
-> 2.  **Vulnerability Code-Lineage Tree** --- a Git/branch-history-style
->     view showing how the vulnerable code/value/flow moved from one
->     code node to another across changes, and the exact code point
->     where the transition occurred.
->
-> The second view is **not** an attack graph or a generic impact tree.
-> It should visually resemble a Git branch/commit tree so that after
-> understanding the relationship graph, a user can follow the
-> vulnerability's movement through code changes.
+It combines repository ingestion, static security analysis, code
+intelligence, finding normalization, correlation, risk prioritization,
+graph-based visualization, vulnerability code lineage, AI-assisted
+triage, and reporting.
 
 ------------------------------------------------------------------------
 
@@ -51,2803 +34,539 @@
 
 ------------------------------------------------------------------------
 
-# 1. Final Project Objective
+## What is ARVE?
 
-The system takes a GitHub repository or local repository and produces an
-evidence-backed security analysis.
+Traditional security scanners can produce a list of findings, but a
+finding is much more useful when the developer can understand:
+
+``` text
+Where is the issue?
+        ↓
+What code contains it?
+        ↓
+What security evidence supports it?
+        ↓
+What is connected to it?
+        ↓
+How did the relevant code change over time?
+        ↓
+How should it be fixed?
+```
+
+ARVE is designed around that evidence chain.
+
+The core principle is:
+
+> **Static analysis and code intelligence provide the evidence; AI
+> reasons over that evidence.**
+
+ARVE is therefore not an LLM-only vulnerability scanner.
+
+------------------------------------------------------------------------
+
+# Core Pipeline
+
+``` text
+GitHub Auth
+     ↓
+Repository Selection
+     ↓
+Repository Ingestion
+     ↓
+Pinned Commit
+     ↓
+Repository Snapshot
+     ↓
+Scan Orchestration
+     ↓
+Security Engines
+     ↓
+Finding Normalization
+     ↓
+AST / Code Intelligence
+     ↓
+Finding Correlation
+     ↓
+Risk Analysis
+     ↓
+Security Graph
+     ↓
+AI Triage
+     ↓
+Dashboard / Reports
+```
+
+The first working vertical slice is intentionally smaller:
+
+``` text
+GitHub
+  ↓
+Repository
+  ↓
+Pinned Commit
+  ↓
+Async Scan
+  ↓
+Semgrep
+  ↓
+Normalized Finding
+  ↓
+Finding displayed with file, line, severity, CWE
+```
+
+------------------------------------------------------------------------
+
+# Key Features
+
+## 1. Commit-Pinned Repository Analysis
+
+ARVE does not scan an ambiguous "current repository".
+
+A scan is associated with an exact commit SHA.
 
 ``` text
 Repository
     ↓
-Pinned Commit
+Branch
     ↓
-Repository Snapshot
+Exact Commit SHA
     ↓
-AST / Code Intelligence
-    ↓
-Semgrep + CodeQL
-    ↓
-Raw Findings
-    ↓
-Correlation
-    ↓
-Deduplication
-    ↓
-CWE / OWASP / Confidence
-    ↓
-Canonical Finding
-    ↓
-┌───────────────────────────────┐
-│                               │
-▼                               ▼
-Relationship Graph        Code-Lineage Tree
-│                               │
-└───────────────┬───────────────┘
-                ▼
-          AI Triage / Explanation
-                ↓
-           Evidence View
-                ↓
-          Dashboard / Reports
+Reproducible Snapshot
 ```
 
-The central objective is:
+The snapshot records:
 
-> **Given a repository, discover security vulnerabilities and explain
-> every important result through traceable code evidence.**
+-   Repository
+-   Branch
+-   Commit SHA
+-   File list
+-   SHA-256 file hashes
+-   Language information
+-   Framework information
+-   Dependency/configuration metadata
 
-The project should not behave like an LLM-only scanner. SAST and code
-intelligence provide the evidence; AI reasons over that evidence.
+Scanning the same commit twice should produce the same manifest and
+hashes.
 
 ------------------------------------------------------------------------
 
-# 2. System Boundaries
+## 2. Repository Ingestion
 
-## 2.1 Input
-
-The scanner accepts:
+ARVE creates an isolated scan workspace:
 
 ``` text
-GitHub repository URL
+/workspaces/{scan_id}/
 ```
 
-or:
+The ingestion layer:
+
+-   Clones the selected repository.
+-   Resolves the exact commit.
+-   Filters generated and binary content.
+-   Detects languages.
+-   Detects supported frameworks.
+-   Detects package managers.
+-   Identifies dependency/configuration files.
+-   Creates a file manifest.
+-   Cleans the workspace after the scan.
+
+v1 supports:
 
 ``` text
-Local repository
+JavaScript
+TypeScript
+
+Express
+Next.js
+React
+Node.js
 ```
 
-Optional scan parameters:
+Repository limits:
 
 ``` text
-branch
-commit SHA
-language
-framework
-scan profile
-```
-
-Example:
-
-``` json
-{
-  "repository": "https://github.com/example/project",
-  "branch": "main",
-  "commit": "abc123"
-}
+≤ 5,000 source files
+≤ 200 MB
+≤ 15 minutes total scan
 ```
 
 ------------------------------------------------------------------------
 
-# 3. Repository Snapshot Design
+# 3. GitHub Ingestion Engine
 
-The first requirement is reproducibility.
+The ingestion engine is the first data-processing layer after GitHub authentication.
 
-A scan must not simply mean:
+Its job is to convert GitHub repository data into a stable ARVE repository representation.
+
+```text
+GitHub OAuth
+     ↓
+Repository Selection
+     ↓
+GitHub API
+     ↓
+Repository Metadata
+     ↓
+Exact Commit SHA
+     ↓
+Repository Tree
+     ↓
+File Filtering
+     ↓
+Language Detection
+     ↓
+File Contents
+     ↓
+SHA-256
+     ↓
+ARVE Normalization
+     ↓
+PostgreSQL
+     ↓
+AST + Security Engines
+```
+
+The ingestion engine:
+
+- verifies repository access
+- retrieves repository metadata
+- resolves the exact commit SHA
+- retrieves the repository tree before downloading files
+- filters irrelevant/generated/binary files
+- detects languages
+- retrieves relevant file contents
+- validates file size/type
+- calculates SHA-256 hashes
+- normalizes GitHub data into ARVE's internal format
+- stores the normalized repository
+- creates/updates an analysis run
+
+It does **not** perform vulnerability detection or AST analysis.
+
+### Why tree-first ingestion?
+
+ARVE should not blindly download every repository file.
+
+The tree is used to identify relevant files first:
+
+```text
+Repository Tree
+      ↓
+File Filter
+      ↓
+Relevant Files
+      ↓
+File Content Fetch
+```
+
+This reduces unnecessary API requests and processing.
+
+### Normalized repository boundary
+
+```text
+GitHub API
+     ↓
+GitHub Connector
+     ↓
+Ingestion Engine
+     ↓
+ARVE Normalized Repository
+     ↓
++-------------------+
+|                   |
+▼                   ▼
+AST Engine      Security Engines
+```
+
+Downstream engines should not depend directly on GitHub API response formats or GitHub tokens.
+
+### File recognition
+
+The ingestion layer can recognize broader source/configuration files such as:
+
+```text
+.js  .jsx  .ts  .tsx
+.py  .java  .go  .rs
+.c   .h    .cpp .hpp
+.php .rb
+```
+
+and important configuration files such as:
+
+```text
+package.json
+requirements.txt
+pyproject.toml
+pom.xml
+go.mod
+Cargo.toml
+Dockerfile
+docker-compose.yml
+.github/workflows/*.yml
+```
+
+The executable v1 security-analysis scope remains **JavaScript and TypeScript**.
+
+Ignored/generated content includes:
+
+```text
+.git/
+node_modules/
+venv/
+.venv/
+__pycache__/
+dist/
+build/
+target/
+coverage/
+vendor/
+.cache/
+```
+
+Binary/media/archive files are also ignored.
+
+### File hashing
+
+Every ingested file receives:
+
+```text
+SHA-256(file_content)
+```
+
+This supports reproducibility and future incremental analysis.
+
+### Example normalized file
+
+```text
+RepositoryFile
+├── path
+├── filename
+├── extension
+├── language
+├── size
+├── sha256
+├── content
+└── status
+```
+
+# 3. Security Analysis
+
+ARVE's executable v1 security engines are:
+
+### Semgrep
+
+Used for:
+
+-   JavaScript security patterns
+-   TypeScript security patterns
+-   OWASP-oriented patterns
+-   Injection
+-   Broken access control patterns
+-   Security misconfiguration
+-   Other supported registry-rule detections
+
+Primary rulesets:
 
 ``` text
-scan current GitHub repository
+p/javascript
+p/typescript
+p/owasp-top-ten
 ```
 
-It must mean:
+### OSV-Scanner
+
+Used for dependency vulnerabilities.
+
+It identifies:
 
 ``` text
-scan repository at exact commit SHA
+OSV/CVE
+Package
+Affected version range
+Fixed version
 ```
 
-## Snapshot pipeline
+### Gitleaks
 
-``` text
-Repository URL
-      ↓
-Clone
-      ↓
-Resolve branch
-      ↓
-Resolve commit SHA
-      ↓
-Checkout exact commit
-      ↓
-Ignore generated/binary files
-      ↓
-Hash source files
-      ↓
-Detect languages/frameworks
-      ↓
-Build manifest
-      ↓
-Create Scan ID
-```
+Used for secret detection.
 
-## Snapshot metadata
+ARVE must redact secret values before storage.
 
-``` json
-{
-  "project_id": "proj_001",
-  "scan_id": "scan_001",
-  "repository": "owner/repo",
-  "branch": "main",
-  "commit_sha": "abc123",
-  "created_at": "...",
-  "files": 431,
-  "languages": {
-    "TypeScript": 0.71,
-    "Python": 0.29
-  }
-}
-```
+Only safe evidence such as location and fingerprint/hash should be
+retained.
 
-## Why this matters
+### Broader analysis
 
-Every finding, graph node and AI explanation must be associated with the
-exact code version that produced it.
+The wider system design also identifies CodeQL as a deeper analysis
+engine for data-flow, taint tracking, source-to-sink relationships, and
+cross-function analysis. CodeQL remains outside the initial v1 execution
+order and can be introduced when the scoped pipeline is stable.
 
 ------------------------------------------------------------------------
 
-# 4. Scan Lifecycle
+# 4. Canonical Findings
 
-The backend should expose a state machine:
+Scanner results are not directly treated as final ARVE findings.
 
-``` text
-QUEUED
-  ↓
-INGESTING
-  ↓
-INDEXING
-  ↓
-ANALYZING
-  ↓
-CORRELATING
-  ↓
-AI_REVIEW
-  ↓
-GRAPH_BUILD
-  ↓
-OUTPUT
-  ↓
-COMPLETED
-```
-
-Failure states:
+They are normalized into a common structure containing:
 
 ``` text
-FAILED
-PARTIAL
-CANCELLED
+Finding ID
+Scan ID
+Engine
+Title
+Description
+Severity
+Confidence
+File
+Line
+Function
+Rule
+CWE
+CVE/OSV
+Component
+Evidence
+Remediation
+Fingerprint
 ```
 
-Each state should expose:
+This allows different security engines to feed one ARVE dashboard.
 
-``` json
-{
-  "scan_id": "scan_001",
-  "status": "ANALYZING",
-  "progress": 67,
-  "message": "Running CodeQL queries"
-}
-```
+Severity and confidence are deterministic. The AI does not arbitrarily
+assign them.
 
 ------------------------------------------------------------------------
 
-# 5. Code Intelligence Design
+# 5. Code Intelligence
 
-The AST engine creates the internal representation used by:
+ARVE builds a structured representation of the repository.
 
--   security analysis
--   relationship graph
--   code-lineage tree
--   evidence viewer
--   AI context builder
-
-## Core CodeModel
+Conceptually:
 
 ``` text
 Repository
  └── File
-      ├── imports
-      ├── exports
-      ├── classes
-      ├── functions
-      ├── variables
-      ├── calls
-      ├── routes
-      ├── sources
-      └── sinks
+      ├── Imports
+      ├── Classes
+      ├── Functions
+      ├── Routes
+      ├── Variables
+      ├── Sources
+      └── Sinks
 ```
+
+The v1 AST implementation uses:
+
+``` text
+tree-sitter-javascript
+tree-sitter-typescript
+```
+
+The most important extraction is:
+
+> Given a finding at `file:line`, identify the enclosing function.
+
+ARVE also identifies HTTP routes/endpoints from Express and Next.js
+structures.
 
 ------------------------------------------------------------------------
 
-# 6. File Node
+# 6. Finding Correlation
 
-Example:
-
-``` json
-{
-  "id": "FILE-001",
-  "type": "file",
-  "path": "users/[id]/route.ts",
-  "language": "typescript",
-  "hash": "..."
-}
-```
-
-Relationships:
+ARVE connects findings with relevant code structure using evidence such
+as:
 
 ``` text
-File → IMPORTS → File
-File → CONTAINS → Function
-File → CONTAINS → Class
-File → DEFINES → Route
+Same file
+Same function
+Same class
+Same dependency
+Same CWE
+Same route
 ```
+
+The purpose is to turn isolated scanner results into useful security
+context.
+
+For example:
+
+``` text
+POST /api/users/:id
+        ↓
+updateUser()
+        ↓
+SQL Injection Finding
+        +
+Missing Authorization Finding
+```
+
+This creates a useful cluster without claiming unsupported full
+data-flow relationships.
 
 ------------------------------------------------------------------------
 
-# 7. Function Node
+# 7. Security Relationship Graph
 
-``` json
-{
-  "id": "FN-001",
-  "type": "function",
-  "name": "GET",
-  "file_id": "FILE-001",
-  "line_start": 12,
-  "line_end": 42
-}
-```
+ARVE has a dedicated current-state security visualization.
 
-Relationships:
+### Question it answers
 
-``` text
-Function → CALLS → Function
-Function → READS → Variable
-Function → WRITES → Variable
-Function → CONTAINS → Source
-Function → CONTAINS → Sink
-```
+> **What is connected to this vulnerability?**
 
-------------------------------------------------------------------------
-
-# 8. Source and Sink Model
-
-Security analysis needs explicit source/sink objects.
-
-## Source
-
-A source is where potentially untrusted input enters.
-
-Examples:
-
-``` text
-req.query.id
-req.body.username
-params.id
-request.headers.authorization
-uploaded_file
-environment input
-```
-
-Example:
-
-``` json
-{
-  "id": "SRC-001",
-  "type": "source",
-  "expression": "params.id",
-  "source_type": "route_parameter",
-  "file": "users/[id]/route.ts",
-  "line": 20
-}
-```
-
-## Sink
-
-A sink is a security-sensitive operation.
-
-Examples:
-
-``` text
-SQL query
-HTML rendering
-shell execution
-file access
-HTTP request
-deserialization
-redirect
-```
-
-Example:
-
-``` json
-{
-  "id": "SINK-001",
-  "type": "sink",
-  "expression": "User.findById(id)",
-  "sink_type": "database_query",
-  "file": "users/[id]/route.ts",
-  "line": 21
-}
-```
-
-------------------------------------------------------------------------
-
-# 9. Source-to-Sink Flow
-
-A security flow should be represented explicitly.
-
-``` text
-Source
-  ↓
-Variable
-  ↓
-Function Call
-  ↓
-Function
-  ↓
-Variable
-  ↓
-Sink
-```
+It is an Obsidian-style knowledge graph.
 
 Example:
 
 ``` text
-params.id
-    ↓
-id
-    ↓
-User.findById(id)
-    ↓
-database query
+             CWE-862
+                |
+                |
+             Finding
+                |
+             route.ts
+                |
+              GET()
+             /     \
+      params.id    import
+           |
+           ↓
+          id
+           |
+           ↓
+   User.findById(id)
 ```
 
-For taint-analysis findings:
-
-``` text
-SOURCE → TRANSFORM → TRANSFER → SINK
-```
-
-Each transition should preserve evidence.
-
-------------------------------------------------------------------------
-
-# 10. Semgrep Layer
-
-Semgrep is responsible for broad and fast pattern-based detection.
-
-## Use Semgrep for
-
--   dangerous APIs
--   insecure coding patterns
--   framework-specific mistakes
--   custom security rules
--   secrets
--   obvious authorization problems
--   unsafe redirects
--   dangerous file operations
-
-## Rule structure
-
-Every rule should have:
-
-``` text
-Rule ID
-Title
-Vulnerability type
-Severity
-CWE
-OWASP
-Pattern
-Positive test
-Negative test
-Message
-```
-
-Example conceptual rule:
-
-``` yaml
-id: unsafe-shell-execution
-severity: high
-cwe: CWE-78
-patterns:
-  - ...
-```
-
-------------------------------------------------------------------------
-
-# 11. CodeQL Layer
-
-CodeQL provides deeper program relationships.
-
-## Use CodeQL for
-
--   taint tracking
--   source-to-sink flows
--   cross-function relationships
--   data-flow analysis
--   deeper CWE-oriented queries
-
-Pipeline:
+Possible nodes include:
 
 ``` text
 Repository
-    ↓
-CodeQL Database
-    ↓
-Queries
-    ↓
-Data-flow / Taint Results
-    ↓
-Parser
-    ↓
-Canonical Evidence
-```
-
-------------------------------------------------------------------------
-
-# 12. Semgrep vs CodeQL
-
-The system should preserve the distinction.
-
-  Capability                     Semgrep                   CodeQL
-  ------------------------------ ------------------------- ----------
-  Pattern detection              Strong                    Possible
-  Custom rules                   Strong                    Strong
-  Fast scanning                  Strong                    Lower
-  Framework patterns             Strong                    Possible
-  Taint analysis                 Limited/depends on rule   Strong
-  Cross-function flow            Limited                   Strong
-  Source-to-sink relationships   Some                      Strong
-
-The dashboard should show which engine produced each piece of evidence.
-
-------------------------------------------------------------------------
-
-# 13. Raw Finding Model
-
-Do not immediately show raw scanner output to the user as final
-findings.
-
-Raw output:
-
-``` json
-{
-  "engine": "semgrep",
-  "rule_id": "missing-auth",
-  "file": "route.ts",
-  "line": 21,
-  "message": "..."
-}
-```
-
-CodeQL might produce another result for the same issue.
-
-Both must go through correlation.
-
-------------------------------------------------------------------------
-
-# 14. Finding Correlation
-
-``` text
-Semgrep Finding A
-        \
-         \
-          → Correlation Engine
-         /
-CodeQL Finding B
-```
-
-Possible matching signals:
-
-``` text
-same file
-same line
-same function
-same source
-same sink
-same CWE
-same data-flow
-semantic similarity
-```
-
-Output:
-
-``` text
-Canonical Finding F-102
-```
-
-------------------------------------------------------------------------
-
-# 15. Canonical Finding Schema
-
-``` json
-{
-  "finding_id": "F-102",
-  "title": "Potential Missing Authorization",
-  "severity": "high",
-  "confidence": 0.91,
-  "state": "probable",
-
-  "file": "users/[id]/route.ts",
-  "line_start": 21,
-  "line_end": 21,
-
-  "cwe": ["CWE-862"],
-  "owasp": ["A01"],
-
-  "source_engines": [
-    "semgrep",
-    "codeql"
-  ],
-
-  "sources": [
-    "SRC-001"
-  ],
-
-  "sinks": [
-    "SINK-001"
-  ],
-
-  "evidence": []
-}
-```
-
-------------------------------------------------------------------------
-
-# 16. Deduplication
-
-The same vulnerability may appear multiple times.
-
-Example:
-
-``` text
-Semgrep
-  F-1
-
-CodeQL
-  F-2
-
-Same underlying vulnerability
-        ↓
-Canonical Finding F-102
-```
-
-Deduplication should consider:
-
-``` text
-CWE
-source location
-function
-source
-sink
-data-flow
-semantic fingerprint
-```
-
-The original scanner results should remain accessible as evidence, even
-after deduplication.
-
-------------------------------------------------------------------------
-
-# 17. Confidence Model
-
-Confidence should be based on deterministic evidence.
-
-Possible signals:
-
-``` text
-Semgrep + CodeQL agreement
-Source found
-Sink found
-Source-to-sink path found
-Exact line location
-AST relationship
-Authentication context
-Rule confidence
-```
-
-Conceptually:
-
-``` text
-Evidence
-   ↓
-Signal extraction
-   ↓
-Weighted confidence
-   ↓
-Final confidence
-```
-
-The AI should not freely assign the final confidence.
-
-------------------------------------------------------------------------
-
-# 18. CWE / OWASP Enrichment
-
-Each finding should be enriched with:
-
-``` text
-CWE
-OWASP category
-Severity
-Confidence
-Description
-```
-
-Example:
-
-``` text
-Finding F-102
-
-CWE:
-CWE-862 — Missing Authorization
-
-OWASP:
-A01 — Broken Access Control
-
-Severity:
-HIGH
-
-Confidence:
-91%
-```
-
-------------------------------------------------------------------------
-
-# 19. Security Relationship Graph
-
-## Purpose
-
-The first visualization answers:
-
-> **"What is connected to this vulnerability?"**
-
-It is an **Obsidian-style knowledge graph**.
-
-The finding is the central node.
-
-------------------------------------------------------------------------
-
-# 20. Relationship Graph Node Types
-
-## Security nodes
-
-``` text
-Finding
-CWE
-OWASP
-```
-
-## Code nodes
-
-``` text
 File
-Function
 Class
-Variable
-Route
-Source
-Sink
-```
-
-## Dependency nodes
-
-``` text
-Import
-Call
-```
-
-## Version-control nodes
-
-``` text
-Commit
-Branch
-```
-
-------------------------------------------------------------------------
-
-# 21. Relationship Graph Edges
-
-Use explicit edge types:
-
-``` text
-FOUND_IN
-CONTAINS
-CALLS
-IMPORTS
-READS
-WRITES
-SOURCE_TO
-FLOWS_TO
-SINK_AT
-MAPS_TO_CWE
-MAPS_TO_OWASP
-RELATED_TO
-INTRODUCED_AT
-MODIFIED_AT
-```
-
-Example:
-
-``` text
-Finding F-102
-     |
-     | FOUND_IN
-     ↓
-route.ts
-     |
-     | CONTAINS
-     ↓
-GET()
-     |
-     | SOURCE_TO
-     ↓
-params.id
-     |
-     | FLOWS_TO
-     ↓
-id
-     |
-     | SINK_AT
-     ↓
-User.findById(id)
-```
-
-------------------------------------------------------------------------
-
-# 22. Relationship Graph Data Structure
-
-``` json
-{
-  "graph_id": "GRAPH-F102",
-  "finding_id": "F-102",
-
-  "nodes": [
-    {
-      "id": "F-102",
-      "type": "finding"
-    },
-    {
-      "id": "FILE-001",
-      "type": "file"
-    },
-    {
-      "id": "FN-001",
-      "type": "function"
-    },
-    {
-      "id": "SRC-001",
-      "type": "source"
-    },
-    {
-      "id": "SINK-001",
-      "type": "sink"
-    }
-  ],
-
-  "edges": [
-    {
-      "source": "F-102",
-      "target": "FILE-001",
-      "type": "FOUND_IN"
-    }
-  ]
-}
-```
-
-------------------------------------------------------------------------
-
-# 23. Relationship Graph UI
-
-## Default state
-
-When the user clicks:
-
-``` text
-Finding F-102
-```
-
-show:
-
-``` text
-                 CWE-862
-                    |
-                    |
-                 F-102
-                    |
-                 route.ts
-                /       \
-             GET()     imports
-              |
-          params.id
-              |
-          User.findById
-              |
-          DB Sink
-```
-
-## Controls
-
-``` text
-Zoom In
-Zoom Out
-Reset
-Fit
-Focus Finding
-Show Neighbors
-Expand
-Collapse
-```
-
-## Filters
-
-``` text
-[✓] Findings
-[✓] Files
-[✓] Functions
-[✓] Sources
-[✓] Sinks
-[✓] Routes
-[✓] Commits
-[✓] CWE
-[✓] OWASP
-```
-
-------------------------------------------------------------------------
-
-# 24. Graph Interaction
-
-When a node is selected:
-
-``` text
-selected node
-      ↓
-highlight direct neighbors
-      ↓
-highlight relevant edges
-      ↓
-show evidence panel
-```
-
-When an edge is selected:
-
-``` text
-Relationship:
-SOURCE_TO
-
-From:
-params.id
-
-To:
-id
-
-Evidence:
-route.ts:20
-
-Source engine:
-CodeQL
-
-Confidence:
-0.98
-```
-
-The graph must therefore be **evidence-driven**, not merely decorative.
-
-------------------------------------------------------------------------
-
-# 25. SECOND VISUALIZATION --- Vulnerability Code-Lineage Tree
-
-## Important clarification
-
-This is **not** the same as the relationship graph.
-
-It should look and behave more like a:
-
-``` text
-Git branch / commit tree
-```
-
-The purpose is to show:
-
-> **How the vulnerable code/flow moved from one code node to another
-> over code changes, and at which code point the transition occurred.**
-
-After a user understands the connected components in the relationship
-graph, this second view lets them understand the **sequence/history of
-the vulnerability inside the code**.
-
-------------------------------------------------------------------------
-
-# 26. What the Lineage Tree Should Show
-
-Example:
-
-``` text
-Commit A
-   |
-   | modifies
-   v
-Node 1
-auth.ts:42
-validateUser()
-   |
-   | code moved/changed
-   |
-   +----------------------+
-                          |
-                          v
-                     Commit B
-                          |
-                          v
-                       Node 2
-                middleware.ts:18
-                checkUser()
-                          |
-                          | vulnerability flow
-                          v
-                       Node 3
-                route.ts:27
-                GET()
-```
-
-The important information is:
-
-``` text
-Node 1
-  ↓
-which commit changed it?
-  ↓
-which code node did it become?
-  ↓
-at which file/function/line?
-  ↓
-where does the vulnerable flow continue?
-```
-
-------------------------------------------------------------------------
-
-# 27. Git-Style Visual Design
-
-The tree should visually resemble:
-
-``` text
-● Commit A
-│
-│
-● Node 1
-│
-│
-● Commit B
-│
-├──────────────● Node 2
-│
-│
-● Commit C
-│
-│
-● Node 3
-```
-
-If the code diverges:
-
-``` text
-                 ● Node 2A
-                /
-● Node 1 ──────●
-                \
-                 ● Node 2B
-```
-
-If the vulnerability path continues:
-
-``` text
-● Node 1
-    |
-    |
-    ● Node 2
-         |
-         |
-         ● Node 3
-              |
-              |
-              ● Vulnerability F-102
-```
-
-The visual language should communicate **history and movement**, not
-generic dependency relationships.
-
-------------------------------------------------------------------------
-
-# 28. Example Vulnerability Lineage
-
-Suppose the vulnerable value begins at:
-
-``` text
-Node 1
-auth.ts:42
-validateUser()
-```
-
-A later commit changes the code:
-
-``` text
-Commit B
-```
-
-and the relevant logic moves into:
-
-``` text
-Node 2
-middleware.ts:18
-checkUser()
-```
-
-Then another change moves the value into:
-
-``` text
-Node 3
-users/[id]/route.ts:27
-GET()
-```
-
-The UI should show:
-
-``` text
-Node 1
-auth.ts:42
-   |
-   | Commit B
-   | moved/changed at line 18
-   v
-Node 2
-middleware.ts:18
-   |
-   | Commit C
-   | propagated to route
-   v
-Node 3
-route.ts:27
-   |
-   v
-Finding F-102
-```
-
-This makes the **point of transition** visible.
-
-------------------------------------------------------------------------
-
-# 29. What Counts as a Transition?
-
-The system should identify transitions using evidence such as:
-
-``` text
-Git diff
-+
-line history
-+
-function identity
-+
-AST similarity
-+
-symbol identity
-+
-call relationships
-+
-data-flow relationship
-```
-
-Possible transition types:
-
-``` text
-MOVED
-MODIFIED
-RENAMED
-SPLIT
-MERGED
-COPIED
-PROPAGATED
-CALLED_FROM
-FLOWED_TO
-```
-
-Example:
-
-``` text
-Node 1
-   |
-   | RENAMED
-   v
-Node 2
-```
-
-or:
-
-``` text
-Node 1
-   |
-   | SPLIT
-   +----------+
-   |          |
-   v          v
-Node 2A     Node 2B
-```
-
-------------------------------------------------------------------------
-
-# 30. Important Distinction: Git History vs Security Flow
-
-The system should keep two concepts separate.
-
-## Git lineage
-
-``` text
-What changed over commits?
-```
-
-## Security flow
-
-``` text
-Where does the vulnerable data/control flow through the current code?
-```
-
-The lineage view may combine them visually, but the underlying evidence
-must distinguish:
-
-``` text
-GIT_CHANGE
-```
-
-from:
-
-``` text
-CODE_FLOW
-```
-
-and:
-
-``` text
-SECURITY_FINDING
-```
-
-------------------------------------------------------------------------
-
-# 31. Combined Interpretation
-
-The user should be able to move:
-
-``` text
-Relationship Graph
-        ↓
-"What is connected?"
-        ↓
-Select Node 2
-        ↓
-"How did this code arrive here?"
-        ↓
-Code-Lineage Tree
-        ↓
-"What commit/change caused this transition?"
-        ↓
-Evidence
-        ↓
-Git diff + code lines
-```
-
-This is the intended workflow.
-
-------------------------------------------------------------------------
-
-# 32. Lineage Tree Data Model
-
-``` json
-{
-  "lineage_id": "LINEAGE-F102",
-  "finding_id": "F-102",
-
-  "nodes": [
-    {
-      "id": "NODE-1",
-      "type": "code",
-      "file": "auth.ts",
-      "function": "validateUser",
-      "line": 42
-    },
-    {
-      "id": "NODE-2",
-      "type": "code",
-      "file": "middleware.ts",
-      "function": "checkUser",
-      "line": 18
-    }
-  ],
-
-  "transitions": [
-    {
-      "from": "NODE-1",
-      "to": "NODE-2",
-      "commit": "abc123",
-      "type": "MOVED",
-      "evidence": [
-        "git diff",
-        "AST similarity"
-      ],
-      "code_point": {
-        "file": "middleware.ts",
-        "line": 18
-      }
-    }
-  ]
-}
-```
-
-------------------------------------------------------------------------
-
-# 33. Lineage Tree UI Detail Panel
-
-When selecting a transition:
-
-``` text
-Transition
-
-FROM
-auth.ts
-validateUser()
-line 42
-
-TO
-middleware.ts
-checkUser()
-line 18
-
-Commit
-abc123
-
-Change
-MOVED
-
-Evidence
-✓ Git diff
-✓ AST similarity
-✓ Symbol relationship
-
-Point of transition
-middleware.ts:18
-```
-
-Then provide:
-
-``` text
-[View Diff]
-[View Source]
-[Open Relationship Graph]
-```
-
-------------------------------------------------------------------------
-
-# 34. Git Diff Integration
-
-The lineage view should allow:
-
-``` text
-Node 1
-   ↓
-Commit
-   ↓
-View Diff
-```
-
-Example:
-
-``` diff
-- validateUser(user)
-+ checkUser(user)
-```
-
-The user should be able to see why the system believes the vulnerable
-logic moved.
-
-------------------------------------------------------------------------
-
-# 35. Finding-to-Lineage Algorithm
-
-Conceptually:
-
-``` text
-1. Start with canonical Finding F-102
-2. Identify current code node
-3. Identify file/function/line
-4. Find previous versions of that code
-5. Traverse Git commits backward
-6. Compare AST/symbol structure
-7. Identify matching previous code nodes
-8. Build transitions
-9. Stop at earliest reliable point
-10. Return lineage tree
-```
-
-The system should not claim a historical transition when evidence is
-insufficient.
-
-Possible final states:
-
-``` text
-ORIGIN_CONFIRMED
-ORIGIN_CANDIDATE
-HISTORY_INCOMPLETE
-ORIGIN_UNKNOWN
-```
-
-------------------------------------------------------------------------
-
-# 36. Relationship Graph + Lineage Tree Architecture
-
-``` text
-                 Canonical Finding
-                        |
-             +----------+----------+
-             |                     |
-             v                     v
-      Current CodeModel       Git History
-             |                     |
-             v                     v
-   Relationship Builder     Lineage Builder
-             |                     |
-             v                     v
-     Obsidian Graph          Git-style Tree
-             |                     |
-             +----------+----------+
-                        |
-                        v
-                 Evidence Viewer
-```
-
-------------------------------------------------------------------------
-
-# 37. Backend API Design
-
-## Projects
-
-``` text
-POST /projects
-```
-
-Create project.
-
-``` text
-POST /projects/{id}/scan
-```
-
-Start scan.
-
-``` text
-GET /projects/{id}/status
-```
-
-Scan progress.
-
-------------------------------------------------------------------------
-
-## Findings
-
-``` text
-GET /projects/{id}/findings
-GET /findings/{id}
-GET /findings/{id}/evidence
-POST /findings/{id}/explain
-```
-
-------------------------------------------------------------------------
-
-## Relationship Graph
-
-``` text
-GET /findings/{id}/graph
-```
-
-Parameters:
-
-``` text
-depth
-node_types
-edge_types
-```
-
-Example:
-
-``` text
-GET /findings/F-102/graph?depth=2
-```
-
-------------------------------------------------------------------------
-
-## Lineage Tree
-
-``` text
-GET /findings/{id}/lineage
-```
-
-Optional:
-
-``` text
-depth
-max_commits
-```
-
-------------------------------------------------------------------------
-
-## Commit History
-
-``` text
-GET /commits/{sha}
-GET /commits/{sha}/findings
-GET /commits/{sha}/diff
-```
-
-------------------------------------------------------------------------
-
-## Graph Nodes
-
-``` text
-GET /nodes/{id}
-GET /nodes/{id}/neighbors
-```
-
-------------------------------------------------------------------------
-
-# 38. Database Design
-
-Recommended primary storage:
-
-``` text
-PostgreSQL
-```
-
-Core tables:
-
-``` text
-projects
-scans
-repositories
-files
-functions
-classes
-routes
-sources
-sinks
-commits
-findings
-evidence
-scanner_results
-relationships
-lineage_nodes
-lineage_edges
-ai_explanations
-```
-
-------------------------------------------------------------------------
-
-# 39. Relationship Table
-
-``` text
-relationships
--------------------------
-id
-scan_id
-source_node_id
-target_node_id
-relationship_type
-evidence_id
-confidence
-created_at
-```
-
-Examples:
-
-``` text
-F-102 → FILE-001 → FOUND_IN
-FILE-001 → FN-001 → CONTAINS
-FN-001 → SRC-001 → CONTAINS
-SRC-001 → VAR-001 → FLOWS_TO
-VAR-001 → SINK-001 → FLOWS_TO
-```
-
-------------------------------------------------------------------------
-
-# 40. Lineage Table
-
-``` text
-lineage_edges
--------------------------
-id
-finding_id
-from_node_id
-to_node_id
-commit_sha
-transition_type
-from_file
-from_line
-to_file
-to_line
-evidence_id
-confidence
-```
-
-This keeps lineage separate from ordinary code relationships.
-
-------------------------------------------------------------------------
-
-# 41. Evidence Model
-
-Every important result should point to evidence.
-
-``` json
-{
-  "evidence_id": "E-102",
-  "type": "source_location",
-  "engine": "codeql",
-  "file": "route.ts",
-  "line_start": 21,
-  "line_end": 21,
-  "description": "User-controlled route parameter reaches database query"
-}
-```
-
-Evidence types:
-
-``` text
-SOURCE_LOCATION
-AST_RELATIONSHIP
-SEMGREP_RESULT
-CODEQL_RESULT
-GIT_DIFF
-GIT_HISTORY
-DATA_FLOW
-CALL_GRAPH
-IMPORT_GRAPH
-AI_CONTEXT
-```
-
-------------------------------------------------------------------------
-
-# 42. AI Context Builder
-
-The AI should not receive the entire repository.
-
-Build:
-
-``` text
-Finding
-   ↓
-Relevant file
-   ↓
-±30 lines
-   ↓
-Enclosing function
-   ↓
-Imports
-   ↓
-Source
-   ↓
-Sink
-   ↓
-Data-flow
-   ↓
-Authentication context
-   ↓
-CWE description
-   ↓
-Scanner evidence
-```
-
-------------------------------------------------------------------------
-
-# 43. AI Output
-
-Use structured output:
-
-``` json
-{
-  "finding_id": "F-102",
-  "summary": "...",
-  "why_it_matters": "...",
-  "evidence_summary": "...",
-  "context_assessment": "...",
-  "analyst_notes": "...",
-  "needs_review": false
-}
-```
-
-The AI output must reference existing evidence.
-
-------------------------------------------------------------------------
-
-# 44. Dashboard Architecture
-
-Recommended pages:
-
-``` text
-/
- ├── repositories
- ├── scan/:id
- ├── findings
- ├── findings/:id
- │     ├── overview
- │     ├── evidence
- │     ├── graph
- │     ├── lineage
- │     └── ai
- ├── analytics
- └── reports
-```
-
-------------------------------------------------------------------------
-
-# 45. Finding Detail Layout
-
-``` text
-+----------------------------------------------------------+
-| Finding F-102                                            |
-| Potential Missing Authorization                          |
-+----------------------------------------------------------+
-| Severity | Confidence | CWE | OWASP | State             |
-+----------------------------------------------------------+
-| Evidence                                                 |
-+----------------------------------------------------------+
-| Source Code                                              |
-+----------------------------------------------------------+
-| AI Explanation                                           |
-+----------------------------------------------------------+
-|                                                          |
-| Security Relationship Graph                              |
-|                                                          |
-+----------------------------------------------------------+
-|                                                          |
-| Vulnerability Code-Lineage Tree                          |
-|                                                          |
-+----------------------------------------------------------+
-```
-
-The user first understands the vulnerability through evidence and the
-relationship graph, then uses the lineage tree to understand how the
-relevant code changed/moved.
-
-------------------------------------------------------------------------
-
-# 46. Report Design
-
-The downloadable report should contain:
-
-``` text
-1. Executive Summary
-2. Repository Information
-3. Scan Information
-4. Language/Framework Analysis
-5. Scanner Summary
-6. Finding Summary
-7. Severity Distribution
-8. CWE/OWASP Mapping
-9. Detailed Findings
-10. Source Evidence
-11. AI Explanations
-12. Relationship Graph
-13. Vulnerability Code-Lineage Tree
-14. Relevant Git Changes
-15. Benchmark Results
-16. False Positive Analysis
-17. False Negative Analysis
-18. Limitations
-19. Conclusion
-```
-
-For every finding:
-
-``` text
-Finding ID
-Title
-Severity
-Confidence
-State
-CWE
-OWASP
-File
-Line
-Source
-Sink
-Scanner evidence
-Relationship graph
-Lineage tree
-Relevant commits
-AI explanation
-```
-
-------------------------------------------------------------------------
-
-# 47. Export Formats
-
-## JSON
-
-Machine-readable complete scan:
-
-``` text
-scan.json
-```
-
-Include:
-
-``` text
-metadata
-findings
-evidence
-relationships
-lineage
-AI outputs
-```
-
-## CSV
-
-Useful columns:
-
-``` text
-finding_id
-title
-severity
-confidence
-state
-file
-line_start
-line_end
-cwe
-owasp
-source_engines
-commit
-```
-
-## PDF
-
-Human-readable security report containing:
-
--   finding details
--   evidence
--   graph screenshots
--   lineage tree
--   benchmark results
-
-------------------------------------------------------------------------
-
-# 48. Dashboard Graph Technology
-
-The frontend can use:
-
-``` text
-React
-+
-React Flow / Cytoscape
-```
-
-## Relationship Graph
-
-Use force-directed / knowledge-graph style visualization.
-
-The graph should support:
-
-``` text
-drag
-zoom
-pan
-expand
-collapse
-filter
-focus
-highlight
-```
-
-## Lineage Tree
-
-Use a deliberately different layout:
-
-``` text
-left → right
-```
-
-or:
-
-``` text
-top → bottom
-```
-
-with:
-
-``` text
-commit nodes
-code nodes
-branch lines
-transition labels
-```
-
-The visual distinction is important.
-
-------------------------------------------------------------------------
-
-# 49. Relationship Graph vs Lineage Tree
-
-  -----------------------------------------------------------------------
-  Feature                 Relationship Graph      Vulnerability Lineage
-                                                  Tree
-  ----------------------- ----------------------- -----------------------
-  Main question           What is connected?      How did the
-                                                  code/vulnerability
-                                                  move?
-
-  Visual style            Obsidian knowledge      Git branch/commit tree
-                          graph                   
-
-  Main data               Code relationships      Git history + code
-                                                  similarity
-
-  Nodes                   Files, functions,       Code states + commits
-                          sources, sinks, CWE,    
-                          finding                 
-
-  Edges                   Calls, imports, flows,  Changed, moved,
-                          contains                renamed, split, merged
-
-  Direction               Relationship-based      Chronological
-
-  Main use                Understand structure    Understand evolution
-
-  Evidence                AST/SAST/data-flow      Git diff/history +
-                                                  AST/symbol evidence
-  -----------------------------------------------------------------------
-
-------------------------------------------------------------------------
-
-# 50. Important Anti-Confusion Rule
-
-Do **not** call the second visualization an:
-
-``` text
-Impact Graph
-```
-
-or:
-
-``` text
-Attack Graph
-```
-
-because that implies a different security concept.
-
-Recommended name:
-
-> **Vulnerability Code-Lineage Tree**
-
-Alternative UI label:
-
-> **Code History / Lineage**
-
-This makes its purpose clear.
-
-------------------------------------------------------------------------
-
-# 51. V1 Vulnerability Scope
-
-Target approximately:
-
-``` text
-SQL / NoSQL Injection
-XSS
-Command Injection
-Path Traversal
-SSRF
-Insecure Deserialization
-Hard-coded Secrets
-Missing Authorization
-IDOR
-Weak Authentication Controls
-Unsafe Redirects
-Dangerous File Operations
-Insecure HTTP Requests
-Sensitive Data Exposure
-```
-
-Do not promise complete CWE coverage.
-
-------------------------------------------------------------------------
-
-# 52. Detailed 15-Week Implementation Plan
-
-## Week 1 --- Architecture and Contracts
-
-### Build
-
-``` text
-repository structure
-FastAPI skeleton
-React skeleton
-PostgreSQL schema
-Docker
-CI
-configuration
-logging
-```
-
-### Define
-
-``` text
-Project
-Scan
-Finding
-Evidence
-CodeNode
-Relationship
-LineageNode
-LineageEdge
-AIExplanation
-```
-
-### Deliverable
-
-All services start and the database schema exists.
-
-------------------------------------------------------------------------
-
-# 53. Week 2 --- Repository Snapshot
-
-Implement:
-
-``` text
-GitHub URL validation
-clone
-branch resolution
-commit resolution
-checkout
-file filtering
-hashing
-language detection
-manifest
-```
-
-### Test
-
-Scan the same commit twice and verify:
-
-``` text
-same SHA
-same files
-same hashes
-same snapshot
-```
-
-### Deliverable
-
-Reproducible repository snapshot.
-
-------------------------------------------------------------------------
-
-# 54. Week 3 --- AST Foundation
-
-Implement:
-
-``` text
-file extraction
-function extraction
-class extraction
-import extraction
-export extraction
-```
-
-Generate stable IDs.
-
-### Deliverable
-
-A repository can be represented as:
-
-``` text
-File → Function/Class/Import
-```
-
-------------------------------------------------------------------------
-
-# 55. Week 4 --- Code Relationships
-
-Add:
-
-``` text
-function calls
-variables
-routes
-source detection
-sink detection
-```
-
-Build:
-
-``` text
-CALLS
-IMPORTS
-CONTAINS
-SOURCE
-SINK
-```
-
-### Deliverable
-
-Queryable CodeModel.
-
-------------------------------------------------------------------------
-
-# 56. Week 5 --- Semgrep
-
-Implement:
-
-``` text
-Semgrep execution
-rule configuration
-rule packs
-raw result parser
-```
-
-Start with:
-
-``` text
-3–5 vulnerability families
-```
-
-### Deliverable
-
-First scanner findings appear through the API.
-
-------------------------------------------------------------------------
-
-# 57. Week 6 --- Semgrep Expansion
-
-Expand to the V1 vulnerability families.
-
-Add:
-
-``` text
-positive tests
-negative tests
-rule metadata
-CWE mapping
-OWASP mapping
-severity
-```
-
-### Deliverable
-
-Stable Semgrep security-rule pack.
-
-------------------------------------------------------------------------
-
-# 58. Week 7 --- CodeQL
-
-Implement:
-
-``` text
-CodeQL database creation
-query execution
-result parser
-location extraction
-```
-
-Start with:
-
-``` text
-source → sink
-```
-
-queries.
-
-### Deliverable
-
-CodeQL findings enter the backend.
-
-------------------------------------------------------------------------
-
-# 59. Week 8 --- Data Flow
-
-Add:
-
-``` text
-taint tracking
-cross-function flow
-source/sink paths
-flow evidence
-```
-
-### Deliverable
-
-At least several vulnerability classes have source-to-sink evidence.
-
-------------------------------------------------------------------------
-
-# 60. Week 9 --- Correlation + Deduplication
-
-Build:
-
-``` text
-raw finding ingestion
-scanner correlation
-deduplication
-semantic fingerprint
-canonical Finding ID
-```
-
-Test:
-
-``` text
-Semgrep finding
-+
-CodeQL finding
-=
-one canonical finding
-```
-
-### Deliverable
-
-Reliable Finding\[\] output.
-
-------------------------------------------------------------------------
-
-# 61. Week 10 --- Enrichment + Confidence + Graph Model
-
-Implement:
-
-``` text
-CWE
-OWASP
-confidence
-security states
-evidence model
-relationship schema
-```
-
-Then generate:
-
-``` text
-Finding
- ↓
-File
- ↓
 Function
- ↓
-Source
- ↓
-Sink
- ↓
-CWE
-```
-
-### Deliverable
-
-Every finding can generate a relationship graph.
-
-------------------------------------------------------------------------
-
-# 62. Week 11 --- Obsidian Relationship Graph
-
-Implement:
-
-``` text
-node rendering
-edge rendering
-zoom
-pan
-drag
-filter
-focus
-expand
-collapse
-evidence selection
-```
-
-### Deliverable
-
-A user can open one finding and visually inspect all connected
-components.
-
-------------------------------------------------------------------------
-
-# 63. Week 12 --- Vulnerability Code-Lineage Tree
-
-Implement:
-
-``` text
-Git commit traversal
-git diff extraction
-line history
-AST similarity
-symbol matching
-code-node matching
-transition detection
-lineage construction
-```
-
-Transition types:
-
-``` text
-MOVED
-MODIFIED
-RENAMED
-SPLIT
-MERGED
-COPIED
-PROPAGATED
-```
-
-### Deliverable
-
-A finding can show:
-
-``` text
-Node 1
- ↓
-Commit
- ↓
-Node 2
- ↓
-Commit
- ↓
-Node 3
-```
-
-with the transition code point visible.
-
-------------------------------------------------------------------------
-
-# 64. Week 13 --- AI + Evidence Viewer
-
-Implement:
-
-``` text
-context builder
-LLM gateway
-structured response
-validation
-explanation
-triage
-```
-
-Evidence viewer should connect:
-
-``` text
+Route
+Dependency
 Finding
- ↓
-Code
- ↓
-Graph node
- ↓
-Lineage node
- ↓
-Commit
- ↓
-Diff
-```
-
-### Deliverable
-
-Complete explainable finding workflow.
-
-------------------------------------------------------------------------
-
-# 65. Week 14 --- Dashboard + Reports
-
-Complete:
-
-``` text
-repository page
-scan progress
-findings table
-finding detail
-relationship graph
-lineage tree
-AI panel
-analytics
-PDF export
-JSON export
-CSV export
-```
-
-### Deliverable
-
-End-to-end dashboard.
-
-------------------------------------------------------------------------
-
-# 66. Week 15 --- Evaluation + Hardening
-
-Run benchmark tests.
-
-Measure:
-
-``` text
-precision
-recall
-F1
-false-positive rate
-false-negative rate
-findings/KLOC
-scan time
-deduplication rate
-relationship graph correctness
-lineage correctness
-```
-
-Then:
-
-``` text
-bug fixing
-security hardening
-performance
-documentation
-demo preparation
-final report
-```
-
-### Deliverable
-
-Final reproducible release.
-
-------------------------------------------------------------------------
-
-# 67. Testing Strategy
-
-## Unit Tests
-
-Test independently:
-
-``` text
-Git parser
-AST parser
-source extractor
-sink extractor
-Semgrep parser
-CodeQL parser
-correlator
-deduplicator
-CWE mapper
-confidence engine
-graph builder
-lineage builder
-AI schema validator
-report generator
-```
-
-------------------------------------------------------------------------
-
-# 68. Integration Test
-
-Full pipeline:
-
-``` text
-Repository
- ↓
-Snapshot
- ↓
-AST
- ↓
-Semgrep
- ↓
-CodeQL
- ↓
-Correlation
- ↓
-Finding
- ↓
-Relationship Graph
- ↓
-Lineage Tree
- ↓
-AI
- ↓
-Report
-```
-
-One test repository should exercise this complete path.
-
-------------------------------------------------------------------------
-
-# 69. Benchmark Evaluation
-
-Use the source brief's recommended evaluation sources where applicable:
-
-``` text
-Juliet
-NIST SARD subsets
-OWASP Benchmark where applicable
-Intentionally vulnerable web repositories
-Manually reviewed real-world repository sample
-```
-
-Measure:
-
-``` text
-Precision
-Recall
-F1
-False positives
-False negatives
-Findings/KLOC
-Scan time
-Deduplication rate
-```
-
-For the two visualizations additionally measure:
-
-``` text
-Relationship precision
-Relationship recall
-Lineage transition correctness
-Correct transition code point
-Evidence coverage
-```
-
-------------------------------------------------------------------------
-
-# 70. Security Requirements
-
-Because repositories are untrusted input:
-
-``` text
-Run scans in isolated environment
-Use Docker
-Limit permissions
-Do not expose credentials
-Restrict network access where possible
-Treat repository files as untrusted
-Validate external inputs
-Validate AI outputs
-Keep audit information
-```
-
-The AI must not:
-
-``` text
-execute shell commands
-modify repository
-access credentials
-call arbitrary URLs
-```
-
-------------------------------------------------------------------------
-
-# 71. Error Handling
-
-## Repository
-
-``` text
-invalid URL
-clone failure
-private repository
-missing branch
-missing commit
-```
-
-## AST
-
-``` text
-unsupported syntax
-parser failure
-corrupt file
-```
-
-## Semgrep
-
-``` text
-scanner failure
-timeout
-invalid rule
-```
-
-## CodeQL
-
-``` text
-database failure
-query failure
-timeout
-```
-
-## AI
-
-``` text
-timeout
-rate limit
-invalid JSON
-schema mismatch
-```
-
-## Graph
-
-``` text
-missing node
-broken relationship
-incomplete history
-```
-
-A partial scan should be marked clearly as:
-
-``` text
-PARTIAL
-```
-
-rather than silently appearing complete.
-
-------------------------------------------------------------------------
-
-# 72. Final Dashboard Workflow
-
-``` text
-┌──────────────────────┐
-│ Enter Repository     │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Select Commit        │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Start Scan           │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Scan Progress        │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Findings             │
-└──────────┬───────────┘
-           ↓
-┌──────────────────────┐
-│ Finding Detail       │
-└───────┬───────┬──────┘
-        │       │
-        │       │
-        ▼       ▼
-   Relationship  Code-Lineage
-      Graph        Tree
-        │           │
-        └─────┬─────┘
-              ↓
-        Evidence Viewer
-              ↓
-        AI Explanation
-              ↓
-        Export Report
-```
-
-------------------------------------------------------------------------
-
-# 73. Final Demonstration
-
-Use one vulnerable full-stack repository.
-
-Show:
-
-``` text
-Repository
-   ↓
-Exact Commit
-   ↓
-431 files
-   ↓
-SAST
-   ↓
-47 raw findings
-   ↓
-31 normalized findings
-   ↓
-12 high-confidence findings
-```
-
-Then open one finding:
-
-``` text
-F-102
-```
-
-Show:
-
-``` text
+Vulnerability
+Secret
 CWE
 OWASP
-Severity
-Confidence
-Evidence
+Source
+Sink
 ```
 
-Then:
-
-### First visualization
-
-``` text
-Obsidian Relationship Graph
-```
-
-Explain:
-
-``` text
-"What is connected to this vulnerability?"
-```
-
-### Second visualization
-
-``` text
-Vulnerability Code-Lineage Tree
-```
-
-Explain:
-
-``` text
-"How did this vulnerable code move from Node 1
-to Node 2, and at which commit/code point did
-that transition happen?"
-```
-
-Then click:
-
-``` text
-Transition
-```
-
-and show:
-
-``` text
-Commit
-+
-Git diff
-+
-old code location
-+
-new code location
-```
-
-Finally:
-
-``` text
-AI Explanation
-      ↓
-PDF Report
-      +
-JSON
-      +
-CSV
-```
+The graph is evidence-driven rather than decorative.
 
 ------------------------------------------------------------------------
 
-# 74. Final Project Deliverables
+# 8. Vulnerability Code-Lineage Tree
 
-``` text
-Source Code
-Docker Configuration
-Database Schema
-API Documentation
-Security Rules
-CodeQL Queries
-CodeModel
-Finding Engine
-Relationship Graph
-Vulnerability Code-Lineage Tree
-AI Gateway
-Dashboard
-Benchmark Results
-PDF Report Generator
-JSON Export
-CSV Export
-Test Suite
-Documentation
-Demo Repository
-Final Presentation
-```
+The second visualization is intentionally different.
 
-------------------------------------------------------------------------
+### Question it answers
 
-# 75. Final Architecture Summary
+> **How did the vulnerable code/flow move through code changes?**
 
-``` text
-                    REPOSITORY
-                        |
-                        v
-                REPRODUCIBLE SNAPSHOT
-                        |
-                        v
-                  CODE INTELLIGENCE
-                        |
-             +----------+----------+
-             |                     |
-             v                     v
-          SEMGREP                CODEQL
-             |                     |
-             +----------+----------+
-                        |
-                        v
-                 CORRELATION
-                        |
-                        v
-                  DEDUPLICATION
-                        |
-                        v
-               CWE / OWASP / SCORE
-                        |
-                        v
-                 CANONICAL FINDING
-                        |
-             +----------+----------+
-             |                     |
-             v                     v
-       RELATIONSHIP           CODE-LINEAGE
-          GRAPH                   TREE
-             |                     |
-             |                     |
-       "WHAT IS               "HOW DID IT
-        CONNECTED?"             MOVE?"
-             |                     |
-             +----------+----------+
-                        |
-                        v
-                 EVIDENCE VIEW
-                        |
-                        v
-                   AI TRIAGE
-                        |
-                        v
-                  DASHBOARD
-                        |
-              +---------+---------+
-              |         |         |
-              v         v         v
-             PDF       JSON      CSV
-```
-
-------------------------------------------------------------------------
-
-# 76. The Two Visualization Concepts --- Final Definition
-
-## A. Security Relationship Graph
-
-> **A current-state Obsidian-style graph that explains the structural
-> and security relationships surrounding one vulnerability.**
-
-Example:
-
-``` text
-Finding
- ├── File
- │    └── Function
- │         ├── Source
- │         ├── Call
- │         └── Sink
- ├── CWE
- ├── OWASP
- └── Related Findings
-```
-
-## B. Vulnerability Code-Lineage Tree
-
-> **A Git-style chronological tree that explains how the relevant
-> vulnerable code/flow transitioned from one code node to another across
-> commits, including the exact code point where the transition
-> occurred.**
+It should look like a Git branch/commit tree.
 
 Example:
 
@@ -2867,17 +586,701 @@ Commit A
  Finding
 ```
 
-The two views answer two different questions:
+The tree can show transitions such as:
 
 ``` text
-RELATIONSHIP GRAPH
-        ↓
+MOVED
+MODIFIED
+RENAMED
+SPLIT
+MERGED
+COPIED
+PROPAGATED
+```
+
+It should expose:
+
+``` text
+Commit
+Old code location
+New code location
+Transition type
+Transition code point
+Git diff
+Evidence
+```
+
+This is **not** an attack graph or generic impact graph.
+
+The two visualizations answer different questions:
+
+``` text
+Relationship Graph
 "What is connected?"
 
-CODE-LINEAGE TREE
-        ↓
+Code-Lineage Tree
 "How did it get here?"
 ```
 
-Together they provide the user with both **structural understanding**
-and **historical/code-evolution understanding** of a vulnerability.
+------------------------------------------------------------------------
+
+# 9. Evidence-First Architecture
+
+Every important result should point to evidence.
+
+Example evidence:
+
+``` text
+SOURCE_LOCATION
+AST_RELATIONSHIP
+SEMGREP_RESULT
+CODEQL_RESULT
+GIT_DIFF
+GIT_HISTORY
+DATA_FLOW
+CALL_GRAPH
+IMPORT_GRAPH
+AI_CONTEXT
+```
+
+The evidence chain is:
+
+``` text
+Scanner
+   ↓
+Evidence
+   ↓
+Canonical Finding
+   ↓
+Graph / Lineage
+   ↓
+Risk
+   ↓
+AI Explanation
+```
+
+ARVE should not present unsupported AI conclusions.
+
+------------------------------------------------------------------------
+
+# 10. Risk Scoring
+
+The initial risk engine uses a transparent weighted model:
+
+``` text
+risk = w1·severity
+     + w2·confidence
+     + w3·exposure
+     + w4·cluster_size
+```
+
+Where:
+
+``` text
+exposure = finding inside route handler
+cluster_size = findings sharing function/endpoint
+```
+
+The dashboard can then show:
+
+``` text
+Repository Risk Score
+Finding Risk
+Priority
+Score Breakdown
+```
+
+ML-based risk scoring is not part of v1.
+
+------------------------------------------------------------------------
+
+# 11. AI-Assisted Analysis
+
+ARVE uses AI for interpretation.
+
+The AI can:
+
+-   Explain findings.
+-   Summarize related findings.
+-   Suggest fixes.
+-   Explain security/business impact.
+-   Generate an executive summary.
+
+The AI receives bounded context:
+
+``` text
+Finding
+±30 lines of code
+Enclosing function
+Imports
+Route
+CWE description
+Raw scanner evidence
+```
+
+It does not receive the entire repository.
+
+AI output must be:
+
+``` text
+Structured
+Schema-validated
+Evidence-backed
+```
+
+The AI does not set:
+
+``` text
+Severity
+Confidence
+```
+
+------------------------------------------------------------------------
+
+# 12. Database
+
+ARVE uses:
+
+> **PostgreSQL hosted on Neon**
+
+The database is centralized for development.
+
+``` text
+Infisical
+    ↓
+Development
+    ↓
+DATABASE_URL
+    ↓
+Neon PostgreSQL
+    ↑
+    ├── Developer 1
+    ├── Developer 2
+    ├── Developer 3
+    ├── Developer 4
+    ├── Developer 5
+    └── Developer 6
+```
+
+This means all six developers work against the same development
+database.
+
+Neon branches can still be used for isolated experiments when necessary.
+
+The database contains structured application data such as:
+
+``` text
+projects
+scans
+repositories
+files
+functions
+classes
+routes
+sources
+sinks
+findings
+evidence
+relationships
+lineage_nodes
+lineage_edges
+ai_explanations
+```
+
+Large raw scanner artifacts should not unnecessarily be stored in
+PostgreSQL.
+
+------------------------------------------------------------------------
+
+# 13. Secret Management
+
+ARVE uses:
+
+> **Infisical**
+
+Development secrets include:
+
+``` text
+DATABASE_URL
+JWT_SECRET
+GITHUB_CLIENT_ID
+GITHUB_CLIENT_SECRET
+FIREBASE_PROJECT_ID
+FRONTEND_URL
+```
+
+The application obtains them at runtime.
+
+Example:
+
+``` bash
+infisical run -- python run.py
+```
+
+or:
+
+``` bash
+infisical run -- python -m uvicorn app.main:app --reload --port 8000
+```
+
+No database credentials or other secrets should be committed to Git.
+
+------------------------------------------------------------------------
+
+# 14. Backend Architecture
+
+The backend is based on:
+
+``` text
+FastAPI
+Python
+PostgreSQL
+SQLAlchemy
+Alembic
+Redis
+Celery
+```
+
+The scan pipeline is asynchronous.
+
+Conceptually:
+
+``` text
+Frontend
+   ↓
+FastAPI
+   ↓
+Redis / Job Queue
+   ↓
+Celery Worker
+   ↓
+Repository + Security Engines
+   ↓
+PostgreSQL
+```
+
+Scanner execution is isolated using Docker.
+
+------------------------------------------------------------------------
+
+# 15. Frontend Architecture
+
+The dashboard is built with:
+
+``` text
+React
+```
+
+Recommended major pages:
+
+``` text
+/
+ ├── repositories
+ ├── scan/:id
+ ├── findings
+ ├── findings/:id
+ │     ├── overview
+ │     ├── evidence
+ │     ├── graph
+ │     ├── lineage
+ │     └── ai
+ ├── analytics
+ └── reports
+```
+
+The scan-progress interface uses polling rather than WebSockets in v1.
+
+------------------------------------------------------------------------
+
+# 16. API Overview
+
+Project/scan:
+
+``` text
+POST /projects
+POST /projects/{id}/scan
+GET /projects/{id}/status
+```
+
+Findings:
+
+``` text
+GET /projects/{id}/findings
+GET /findings/{id}
+GET /findings/{id}/evidence
+POST /findings/{id}/explain
+```
+
+Relationship graph:
+
+``` text
+GET /findings/{id}/graph
+```
+
+Lineage:
+
+``` text
+GET /findings/{id}/lineage
+```
+
+Commit/evidence:
+
+``` text
+GET /commits/{sha}
+GET /commits/{sha}/findings
+GET /commits/{sha}/diff
+GET /nodes/{id}
+GET /nodes/{id}/neighbors
+```
+
+------------------------------------------------------------------------
+
+# 17. Project Roadmap
+
+The project is organized into the following major phases:
+
+``` text
+Phase 1  — GitHub Authentication
+Phase 2  — GitHub Repository Ingestion
+Phase 3  — Scan Orchestration
+Phase 4  — Security Engines
+Phase 5  — Finding Normalization
+Phase 6  — AST / Code Intelligence
+Phase 7  — Finding Correlation
+Phase 8  — Security Knowledge Graph
+Phase 9  — Risk Engine
+Phase 10 — LLM Analysis
+Phase 11 — Dashboard
+```
+
+The first major milestone is the Semgrep vertical slice.
+
+------------------------------------------------------------------------
+
+# 18. MVP
+
+The MVP is intentionally not the complete ARVE vision.
+
+``` text
+GitHub Login
+     ↓
+Select Repository + Commit
+     ↓
+GitHub API Ingestion
+     ↓
+Normalized Repository
+     ↓
+Async Scan
+     ↓
+Semgrep
+     ↓
+Normalize Finding
+     ↓
+Display Finding
+```
+
+The MVP proves that ARVE can go from:
+
+``` text
+Repository
+```
+
+to:
+
+``` text
+Evidence-backed security finding
+```
+
+before advanced AI and graph capabilities are built.
+
+------------------------------------------------------------------------
+
+# 19. Evaluation
+
+ARVE should be evaluated against known vulnerable repositories/datasets.
+
+Measure:
+
+``` text
+Precision
+Recall
+F1
+False positives
+False negatives
+Findings/KLOC
+Scan time
+Deduplication rate
+```
+
+For the two visualizations:
+
+``` text
+Relationship correctness
+Lineage transition correctness
+Transition code-point correctness
+Evidence coverage
+```
+
+Evaluation is part of the project, not a final-week afterthought.
+
+------------------------------------------------------------------------
+
+# 20. Security
+
+ARVE analyzes untrusted third-party repositories.
+
+Therefore scanner execution must use:
+
+``` text
+Docker isolation
+No network access where possible
+Read-only workspace
+Non-root execution
+Memory/resource limits
+Timeouts
+```
+
+The AI must not:
+
+``` text
+execute arbitrary shell commands
+modify the repository
+access credentials
+call arbitrary URLs
+```
+
+External input and AI output must be validated.
+
+------------------------------------------------------------------------
+
+# 21. Reporting
+
+The final reporting system is intended to contain:
+
+1.  Executive Summary
+2.  Repository Information
+3.  Scan Information
+4.  Language/Framework Analysis
+5.  Scanner Summary
+6.  Finding Summary
+7.  Severity Distribution
+8.  CWE/OWASP Mapping
+9.  Detailed Findings
+10. Source Evidence
+11. AI Explanations
+12. Relationship Graph
+13. Vulnerability Code-Lineage Tree
+14. Relevant Git Changes
+15. Benchmark Results
+16. False Positive Analysis
+17. False Negative Analysis
+18. Limitations
+19. Conclusion
+
+Export formats:
+
+``` text
+JSON
+CSV
+PDF
+```
+
+Markdown/JSON should be prioritized before PDF if schedule is
+constrained.
+
+------------------------------------------------------------------------
+
+# 22. What Makes ARVE Different?
+
+ARVE is not only:
+
+``` text
+"run a scanner and show vulnerabilities"
+```
+
+The project is built around three layers of understanding:
+
+### 1. Detection
+
+``` text
+Semgrep
+OSV-Scanner
+Gitleaks
+```
+
+### 2. Understanding
+
+``` text
+AST
+Functions
+Routes
+Files
+Relationships
+Evidence
+```
+
+### 3. Explanation
+
+``` text
+Risk
+Relationship Graph
+Code-Lineage Tree
+AI Triage
+Reports
+```
+
+The intended user journey is:
+
+``` text
+Find the vulnerability
+        ↓
+Understand the evidence
+        ↓
+Understand what is connected
+        ↓
+Understand how the relevant code evolved
+        ↓
+Understand why it matters
+        ↓
+Know what to fix
+```
+
+------------------------------------------------------------------------
+
+# 23. Final Vision
+
+ARVE's long-term vision is an evidence-backed security analysis platform
+where a developer can move from a repository to an explainable
+vulnerability without losing the connection to the underlying code.
+
+``` text
+                    REPOSITORY
+                        |
+                        v
+                REPRODUCIBLE SNAPSHOT
+                        |
+                        v
+                  CODE INTELLIGENCE
+                        |
+             +----------+----------+
+             |                     |
+             v                     v
+          SECURITY              DEPENDENCY
+          ANALYSIS              ANALYSIS
+             |                     |
+             +----------+----------+
+                        |
+                        v
+                 CANONICAL FINDING
+                        |
+             +----------+----------+
+             |                     |
+             v                     v
+       RELATIONSHIP           CODE-LINEAGE
+          GRAPH                   TREE
+             |                     |
+             +----------+----------+
+                        |
+                        v
+                    EVIDENCE
+                        |
+                        v
+                  AI ANALYSIS
+                        |
+                        v
+                    DASHBOARD
+                        |
+                        v
+                    REPORTS
+```
+
+ARVE's core promise is:
+
+> **Don't just tell the developer that a vulnerability exists. Show the
+> evidence, show the code relationships, show the relevant history, and
+> explain what the developer should do next.**
+
+------------------------------------------------------------------------
+
+# 24. Repository Structure --- Target Direction
+
+A high-level project organization should evolve around the system
+boundaries:
+
+``` text
+ARVE/
+├── backend/
+│   ├── app/
+│   │   ├── core/
+│   │   ├── ingestion/
+│   │   │   ├── github/
+│   │   │   ├── filters/
+│   │   │   ├── detector/
+│   │   │   ├── normalizer/
+│   │   │   └── service.py
+│   │   ├── models/
+│   │   ├── schemas/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   └── ...
+│   ├── alembic/
+│   ├── tests/
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   └── ...
+│
+├── scanners/
+│   ├── semgrep/
+│   ├── osv/
+│   └── gitleaks/
+│
+├── docker/
+├── scripts/
+├── docs/
+└── README.md
+```
+
+The exact implementation structure may evolve with the existing
+repository, but the architecture should preserve the separation between
+API, scanning, code intelligence, evidence, graph, AI, and frontend
+responsibilities.
+
+------------------------------------------------------------------------
+
+# 25. Project Status Philosophy
+
+ARVE development should prioritize a working vertical slice before
+advanced features.
+
+The order is:
+
+``` text
+Reliable GitHub repository access
+        ↓
+Reliable repository ingestion
+        ↓
+Reproducible commit snapshot
+        ↓
+Reliable asynchronous scan
+        ↓
+Reliable security finding
+        ↓
+Reliable normalized evidence
+        ↓
+Code intelligence
+        ↓
+Correlation
+        ↓
+Graph
+        ↓
+Risk
+        ↓
+AI
+        ↓
+Advanced reporting
+```
+
+The system should never sacrifice reproducibility, evidence integrity,
+or security isolation just to add a visually impressive feature earlier.

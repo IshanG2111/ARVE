@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGitHubRepos, useBranchesByName } from '../hooks/useRepositories';
 import { useCreateProject } from '../hooks/useProjects';
 import type { GitHubRepo } from '../types';
+import { ConfirmModal } from './ConfirmModal';
 
 interface Props {
   onClose: () => void;
@@ -18,6 +19,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
   const [selectedBranch, setSelectedBranch] = useState('');
   const [deploymentUrl, setDeploymentUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingPrivateRepo, setPendingPrivateRepo] = useState<GitHubRepo | null>(null);
 
   const { data: repos = [], isLoading: loadingRepos } = useGitHubRepos();
   const { data: branches = [], isLoading: loadingBranches } = useBranchesByName(
@@ -25,10 +27,28 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
   );
   const createProject = useCreateProject();
 
-  // Auto-pick first repo
+  // Auto-pick the first public repo. Private repositories require explicit confirmation.
   React.useEffect(() => {
-    if (repos.length > 0 && !selectedRepo) setSelectedRepo(repos[0]);
+    if (repos.length > 0 && !selectedRepo) {
+      const firstPublicRepo = repos.find((repo) => !repo.private);
+      if (firstPublicRepo) setSelectedRepo(firstPublicRepo);
+    }
   }, [repos, selectedRepo]);
+
+  const selectRepository = (repo: GitHubRepo) => {
+    if (repo.private) {
+      setPendingPrivateRepo(repo);
+      return;
+    }
+    setSelectedRepo(repo);
+  };
+
+  const confirmPrivateRepository = () => {
+    if (pendingPrivateRepo) {
+      setSelectedRepo(pendingPrivateRepo);
+    }
+    setPendingPrivateRepo(null);
+  };
 
   // Auto-pick default branch when repo changes
   React.useEffect(() => {
@@ -66,10 +86,17 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
         deployment_url: trimmedUrl || undefined,
         name: selectedRepo.name,
         description: selectedRepo.description || undefined,
-        repo_name: selectedRepo.full_name,
-        repo_url: selectedRepo.html_url,
-        repo_id: selectedRepo.id,
-        default_branch: selectedRepo.default_branch,
+        repository: {
+          github_repo_id: selectedRepo.id,
+          owner: selectedRepo.full_name.split('/')[0] || 'unknown',
+          name: selectedRepo.name,
+          full_name: selectedRepo.full_name,
+          html_url: selectedRepo.html_url,
+          default_branch: selectedRepo.default_branch,
+          language: selectedRepo.language,
+          description: selectedRepo.description,
+          private: selectedRepo.private,
+        },
       },
       {
         onSuccess: () => {
@@ -143,7 +170,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
                   <div
                     key={repo.id}
                     className={`list-item${selectedRepo?.id === repo.id ? ' selected' : ''}`}
-                    onClick={() => setSelectedRepo(repo)}
+                    onClick={() => selectRepository(repo)}
                     id={`repo-${repo.id}`}
                   >
                     <div className="list-item-title">{repo.full_name}</div>
@@ -279,6 +306,22 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
           </div>
         )}
       </div>
+
+      {pendingPrivateRepo && (
+        <ConfirmModal
+          title="Private repository"
+          message={
+            <>
+              <strong style={{ color: 'var(--primary)' }}>{pendingPrivateRepo.full_name}</strong> is a private GitHub repository.
+              ARVE will need access to its source code for security analysis. Do you want to connect this private repository?
+            </>
+          }
+          confirmText="Connect private repo"
+          cancelText="Cancel"
+          onConfirm={confirmPrivateRepository}
+          onCancel={() => setPendingPrivateRepo(null)}
+        />
+      )}
     </div>
   );
 };

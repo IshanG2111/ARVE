@@ -1,12 +1,85 @@
-from typing import List
+from typing import List, Optional
+
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from app.models.models import User, Project, Repository
-from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, selectinload
+
 from app.api.deps import get_current_user
+from app.core.config import settings
+from app.core.database import get_db
+from app.models.models import Project, Repository, TargetWebsite, User
+from app.schemas.schemas import ProjectCreate, ProjectResponse, ProjectUpdate
+from app.services.verifier import clean_domain
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+async def _fetch_github_repository(current_user: User, repository) -> dict:
+    """Verify the selected GitHub repository belongs to the authenticated user."""
+    token = current_user.github_access_token
+    if settings.is_development and token and token.startswith("mock_"):
+        return {
+            "id": repository.github_repo_id,
+            "owner": repository.owner,
+            "name": repository.name,
+            "full_name": repository.full_name,
+            "html_url": repository.html_url,
+            "default_branch": repository.default_branch,
+            "language": repository.language,
+            "description": repository.description,
+            "private": repository.private,
+        }
+
+    if not token:
+        raise HTTPException(status_code=403, detail="GitHub access is required to connect a repository")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            f"https://api.github.com/repos/{repository.full_name}",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="GitHub repository not found or not accessible")
+    if response.status_code in {401, 403}:
+        raise HTTPException(status_code=403, detail="GitHub access to this repository was denied")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="GitHub repository verification failed")
+
+    return response.json()
+
+
+def _repository_from_github_data(data: dict) -> dict:
+    owner_data = data.get("owner")
+    owner = owner_data.get("login") if isinstance(owner_data, dict) else owner_data
+    full_name = data.get("full_name") or ""
+    return {
+        "github_repo_id": str(data["id"]),
+        "owner": owner or full_name.split("/", 1)[0],
+        "name": data.get("name") or full_name.split("/")[-1],
+        "full_name": full_name,
+        "html_url": data.get("html_url"),
+        "default_branch": data.get("default_branch") or "main",
+        "language": data.get("language"),
+        "description": data.get("description"),
+        "private": bool(data.get("private", False)),
+    }
+
+
+def _get_project_query(db: Session, project_id: str, user_id: str):
+    return (
+        db.query(Project)
+        .options(
+            selectinload(Project.repository),
+            selectinload(Project.targets),
+            selectinload(Project.scans),
+        )
+        .filter(Project.id == project_id, Project.user_id == user_id)
+    )
 
 
 @router.get("", response_model=List[ProjectResponse])
@@ -14,90 +87,109 @@ def get_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    projects = db.query(Project).filter(Project.user_id == current_user.id).all()
-    return projects
+    return (
+        db.query(Project)
+        .options(
+            selectinload(Project.repository),
+            selectinload(Project.targets),
+            selectinload(Project.scans),
+        )
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.created_at.desc())
+        .all()
+    )
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-def create_project(
+async def create_project(
     project_in: ProjectCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # ── Resolve or create Repository record ─────────────────────────────────
-    repository_id = project_in.repository_id
+    """Create a project and all immediately-owned records atomically."""
+    try:
+        repository: Optional[Repository] = None
 
-    if not repository_id and project_in.repo_id:
-        # Check if we already have this repo stored
-        existing = db.query(Repository).filter(
-            Repository.github_repo_id == project_in.repo_id
-        ).first()
-
-        if existing:
-            repository_id = existing.id
-        else:
-            # Create a new Repository record from wizard passthrough data
-            full_name = project_in.repo_name or ""
-            parts = full_name.split("/")
-            owner = parts[0] if len(parts) > 1 else current_user.username or "unknown"
-            name = parts[-1] if parts else full_name
-
-            new_repo = Repository(
-                github_repo_id=project_in.repo_id,
-                owner=owner,
-                name=name,
-                full_name=full_name,
-                html_url=project_in.repo_url,
-                default_branch=project_in.default_branch or project_in.branch or "main",
-                language=None,
-                description=project_in.description,
-                private=False,
+        if project_in.repository_id:
+            # An internal repository ID is only valid if this user already has
+            # a project referencing it. This prevents ID-based cross-user access.
+            repository = (
+                db.query(Repository)
+                .join(Project, Project.repository_id == Repository.id)
+                .filter(
+                    Repository.id == project_in.repository_id,
+                    Project.user_id == current_user.id,
+                )
+                .first()
             )
-            db.add(new_repo)
-            db.flush()
-            repository_id = new_repo.id
+            if not repository:
+                raise HTTPException(status_code=404, detail="Repository not found")
 
-    # ── Derive a display name ────────────────────────────────────────────────
-    name = project_in.name or (project_in.repo_name or "").split("/")[-1] or "Untitled"
+        elif project_in.repository:
+            # Never trust the browser's repository metadata for authorization.
+            verified_data = await _fetch_github_repository(current_user, project_in.repository)
+            normalized = _repository_from_github_data(verified_data)
 
-    dep_url = project_in.deployment_url.strip() if project_in.deployment_url and project_in.deployment_url.strip() else None
-    target_url = dep_url or getattr(project_in, "target_domain", None)
+            dep_url = project_in.deployment_url.strip() if project_in.deployment_url and project_in.deployment_url.strip() else None
+            target_url = dep_url or getattr(project_in, "target_domain", None)
 
-    project = Project(
-        user_id=current_user.id,
-        owner_id=current_user.id,      # legacy alias
-        repository_id=repository_id,
-        branch=project_in.branch or project_in.default_branch or "main",
-        deployment_url=target_url,
-        verified=False,
-        # legacy passthrough fields
-        name=name,
-        description=project_in.description,
-        repo_name=project_in.repo_name,
-        repo_url=project_in.repo_url,
-        repo_id=project_in.repo_id,
-        default_branch=project_in.default_branch or project_in.branch or "main",
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
+            repository = (
+                db.query(Repository)
+                .filter(Repository.github_repo_id == normalized["github_repo_id"])
+                .first()
+            )
 
-    # ── Legacy: auto-create TargetWebsite if domain / deployment URL supplied ────────────────
-    if target_url:
-        try:
-            from app.services.verifier import clean_domain
-            domain_cleaned = clean_domain(target_url)
-        except Exception:
-            domain_cleaned = target_url
+            if repository:
+                # Refresh metadata from the authoritative GitHub response.
+                for field, value in normalized.items():
+                    setattr(repository, field, value)
+            else:
+                repository = Repository(**normalized)
+                db.add(repository)
+                db.flush()
 
-        if domain_cleaned:
-            from app.models.models import TargetWebsite
-            target = TargetWebsite(project_id=project.id, domain=domain_cleaned)
-            db.add(target)
-            db.commit()
-            db.refresh(project)
+        project_name = (project_in.name or "").strip()
+        if not project_name:
+            project_name = repository.name if repository else "Untitled project"
 
-    return project
+        branch = (project_in.branch or (repository.default_branch if repository else "main")).strip()
+        if not branch:
+            branch = "main"
+
+        deployment_url = project_in.deployment_url.strip() if project_in.deployment_url else None
+        target_domain = clean_domain(deployment_url) if deployment_url else None
+        if deployment_url and not target_domain:
+            raise HTTPException(status_code=400, detail="Invalid deployment URL")
+
+        project = Project(
+            user_id=current_user.id,
+            repository_id=repository.id if repository else None,
+            name=project_name,
+            description=project_in.description,
+            branch=branch,
+            deployment_url=deployment_url,
+            verified=False,
+        )
+        db.add(project)
+        db.flush()
+
+        if target_domain:
+            db.add(TargetWebsite(project_id=project.id, domain=target_domain))
+
+        db.commit()
+
+        project = _get_project_query(db, project.id, current_user.id).first()
+        return project
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="The project could not be created because of a database constraint")
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -106,9 +198,7 @@ def get_project(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    project = db.query(Project).filter(
-        Project.id == project_id, Project.user_id == current_user.id
-    ).first()
+    project = _get_project_query(db, project_id, current_user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
@@ -127,22 +217,37 @@ def update_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if project_in.name is not None:
-        project.name = project_in.name
-    if project_in.description is not None:
-        project.description = project_in.description
-    if project_in.branch is not None:
-        project.branch = project_in.branch
-        project.default_branch = project_in.branch
-    if project_in.deployment_url is not None:
-        project.deployment_url = project_in.deployment_url
-    if project_in.verified is not None:
-        project.verified = project_in.verified
+    values = project_in.model_dump(exclude_unset=True)
 
-    db.commit()
-    db.refresh(project)
-    return project
+    if "name" in values:
+        name = (values["name"] or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Project name cannot be empty")
+        project.name = name
 
+    if "description" in values:
+        project.description = values["description"]
+
+    if "branch" in values:
+        branch = (values["branch"] or "").strip()
+        if not branch:
+            raise HTTPException(status_code=400, detail="Branch cannot be empty")
+        project.branch = branch
+
+    if "deployment_url" in values:
+        deployment_url = values["deployment_url"]
+        deployment_url = deployment_url.strip() if deployment_url else None
+        if deployment_url and not clean_domain(deployment_url):
+            raise HTTPException(status_code=400, detail="Invalid deployment URL")
+        project.deployment_url = deployment_url
+
+    try:
+        db.commit()
+        db.refresh(project)
+        return project
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -152,10 +257,19 @@ def delete_project(
     current_user: User = Depends(get_current_user),
 ):
     project = db.query(Project).filter(
-        Project.id == project_id, Project.user_id == current_user.id
+        Project.id == project_id,
+        Project.user_id == current_user.id,
     ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    db.delete(project)
-    db.commit()
+
+    try:
+        # Targets and scans cascade from Project. Repository intentionally remains
+        # because it is a reusable GitHub resource and may be referenced elsewhere.
+        db.delete(project)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     return None

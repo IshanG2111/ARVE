@@ -1,6 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getProjects, getProject, createProject, deleteProject } from '../services/api';
-import type { CreateProjectPayload } from '../types';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  createProject,
+  deleteProject,
+  getProject,
+  getProjects,
+  updateProject,
+} from '../services/api';
+import type { CreateProjectPayload, UpdateProjectPayload } from '../types';
 
 export function useProjects() {
   return useQuery({
@@ -22,7 +28,20 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: CreateProjectPayload) => createProject(payload),
-    onSuccess: () => {
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.setQueryData(['project', project.id], project);
+    },
+  });
+}
+
+export function useUpdateProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: UpdateProjectPayload }) =>
+      updateProject(id, payload),
+    onSuccess: (project) => {
+      queryClient.setQueryData(['project', project.id], project);
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
@@ -32,7 +51,8 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteProject(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: ['project', id] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });

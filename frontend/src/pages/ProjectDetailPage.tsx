@@ -134,10 +134,11 @@ export const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  const name = project.name || project.repository?.name || project.repo_name?.split('/').pop() || 'Untitled Project';
-  const repoFull = project.repository?.full_name || project.repo_name || '—';
-  const branch = project.branch || project.default_branch || 'main';
-  const repoUrl = project.repository?.html_url || project.repo_url;
+  const projAny = project as any;
+  const name = project.name || project.repository?.name || projAny.repo_name?.split('/').pop() || 'Untitled Project';
+  const repoFull = project.repository?.full_name || projAny.repo_name || '—';
+  const branch = project.branch || projAny.default_branch || project.repository?.default_branch || 'main';
+  const repoUrl = project.repository?.html_url || projAny.repo_url;
   const language = project.repository?.language || 'TypeScript / Python';
   const targets = project.targets || [];
   const isVerified = project.verified || targets.some((t) => t.is_verified);

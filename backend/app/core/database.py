@@ -1,18 +1,32 @@
-from sqlalchemy import create_engine, inspect, text
-from sqlalchemy.engine.url import make_url
+from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
 from app.core.config import settings
 
-connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
 
-engine = create_engine(
-    settings.DATABASE_URL, connect_args=connect_args
-)
+def _sqlalchemy_url(database_url: str) -> str:
+    """Normalize PostgreSQL URLs for SQLAlchemy driver."""
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
 
+
+database_url = _sqlalchemy_url(settings.DATABASE_URL)
+connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+
+engine_kwargs = {
+    "connect_args": connect_args,
+}
+if database_url.startswith("postgresql+"):
+    engine_kwargs.update(
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        pool_recycle=300,
+    )
+
+engine = create_engine(database_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 
@@ -25,7 +39,7 @@ def get_db():
 
 
 def ensure_postgres_db_exists():
-    """Checks if target PostgreSQL database exists; creates it if missing."""
+    """Checks if the PostgreSQL database exists and creates it if it doesn't."""
     if not settings.DATABASE_URL.startswith(("postgresql", "postgres")):
         return
 
@@ -34,7 +48,6 @@ def ensure_postgres_db_exists():
     if not db_name:
         return
 
-    # Connection parameters to default postgres DB
     user = url.username or "postgres"
     password = url.password or ""
     host = url.host or "localhost"
@@ -87,4 +100,3 @@ def init_db():
                                 conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type} NULL'))
     except Exception as e:
         print(f"[DB] Note on init_db execution: {e}")
-

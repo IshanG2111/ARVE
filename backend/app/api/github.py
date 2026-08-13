@@ -1,6 +1,7 @@
 from typing import List
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 import httpx
+from app.core.config import settings
 from app.models.models import User
 from app.schemas.schemas import GitHubRepo
 from app.api.deps import get_current_user
@@ -8,15 +9,13 @@ from app.api.deps import get_current_user
 router = APIRouter(prefix="/github", tags=["github"])
 
 
-
 @router.get("/repos", response_model=List[GitHubRepo])
 async def list_github_repositories(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns GitHub repositories for the authenticated user.
-    If authenticated via GitHub OAuth, queries GitHub REST API.
-    Otherwise, returns sample repositories for seamless project creation.
+    Returns repositories accessible with the GitHub access token obtained
+    from the authenticated Firebase GitHub provider.
     """
     if current_user.github_access_token and current_user.github_access_token != "mock_github_access_token_123":
         async with httpx.AsyncClient() as client:
@@ -41,7 +40,10 @@ async def list_github_repositories(
                     for r in repos
                 ]
 
-    # Sample/Demo repositories for instant selection
+    if not (settings.is_development and current_user.github_access_token == "mock_github_access_token_123"):
+        raise HTTPException(status_code=403, detail="GitHub repository access is unavailable")
+
+    # Development-only sample repositories
     login = current_user.github_login or current_user.email.split("@")[0]
     return [
         GitHubRepo(
@@ -85,7 +87,7 @@ async def get_branches_by_full_name(
     """
     from app.schemas.schemas import BranchResponse
     token = current_user.github_access_token
-    is_real = token and token != "mock_github_access_token_123"
+    is_real = bool(token and token != "mock_github_access_token_123")
 
     if is_real and full_name:
         async with httpx.AsyncClient() as client:
@@ -99,7 +101,10 @@ async def get_branches_by_full_name(
                     for b in resp.json()
                 ]
 
-    # Demo fallback
+    if not (settings.is_development and token == "mock_github_access_token_123"):
+        raise HTTPException(status_code=403, detail="GitHub branch access is unavailable")
+
+    # Development-only fallback
     return [
         BranchResponse(name="main", protected=True),
         BranchResponse(name="develop", protected=False),

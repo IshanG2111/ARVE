@@ -8,7 +8,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { ToastProvider } from './components/ui/ToastProvider';
 
-
 /** Guard: redirect authenticated users away from landing */
 function PublicOnly({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();

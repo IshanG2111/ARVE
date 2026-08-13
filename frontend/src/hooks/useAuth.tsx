@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { signInWithPopup, GithubAuthProvider, signOut as fbSignOut } from "firebase/auth";
 import { auth, githubProvider, isFirebaseConfigured } from "../config/firebase";
-import { getMe, loginWithFirebase, logout as apiLogout } from "../services/api";
+import { getMe, loginWithFirebase } from "../services/api";
 import type { User } from "../types";
 
 interface AuthContextType {
@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isFirebaseConfigured) {
         throw new Error("Firebase Authentication is not configured in frontend environment.");
       }
+
       const result = await signInWithPopup(auth, githubProvider);
       const credential = GithubAuthProvider.credentialFromResult(result);
       const githubToken = credential?.accessToken;
@@ -64,11 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await fbSignOut(auth);
-    } catch {
-      // Ignore firebase signout error
+    } finally {
+      localStorage.removeItem("arve_token");
+      setUser(null);
     }
-    await apiLogout();
-    setUser(null);
   };
 
   return (

@@ -30,17 +30,16 @@ import {
   Filter,
 } from 'lucide-react';
 import type { Project } from '../types';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 function projectDisplayName(p: Project): string {
   if (p.name) return p.name;
   if (p.repository?.name) return p.repository.name;
-  if (p.repo_name) return p.repo_name.split('/').pop() || p.repo_name;
   return 'Untitled project';
 }
 
 function projectRepoLabel(p: Project): string {
   if (p.repository?.full_name) return p.repository.full_name;
-  if (p.repo_name) return p.repo_name;
   return '';
 }
 
@@ -61,9 +60,21 @@ export const DashboardPage: React.FC = () => {
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
   const [addTargetProjectId, setAddTargetProjectId] = useState<{ id: string; name: string } | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const refreshProjects = () => {
     queryClient.invalidateQueries({ queryKey: ['projects'] });
+  };
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    setDeleteError(null);
+    deleteProject.mutate(id, {
+      onError: (err) => setDeleteError(err instanceof Error ? err.message : 'Failed to delete project'),
+      onSuccess: () => setConfirmDeleteId(null),
+      onSettled: () => setDeletingId(null),
+    });
   };
 
   const handleDeleteProject = async (id: string, name: string) => {
@@ -247,7 +258,7 @@ export const DashboardPage: React.FC = () => {
                   const targets = project.targets || [];
                   const name = projectDisplayName(project);
                   const repoLabel = projectRepoLabel(project);
-                  const branch = project.branch || project.default_branch || 'main';
+                  const branch = project.branch || (project as any).default_branch || project.repository?.default_branch || 'main';
 
                   return (
                     <SpotlightCard key={project.id} spotlightColor="rgba(126, 139, 245, 0.06)">
@@ -271,7 +282,7 @@ export const DashboardPage: React.FC = () => {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
                               {repoLabel && (
                                 <a
-                                  href={project.repo_url || `https://github.com/${repoLabel}`}
+                                  href={(project as any).repo_url || project.repository?.html_url || `https://github.com/${repoLabel}`}
                                   target="_blank"
                                   rel="noreferrer"
                                   style={{ color: 'var(--accent)', textDecoration: 'none' }}
@@ -458,6 +469,29 @@ export const DashboardPage: React.FC = () => {
               refreshProjects();
               toast.success('Authorization status updated!');
             }}
+          />
+        )}
+
+        {confirmDeleteId && (
+          <ConfirmModal
+            title="Delete project"
+            message="This will delete the project and its associated targets. This action cannot be undone."
+            confirmText="Delete project"
+            onConfirm={() => handleDelete(confirmDeleteId)}
+            onCancel={() => setConfirmDeleteId(null)}
+            danger
+            busy={deletingId === confirmDeleteId}
+          />
+        )}
+
+        {deleteError && (
+          <ConfirmModal
+            title="Delete failed"
+            message={deleteError}
+            confirmText="Close"
+            cancelText=""
+            onConfirm={() => setDeleteError(null)}
+            onCancel={() => setDeleteError(null)}
           />
         )}
       </div>

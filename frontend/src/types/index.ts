@@ -11,7 +11,7 @@ export interface User {
   created_at: string;
 }
 
-// ─── GitHub raw list (wizard passthrough) ─────────────────────────────────
+// ─── GitHub raw list ───────────────────────────────────────────────────────
 export interface GitHubRepo {
   id: string;
   name: string;
@@ -24,7 +24,7 @@ export interface GitHubRepo {
   description?: string;
 }
 
-// ─── Repository (stored) ───────────────────────────────────────────────────
+// ─── Stored Repository ─────────────────────────────────────────────────────
 export interface Repository {
   id: string;
   github_repo_id: string;
@@ -41,43 +41,36 @@ export interface Repository {
   created_at: string;
 }
 
-// ─── Branch ────────────────────────────────────────────────────────────────
 export interface Branch {
   name: string;
   protected: boolean;
 }
 
-// ─── Project ───────────────────────────────────────────────────────────────
+// ─── Project ────────────────────────────────────────────────────────────────
 export interface Project {
   id: string;
-  user_id?: string;
-  owner_id?: string;
+  user_id: string;
   repository_id?: string;
-  branch?: string;
+  name?: string;
+  description?: string;
+  branch: string;
   deployment_url?: string;
   verified: boolean;
   created_at: string;
-
-  // legacy / display fields
-  name?: string;
-  description?: string;
-  repo_name?: string;
-  repo_url?: string;
-  repo_id?: string;
-  default_branch?: string;
   targets?: TargetWebsite[];
+  scans?: Scan[];
   repository?: Repository;
 }
 
-// ─── Scan (future) ────────────────────────────────────────────────────────
+// ─── Scan (future) ──────────────────────────────────────────────────────────
 export interface Scan {
   id: string;
   project_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | string;
   created_at: string;
 }
 
-// ─── Target Website (retained for backend compat) ─────────────────────────
+// ─── Target Website ─────────────────────────────────────────────────────────
 export interface TargetWebsite {
   id: string;
   project_id: string;
@@ -97,18 +90,31 @@ export interface VerificationResult {
   verified_at?: string;
 }
 
-// ─── Create payloads ────────────────────────────────────────────────────────
-export interface CreateProjectPayload {
-  // Sprint 1 canonical
-  branch?: string;
-  deployment_url?: string;
-  repository_id?: string;
+// ─── Project API payloads ───────────────────────────────────────────────────
+export interface RepositoryReference {
+  github_repo_id: string;
+  owner: string;
+  name: string;
+  full_name: string;
+  html_url?: string;
+  default_branch?: string;
+  language?: string;
+  description?: string;
+  private?: boolean;
+}
 
-  // Wizard passthrough
+export interface CreateProjectPayload {
   name?: string;
   description?: string;
-  repo_name?: string;
-  repo_url?: string;
-  repo_id?: string;
-  default_branch?: string;
+  repository_id?: string;
+  repository?: RepositoryReference;
+  branch?: string;
+  deployment_url?: string;
+}
+
+export interface UpdateProjectPayload {
+  name?: string;
+  description?: string;
+  branch?: string;
+  deployment_url?: string;
 }

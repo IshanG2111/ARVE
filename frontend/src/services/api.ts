@@ -1,14 +1,32 @@
-import axios from "axios";
-import type { User, GitHubRepo, Branch, Project, CreateProjectPayload, TargetWebsite, VerificationResult } from '../types';
+import axios from 'axios';
+import type {
+  User,
+  GitHubRepo,
+  Branch,
+  Project,
+  CreateProjectPayload,
+  UpdateProjectPayload,
+  TargetWebsite,
+  VerificationResult,
+} from '../types';
 
-export type { User, GitHubRepo, Branch, Project, CreateProjectPayload, TargetWebsite, VerificationResult };
+export type {
+  User,
+  GitHubRepo,
+  Branch,
+  Project,
+  CreateProjectPayload,
+  UpdateProjectPayload,
+  TargetWebsite,
+  VerificationResult,
+};
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 const BASE = `${API_URL}/api`;
 
 export const api: any = axios.create({
   baseURL: API_URL,
-  withCredentials: true, // sends/receives the httpOnly cookie
+  withCredentials: true,
 });
 
 function authHeaders(): HeadersInit {
@@ -24,20 +42,25 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
-  return res.json() as Promise<T>;
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return (await res.json()) as T;
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Auth ───────────────────────────────────────────────────────────────────
 export async function getMe(): Promise<User> {
-  const res = await fetch(`${API_URL}/me`, { headers: authHeaders(), credentials: 'include' });
-  if (!res.ok) {
-    const fallbackRes = await fetch(`${BASE}/auth/me`, { headers: authHeaders(), credentials: 'include' });
-    return handleResponse<User>(fallbackRes);
-  }
+  const res = await fetch(`${BASE}/auth/me`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   return handleResponse<User>(res);
 }
 
-export async function loginWithFirebase(idToken: string, githubAccessToken?: string): Promise<{ access_token: string }> {
+export async function loginWithFirebase(
+  idToken: string,
+  githubAccessToken?: string,
+): Promise<{ access_token: string }> {
   const res = await fetch(`${BASE}/auth/firebase`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -45,57 +68,58 @@ export async function loginWithFirebase(idToken: string, githubAccessToken?: str
     body: JSON.stringify({ id_token: idToken, github_access_token: githubAccessToken }),
   });
   const data = await handleResponse<{ access_token: string }>(res);
-  if (data.access_token) {
-    localStorage.setItem('arve_token', data.access_token);
-  }
+  if (data.access_token) localStorage.setItem('arve_token', data.access_token);
   return data;
 }
 
 export async function logout() {
   localStorage.removeItem('arve_token');
   try {
-    await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
     await fetch(`${BASE}/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch (err) {
     // Ignore network error on logout
   }
 }
 
-// ─── GitHub Repos (wizard list) ───────────────────────────────────────────────
+// ─── GitHub repositories ───────────────────────────────────────────────────
 export async function getGitHubRepos(): Promise<GitHubRepo[]> {
-  const res = await fetch(`${BASE}/repositories/github/list`, { headers: authHeaders(), credentials: 'include' });
+  const res = await fetch(`${BASE}/repositories/github/list`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   return handleResponse<GitHubRepo[]>(res);
 }
 
-// ─── Branches ─────────────────────────────────────────────────────────────────
 export async function getBranches(repoId: string): Promise<Branch[]> {
-  const res = await fetch(`${BASE}/repositories/${repoId}/branches`, { headers: authHeaders(), credentials: 'include' });
+  const res = await fetch(`${BASE}/repositories/${repoId}/branches`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   return handleResponse<Branch[]>(res);
 }
 
-// Fetch branches from GitHub using full_name (for wizard before repo is saved)
 export async function getBranchesByFullName(fullName: string): Promise<Branch[]> {
   const res = await fetch(`${BASE}/github/branches?full_name=${encodeURIComponent(fullName)}`, {
     headers: authHeaders(),
     credentials: 'include',
   });
-  if (!res.ok) {
-    return [
-      { name: 'main', protected: true },
-      { name: 'develop', protected: false },
-    ];
-  }
   return handleResponse<Branch[]>(res);
 }
 
-// ─── Projects ─────────────────────────────────────────────────────────────────
+// ─── Projects ──────────────────────────────────────────────────────────────
 export async function getProjects(): Promise<Project[]> {
-  const res = await fetch(`${BASE}/projects`, { headers: authHeaders(), credentials: 'include' });
+  const res = await fetch(`${BASE}/projects`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   return handleResponse<Project[]>(res);
 }
 
 export async function getProject(id: string): Promise<Project> {
-  const res = await fetch(`${BASE}/projects/${id}`, { headers: authHeaders(), credentials: 'include' });
+  const res = await fetch(`${BASE}/projects/${id}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
   return handleResponse<Project>(res);
 }
 
@@ -109,19 +133,29 @@ export async function createProject(payload: CreateProjectPayload): Promise<Proj
   return handleResponse<Project>(res);
 }
 
+export async function updateProject(
+  id: string,
+  payload: UpdateProjectPayload,
+): Promise<Project> {
+  const res = await fetch(`${BASE}/projects/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<Project>(res);
+}
+
 export async function deleteProject(id: string): Promise<void> {
   const res = await fetch(`${BASE}/projects/${id}`, {
     method: 'DELETE',
     headers: authHeaders(),
     credentials: 'include',
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Delete failed' }));
-    throw new Error(err.detail || 'Delete failed');
-  }
+  await handleResponse<void>(res);
 }
 
-// ─── Targets ──────────────────────────────────────────────────────────────────
+// ─── Targets ────────────────────────────────────────────────────────────────
 export async function addTarget(projectId: string, domain: string): Promise<TargetWebsite> {
   const res = await fetch(`${BASE}/projects/${projectId}/targets`, {
     method: 'POST',
@@ -132,16 +166,21 @@ export async function addTarget(projectId: string, domain: string): Promise<Targ
   return handleResponse<TargetWebsite>(res);
 }
 
+export async function getTargets(projectId: string): Promise<TargetWebsite[]> {
+  const res = await fetch(`${BASE}/projects/${projectId}/targets`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<TargetWebsite[]>(res);
+}
+
 export async function deleteTarget(targetId: string): Promise<void> {
   const res = await fetch(`${BASE}/targets/${targetId}`, {
     method: 'DELETE',
     headers: authHeaders(),
     credentials: 'include',
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Target delete failed' }));
-    throw new Error(err.detail || 'Target delete failed');
-  }
+  await handleResponse<void>(res);
 }
 
 export async function verifyTarget(targetId: string): Promise<VerificationResult> {
@@ -196,9 +235,11 @@ Object.assign(api, {
   getProjects,
   getProject,
   createProject,
+  updateProject,
   deleteProject,
   logout,
   addTarget,
+  getTargets,
   deleteTarget,
   verifyTarget,
   triggerIngestion,
