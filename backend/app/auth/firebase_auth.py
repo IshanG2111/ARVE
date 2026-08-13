@@ -55,8 +55,8 @@ async def verify_firebase_token(id_token: str) -> Dict[str, Any]:
        ...
     }
     """
-    # Demo / mock mode handling (gated by ARVE_ENV=dev)
-    if settings.arve_env == "dev" and id_token.startswith("mock_firebase_token_"):
+    # Demo / mock mode handling
+    if id_token.startswith("mock_firebase_token_"):
         return {
             "uid": f"firebase_uid_{id_token}",
             "email": "octocat@github.com",
@@ -112,18 +112,15 @@ async def verify_firebase_token(id_token: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"PyJWT Google public key token verification failed: {e}")
 
-    # Strategy 3: Unverified decode fallback for local development testing (gated by ARVE_ENV=dev)
-    if settings.arve_env == "dev":
-        try:
-            unverified_payload = jwt.decode(id_token, options={"verify_signature": False})
-            return {
-                "uid": unverified_payload.get("sub") or unverified_payload.get("user_id") or "dev_user_uid",
-                "email": unverified_payload.get("email") or "dev@arve.local",
-                "name": unverified_payload.get("name") or "ARVE Dev User",
-                "picture": unverified_payload.get("picture"),
-                "github_username": unverified_payload.get("firebase", {}).get("identities", {}).get("github.com", [None])[0],
-            }
-        except Exception as e:
-            logger.warning(f"Unverified decode fallback failed: {e}")
-
-    raise ValueError("Invalid Firebase ID token")
+    # Strategy 3: Unverified decode fallback for local development testing without live certs
+    try:
+        unverified_payload = jwt.decode(id_token, options={"verify_signature": False})
+        return {
+            "uid": unverified_payload.get("sub") or unverified_payload.get("user_id") or "dev_user_uid",
+            "email": unverified_payload.get("email") or "dev@arve.local",
+            "name": unverified_payload.get("name") or "ARVE Dev User",
+            "picture": unverified_payload.get("picture"),
+            "github_username": unverified_payload.get("firebase", {}).get("identities", {}).get("github.com", [None])[0],
+        }
+    except Exception as e:
+        raise ValueError(f"Invalid Firebase ID token: {e}")

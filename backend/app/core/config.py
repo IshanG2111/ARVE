@@ -15,7 +15,6 @@ ENV_FILES = (
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ARVE - Adaptive Remediation & Verification Engine"
     API_V1_STR: str = "/api"
-    ARVE_ENV: str = "dev"
 
     # JWT Settings
     JWT_SECRET: str = "arve-secret-key-super-secure-change-in-production-2026"
@@ -51,25 +50,6 @@ class Settings(BaseSettings):
         "env_file": ENV_FILES,
         "extra": "ignore",
     }
-
-    @property
-    def database_url(self) -> str:
-        url = self.DATABASE_URL
-        if url and url.startswith("postgres://"):
-            url = "postgresql://" + url[len("postgres://"):]
-        return url
-
-    @property
-    def arve_env(self) -> str:
-        return self.ARVE_ENV.lower()
-
-    @property
-    def firebase_service_account_json(self) -> Optional[str]:
-        return self.FIREBASE_SERVICE_ACCOUNT_JSON
-
-    @property
-    def firebase_credentials_path(self) -> Optional[str]:
-        return self.FIREBASE_CREDENTIALS_PATH
 
     # Lowercase properties matching standard settings pattern
     @property

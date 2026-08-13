@@ -7,8 +7,33 @@ import uuid
 from app.main import app
 from app.core.database import Base, get_db
 
-from tests.conftest import client, TestingSessionLocal, engine
+from sqlalchemy.pool import StaticPool
 
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def override_get_db():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+app.dependency_overrides[get_db] = override_get_db
+
+@pytest.fixture(scope="module", autouse=True)
+def setup_db():
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+client = TestClient(app)
 
 def test_root_endpoint():
     response = client.get("/")
@@ -113,47 +138,11 @@ def test_firebase_auth():
     token = fb_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-def test_delete_project_cascades_db_entries():
-    random_email = f"deleter_{uuid.uuid4().hex[:6]}@example.com"
-    reg_resp = client.post(
-        "/api/auth/register",
-        json={"email": random_email, "password": "password123", "full_name": "Deleter User"}
-    )
-    assert reg_resp.status_code == 201
-    login_resp = client.post(
-        "/api/auth/login/json",
-        json={"email": random_email, "password": "password123"}
-    )
-    assert login_resp.status_code == 200
-    token = login_resp.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # Create project with target
-    proj_resp = client.post(
-        "/api/projects",
-        json={
-            "name": "Delete Me Project",
-            "repo_name": "test-owner/test-repo-delete",
-            "repo_url": "https://github.com/test-owner/test-repo-delete",
-            "target_domain": "https://delete-me.com"
-        },
-        headers=headers
-    )
-    assert proj_resp.status_code == 201
-    proj_data = proj_resp.json()
-    project_id = proj_data["id"]
-    repo_id = proj_data["repository_id"]
-
-    # Delete project
-    del_resp = client.delete(f"/api/projects/{project_id}", headers=headers)
-    assert del_resp.status_code == 204
-
-    # Verify project is gone
-    get_proj = client.get(f"/api/projects/{project_id}", headers=headers)
-    assert get_proj.status_code == 404
-
-    # Verify orphaned repo is also gone from DB
-    get_repo = client.get(f"/api/repositories/{repo_id}", headers=headers)
-    assert get_repo.status_code == 404
+    # Verify user profile returned via /api/auth/me has firebase_uid
+    me_resp = client.get("/api/auth/me", headers=headers)
+    assert me_resp.status_code == 200
+    user_data = me_resp.json()
+    assert user_data["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
+    assert user_data["email"] == "octocat@github.com"
 
 

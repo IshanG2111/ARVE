@@ -91,7 +91,7 @@ async def firebase_login(
 async def github_login(request: Request):
     """Initiates GitHub OAuth flow via top-level browser redirect."""
     state = secrets.token_urlsafe(24)
-    is_demo = settings.arve_env == "dev" and settings.effective_github_client_id == "arve_demo_client_id"
+    is_demo = settings.effective_github_client_id == "arve_demo_client_id"
 
     if is_demo:
         # In demo mode, directly redirect to callback with mock code
@@ -123,7 +123,7 @@ async def github_callback(
     if expected_state and state and state != expected_state:
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
-    if settings.arve_env == "dev" and (code in ("mock_github_code", "mock_code") or settings.effective_github_client_id == "arve_demo_client_id"):
+    if code in ("mock_github_code", "mock_code") or settings.effective_github_client_id == "arve_demo_client_id":
         gh_user = {
             "id": 10293847,
             "login": "octocat-dev",

@@ -5,7 +5,7 @@ GET  /repositories/{id}       — get single repository by internal ID
 GET  /repositories/{id}/branches — list branches from GitHub API
 """
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 import httpx
 from sqlalchemy.orm import Session
 
@@ -45,29 +45,6 @@ def get_repository(
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     return repo
-
-
-@router.delete("/{repo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_repository(
-    repo_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    repo = db.query(Repository).filter(Repository.id == repo_id).first()
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-
-    # Delete linked projects first (triggers target and scan cascades)
-    from app.models.models import Project
-    projects = db.query(Project).filter(Project.repository_id == repo_id).all()
-    for proj in projects:
-        db.delete(proj)
-    db.flush()
-
-    # Delete repository (triggers analysis_runs and repository_files cascades)
-    db.delete(repo)
-    db.commit()
-    return None
 
 
 @router.get("/{repo_id}/branches", response_model=List[BranchResponse])

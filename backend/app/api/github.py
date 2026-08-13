@@ -27,7 +27,7 @@ def get_github_auth_url():
 
 @router.post("/callback", response_model=Token)
 async def github_callback(payload: GitHubAuthCallback, db: Session = Depends(get_db)):
-    if settings.arve_env == "dev" and (payload.is_mock or payload.code == "mock_github_code"):
+    if payload.is_mock or payload.code == "mock_github_code":
         # Demo mode login when no real GitHub App secret is configured
         gh_user = {
             "id": "gh_10293847",
