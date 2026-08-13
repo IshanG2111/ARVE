@@ -1,7 +1,9 @@
 import datetime
 import uuid
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text, UniqueConstraint
+
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
+
 from app.core.database import Base
 
 
@@ -20,7 +22,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     avatar_url = Column(String, nullable=True)
 
-    # Legacy authentication/profile fields retained only for existing data.
+    # Legacy profile fields retained for existing data compatibility.
     full_name = Column(String, nullable=True)
     hashed_password = Column(String, nullable=True)
     github_login = Column(String, nullable=True)
@@ -29,42 +31,21 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
-    projects = relationship(
-        "Project",
-        back_populates="owner",
-        cascade="all, delete-orphan",
-    )
-
-
-class Repository(Base):
-    """Normalized GitHub repository metadata used by ARVE projects."""
-    __tablename__ = "repositories"
-    __table_args__ = (
-        UniqueConstraint("github_repo_id", name="uq_repositories_github_repo_id"),
-    )
-
-    id = Column(String, primary_key=True, default=generate_uuid)
-    github_repo_id = Column(String, nullable=False, index=True)
-    owner = Column(String, nullable=False)
-    name = Column(String, nullable=False)
-    full_name = Column(String, nullable=False)
-    html_url = Column(String, nullable=True)
-    default_branch = Column(String, default="main", nullable=False)
-    language = Column(String, nullable=True)
-    description = Column(Text, nullable=True)
-    private = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
-
-    projects = relationship("Project", back_populates="repository")
+    projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
 
 
 class Project(Base):
-    """ARVE project linking a user to a repository and analysis configuration."""
+    """ARVE project and its single connected GitHub repository.
+
+    A project owns exactly one repository connection, so repository metadata is
+    stored directly on the project rather than in a separate repositories table.
+    """
     __tablename__ = "projects"
 
     id = Column(String, primary_key=True, default=generate_uuid)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    repository_id = Column(String, ForeignKey("repositories.id"), nullable=True, index=True)
+
+    # Project configuration.
     name = Column(String, nullable=True, index=True)
     description = Column(Text, nullable=True)
     branch = Column(String, default="main", nullable=False)
@@ -72,22 +53,30 @@ class Project(Base):
     verified = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
-    # Deprecated compatibility columns. New application code must not read/write these.
-    # They remain in the ORM until the existing Neon data has been migrated and verified.
-    owner_id = Column(String, nullable=True)
-    repo_name = Column(String, nullable=True)
+    # Repository metadata is denormalized here because one project owns one repo.
+    # repo_id is the GitHub repository's numeric/string ID, not an internal FK.
+    repo_id = Column(String, nullable=True, index=True)
+    repo_owner = Column(String, nullable=True)
+    repo_name = Column(String, nullable=True)  # owner/name (full_name)
     repo_url = Column(String, nullable=True)
-    repo_id = Column(String, nullable=True)
     default_branch = Column(String, default="main", nullable=True)
+    repo_language = Column(String, nullable=True)
+    repo_description = Column(Text, nullable=True)
+    repo_private = Column(Boolean, default=False, nullable=False)
+    repo_visibility = Column(String, nullable=True)
+    repo_size_kb = Column(Integer, default=0, nullable=False)
+    repo_frameworks = Column(String, nullable=True)
+    repo_package_manager = Column(String, nullable=True)
 
     owner = relationship("User", back_populates="projects", foreign_keys=[user_id])
-    repository = relationship("Repository", back_populates="projects")
     scans = relationship("Scan", back_populates="project", cascade="all, delete-orphan")
     targets = relationship("TargetWebsite", back_populates="project", cascade="all, delete-orphan")
+    analysis_runs = relationship("AnalysisRun", back_populates="project", cascade="all, delete-orphan")
+    repository_files = relationship("RepositoryFile", back_populates="project", cascade="all, delete-orphan")
 
 
 class Scan(Base):
-    """Placeholder for the Phase-2+ scan pipeline."""
+    """Placeholder for later scan orchestration."""
     __tablename__ = "scans"
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -119,3 +108,47 @@ class TargetWebsite(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
 
     project = relationship("Project", back_populates="targets")
+
+
+class AnalysisRun(Base):
+    """Tracks a deterministic repository ingestion/analysis execution."""
+    __tablename__ = "analysis_runs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
+    commit_sha = Column(String, nullable=True)
+    status = Column(String, default="PENDING", nullable=False)
+    files_found = Column(Integer, default=0, nullable=False)
+    files_ingested = Column(Integer, default=0, nullable=False)
+    files_skipped = Column(Integer, default=0, nullable=False)
+    languages_summary = Column(Text, nullable=True)
+    frameworks = Column(String, nullable=True)
+    package_manager = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+
+    project = relationship("Project", back_populates="analysis_runs")
+    files = relationship("RepositoryFile", back_populates="analysis_run", cascade="all, delete-orphan")
+
+
+class RepositoryFile(Base):
+    """Normalized file content/metadata captured for an analysis run."""
+    __tablename__ = "repository_files"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
+    analysis_run_id = Column(String, ForeignKey("analysis_runs.id"), nullable=False, index=True)
+    path = Column(String, nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    extension = Column(String, nullable=True)
+    language = Column(String, nullable=True)
+    size = Column(Integer, default=0, nullable=False)
+    sha256 = Column(String, index=True, nullable=True)
+    content = Column(Text, nullable=True)
+    status = Column(String, default="INGESTED", nullable=False)
+    skip_reason = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    project = relationship("Project", back_populates="repository_files")
+    analysis_run = relationship("AnalysisRun", back_populates="files")

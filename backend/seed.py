@@ -1,116 +1,79 @@
-import sys
-import os
-import uuid
+"""Development seed data for the project-scoped repository model."""
 import datetime
+import uuid
 
-# Add backend directory to sys.path
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, backend_dir)
+from app.core.database import SessionLocal
+from app.models.models import Project, Scan, TargetWebsite, User
 
-from app.core.database import SessionLocal, init_db
-from app.models.models import User, Repository, Project, TargetWebsite, Scan
+
+def generate_uuid():
+    return str(uuid.uuid4())
+
 
 def seed():
-    print("Initializing database tables...")
-    init_db()
     db = SessionLocal()
-
     try:
-        # Check if user already exists
-        user = db.query(User).filter(User.email == "demo@arve.dev").first()
+        user = db.query(User).filter(User.email == "demo@arve.local").first()
         if not user:
-            print("Seeding demo user...")
             user = User(
-                id=str(uuid.uuid4()),
-                firebase_uid="demo_firebase_123",
-                github_id="10293847",
-                username="octocat-dev",
-                email="demo@arve.dev",
-                full_name="Octocat Security Tester",
-                avatar_url="https://avatars.githubusercontent.com/u/583231?v=4",
-                github_login="octocat-dev",
-                github_avatar="https://avatars.githubusercontent.com/u/583231?v=4",
-                is_active=True
+                id=generate_uuid(),
+                firebase_uid="seed-firebase-user",
+                email="demo@arve.local",
+                username="arve-demo",
+                github_login="arve-demo",
+                full_name="ARVE Demo User",
+                is_active=True,
             )
             db.add(user)
-            db.commit()
-            db.refresh(user)
+            db.flush()
 
-        # Check repository
-        repo = db.query(Repository).filter(Repository.name == "sample-secure-app").first()
-        if not repo:
-            print("Seeding demo repository...")
-            repo = Repository(
-                id=str(uuid.uuid4()),
-                github_repo_id="998877",
-                owner="octocat-dev",
-                name="sample-secure-app",
-                full_name="octocat-dev/sample-secure-app",
-                html_url="https://github.com/octocat-dev/sample-secure-app",
-                default_branch="main",
-                language="Python",
-                description="Demo repository for vulnerability scanning and remediation",
-                private=False
-            )
-            db.add(repo)
-            db.commit()
-            db.refresh(repo)
-
-        # Check project
-        project = db.query(Project).filter(Project.user_id == user.id).first()
+        project = db.query(Project).filter(Project.name == "Sample Security Project", Project.user_id == user.id).first()
         if not project:
-            print("Seeding demo project...")
             project = Project(
-                id=str(uuid.uuid4()),
+                id=generate_uuid(),
                 user_id=user.id,
-                repository_id=repo.id,
-                branch="main",
-                deployment_url="http://localhost:8000/mock-verification-file",
-                verified=True,
                 name="Sample Security Project",
-                description="ARVE Test Security Project"
+                description="Development seed project",
+                branch="main",
+                repo_id="seed-repo-001",
+                repo_owner="arve-demo",
+                repo_name="arve-demo/sample-secure-app",
+                repo_url="https://github.com/arve-demo/sample-secure-app",
+                default_branch="main",
+                repo_language="TypeScript",
+                repo_description="Sample application for local development",
+                repo_private=False,
+                repo_visibility="public",
+                repo_size_kb=0,
+                created_at=datetime.datetime.utcnow(),
             )
             db.add(project)
-            db.commit()
-            db.refresh(project)
+            db.flush()
 
-        # Check target website
-        target = db.query(TargetWebsite).filter(TargetWebsite.project_id == project.id).first()
-        if not target:
-            print("Seeding demo target website...")
-            target = TargetWebsite(
-                id=str(uuid.uuid4()),
-                project_id=project.id,
-                domain="localhost:8000",
-                verification_token="arve-verify-demo-token-12345",
-                is_verified=True,
-                verified_at=datetime.datetime.now(datetime.timezone.utc)
+            db.add(
+                TargetWebsite(
+                    id=generate_uuid(),
+                    project_id=project.id,
+                    domain="example.com",
+                )
             )
-            db.add(target)
-            db.commit()
-
-        # Check scan
-        scan = db.query(Scan).filter(Scan.project_id == project.id).first()
-        if not scan:
-            print("Seeding demo scan...")
-            scan = Scan(
-                id=str(uuid.uuid4()),
-                project_id=project.id,
-                status="completed"
+            db.add(
+                Scan(
+                    id=generate_uuid(),
+                    project_id=project.id,
+                    status="pending",
+                )
             )
-            db.add(scan)
-            db.commit()
 
-        print("\nDatabase seeded successfully with demo data!")
-        print("Summary of entries in PostgreSQL (arve_db):")
-        print(f"  - Users          : {db.query(User).count()}")
-        print(f"  - Repositories   : {db.query(Repository).count()}")
-        print(f"  - Projects       : {db.query(Project).count()}")
-        print(f"  - TargetWebsites : {db.query(TargetWebsite).count()}")
-        print(f"  - Scans          : {db.query(Scan).count()}")
-
+        db.commit()
+        print("Seed completed successfully.")
+        print(f"  - Users      : {db.query(User).count()}")
+        print(f"  - Projects   : {db.query(Project).count()}")
+        print(f"  - Targets    : {db.query(TargetWebsite).count()}")
+        print(f"  - Scans      : {db.query(Scan).count()}")
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     seed()

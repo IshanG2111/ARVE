@@ -1,25 +1,123 @@
-import React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
-
-const FUTURE_MODULES = [
-  { title: 'Static Analysis', desc: 'Scan source code for security vulnerabilities.' },
-  { title: 'Dynamic Analysis', desc: 'Runtime security testing against the live deployment.' },
-  { title: 'Reports', desc: 'Detailed findings and remediation guidance.' },
-  { title: 'Settings', desc: 'Project configuration and access controls.' },
-];
+import { SpotlightCard } from '../components/ui/SpotlightCard';
+import { LiveScanSimulator } from '../components/LiveScanSimulator';
+import { AddTargetModal } from '../components/AddTargetModal';
+import { VerificationModal } from '../components/VerificationModal';
+import { useToast } from '../components/ui/ToastProvider';
+import { api, type TargetWebsite } from '../services/api';
+import { ConfirmModal } from '../components/ConfirmModal';
+import {
+  ArrowLeft,
+  GitBranch,
+  Globe,
+  ExternalLink,
+  Plus,
+  Trash2,
+  Code,
+  Layers,
+  Cpu,
+} from 'lucide-react';
 
 export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { data: project, isLoading, error } = useProject(id ?? '');
+  const toast = useToast();
+
+  const { data: project, isLoading, error, refetch } = useProject(id ?? '');
+
+  const [activeTab, setActiveTab] = useState<'details' | 'scanner'>('details');
+  const [showAddTarget, setShowAddTarget] = useState(false);
+  const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
+
+  // Ingestion history states
+  const [runs, setRuns] = useState<any[]>([]);
+  const [selectedRun, setSelectedRun] = useState<any | null>(null);
+  const [runFiles, setRunFiles] = useState<any[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(false);
+  const [triggeringIngest, setTriggeringIngest] = useState(false);
+  const [deleteTargetRequest, setDeleteTargetRequest] = useState<{ id: string; domain: string } | null>(null);
+
+  const projectId = project?.id;
+
+  const fetchRuns = async () => {
+    if (!projectId) return;
+    setLoadingRuns(true);
+    try {
+      const data = await api.getAnalysisRuns(projectId);
+      setRuns(data);
+      if (data.length > 0) {
+        setSelectedRun(data[0]);
+      } else {
+        setSelectedRun(null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch runs:', err);
+    } finally {
+      setLoadingRuns(false);
+    }
+  };
+
+  const fetchRunFiles = async () => {
+    if (!selectedRun?.id) return;
+    try {
+      const data = await api.getAnalysisFiles(selectedRun.id);
+      setRunFiles(data);
+    } catch (err) {
+      console.error('Failed to fetch run files:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (projectId) {
+      fetchRuns();
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (selectedRun?.id) {
+      fetchRunFiles();
+    } else {
+      setRunFiles([]);
+    }
+  }, [selectedRun?.id]);
+
+  const handleTriggerIngest = async () => {
+    if (!projectId) return;
+    setTriggeringIngest(true);
+    try {
+      await api.triggerIngestion(projectId);
+      toast.success('Ingestion pipeline triggered.');
+      setTimeout(() => {
+        fetchRuns();
+      }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to trigger ingestion');
+    } finally {
+      setTriggeringIngest(false);
+    }
+  };
+
+  const handleDeleteTarget = async () => {
+    if (!deleteTargetRequest) return;
+    const { id: targetId, domain } = deleteTargetRequest;
+    try {
+      await api.deleteTarget(targetId);
+      refetch();
+      toast.success(`Target domain ${domain} removed.`);
+      setDeleteTargetRequest(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove target');
+    }
+  };
 
   if (isLoading) {
     return (
       <div className="screen-center">
-        <LoadingAnimation label="ANALYZING ARVE PROJECT AST GRAPH…" fullScreen={false} />
+        <LoadingAnimation label="PARSING ARVE AST GRAPH & TARGET METADATA…" fullScreen={false} />
       </div>
     );
   }
@@ -27,120 +125,399 @@ export const ProjectDetailPage: React.FC = () => {
   if (error || !project) {
     return (
       <div className="project-detail">
-        <div className="card empty-state">
-          <div className="empty-title">Project not found</div>
-          <p className="empty-sub">This project does not exist or you don't have access.</p>
-          <button className="btn btn-primary" onClick={() => navigate('/dashboard')} id="back-dashboard">
-            Back to dashboard
-          </button>
-        </div>
+        <SpotlightCard spotlightColor="rgba(255, 107, 107, 0.1)">
+          <div className="empty-state" style={{ padding: '64px 24px' }}>
+            <h2 className="empty-title">Project not found</h2>
+            <p className="empty-sub">This project does not exist or you don't have permission to view it.</p>
+            <button className="btn btn-primary" onClick={() => navigate('/dashboard')} id="back-dashboard">
+              Back to Security Command Center
+            </button>
+          </div>
+        </SpotlightCard>
       </div>
     );
   }
 
-  const name = project.name || project.repository?.name || 'Untitled project';
-  const repoFull = project.repository?.full_name || '—';
-  const branch = project.branch || 'main';
-  const repoUrl = project.repository?.html_url;
-  const language = project.repository?.language;
-  const isPrivate = project.repository?.private;
+  const name = project.name || project.repo_name?.split('/').pop() || 'Untitled Project';
+  const repoFull = project.repo_name || '—';
+  const branch = project.branch || project.default_branch || 'main';
+  const repoUrl = project.repo_url;
+  const language = project.repo_language || 'Unknown';
+  const targets = project.targets || [];
+  const isVerified = project.verified || targets.some((t) => t.is_verified);
 
   return (
     <div className="project-detail anim-fade-up">
       <HalftoneBackground interactive={false} showHero={false} />
 
+      {/* Navigation Breadcrumb */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px' }}
+        style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
-        ← Dashboard
+        <ArrowLeft size={13} /> Return to Command Center
       </button>
 
-      <div className="project-detail-header">
-        <h1 className="project-detail-name">{name}</h1>
-        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
-          <span>{branch}</span>
-          {language && <>• <span>{language}</span></>}
-          {isPrivate && <>• <span>Private</span></>}
-          • <span style={{ color: project.verified ? 'var(--success)' : 'var(--muted)' }}>
-            {project.verified ? 'Verified' : 'Pending'}
-          </span>
-        </div>
-      </div>
-
-      <div className="detail-section card card-flat" style={{ padding: '20px 24px', marginBottom: '20px' }}>
-        <div className="detail-section-title">Repository Metadata</div>
-
-        <div className="detail-field">
-          <span className="detail-field-key">Repository</span>
-          {repoUrl ? (
-            <a
-              href={repoUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="detail-field-val"
-              style={{ color: 'var(--primary)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
-            >
-              {repoFull}
-            </a>
-          ) : (
-            <span className="detail-field-val">{repoFull}</span>
-          )}
-        </div>
-
-        <div className="detail-field">
-          <span className="detail-field-key">Branch</span>
-          <span className="detail-field-val">{branch}</span>
-        </div>
-
-        {language && (
-          <div className="detail-field">
-            <span className="detail-field-key">Language</span>
-            <span className="detail-field-val">{language}</span>
-          </div>
-        )}
-
-        <div className="detail-field">
-          <span className="detail-field-key">Deployment URL</span>
-          <span className="detail-field-val">
-            {project.deployment_url || <span style={{ color: 'var(--dim)' }}>—</span>}
-          </span>
-        </div>
-
-        <div className="detail-field">
-          <span className="detail-field-key">Verification</span>
-          <span className="detail-field-val">
-            {project.verified
-              ? <span style={{ color: 'var(--success)' }}>Verified</span>
-              : <span style={{ color: 'var(--dim)' }}>Pending</span>}
-          </span>
-        </div>
-
-        <div className="detail-field">
-          <span className="detail-field-key">Created</span>
-          <span className="detail-field-val">
-            {new Date(project.created_at).toLocaleDateString('en-US', {
-              month: 'long', day: 'numeric', year: 'numeric',
-            })}
-          </span>
-        </div>
-      </div>
-
-      <div>
-        <div style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)', marginBottom: '12px', fontFamily: 'var(--font-code)' }}>
-          Upcoming modules
-        </div>
-        <div className="modules-grid">
-          {FUTURE_MODULES.map((module) => (
-            <div key={module.title} className="module-card">
-              <div className="module-card-title">{module.title}</div>
-              <div className="module-card-sub">{module.desc}</div>
+      {/* Header Banner */}
+      <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.12)" style={{ marginBottom: '24px' }}>
+        <div style={{ padding: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--primary)' }}>{name}</h1>
+              <span className={`badge ${isVerified ? 'badge-verified' : 'badge-pending'}`}>
+                <span className={`dot ${isVerified ? 'dot-green' : 'dot-amber'}`} />
+                {isVerified ? 'AST Authorized' : 'Pending Domain Auth'}
+              </span>
             </div>
-          ))}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '8px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+              <span style={{ color: 'var(--accent)' }}>{repoFull}</span>
+              <span>•</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <GitBranch size={12} /> {branch}
+              </span>
+              <span>•</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Code size={12} /> {language}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowAddTarget(true)}
+              style={{ fontSize: '12px', padding: '8px 14px' }}
+            >
+              <Plus size={14} /> Add Target Endpoint
+            </button>
+          </div>
         </div>
+      </SpotlightCard>
+
+      {/* Sub Tabs */}
+      <div className="dashboard-nav-tabs">
+        <button
+          className={`dashboard-tab-btn ${activeTab === 'details' ? 'active' : ''}`}
+          onClick={() => setActiveTab('details')}
+        >
+          <Layers size={14} /> Project Details & Endpoints
+        </button>
+        <button
+          className={`dashboard-tab-btn ${activeTab === 'scanner' ? 'active' : ''}`}
+          onClick={() => setActiveTab('scanner')}
+        >
+          <Cpu size={14} /> Live AST Security Scanner
+        </button>
       </div>
+
+      {activeTab === 'details' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Metadata Card */}
+          <SpotlightCard spotlightColor="rgba(56, 189, 248, 0.1)">
+            <div style={{ padding: '24px' }}>
+              <div className="detail-section-title">Repository Specs & Infrastructure</div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">GitHub Repository</span>
+                {repoUrl ? (
+                  <a
+                    href={repoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="detail-field-val"
+                    style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                  >
+                    {repoFull} <ExternalLink size={11} style={{ display: 'inline', marginLeft: '4px' }} />
+                  </a>
+                ) : (
+                  <span className="detail-field-val">{repoFull}</span>
+                )}
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Active Branch</span>
+                <span className="detail-field-val">{branch}</span>
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Language Runtime</span>
+                <span className="detail-field-val">{language}</span>
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Detected Frameworks</span>
+                <span className="detail-field-val">{project.repository?.frameworks || 'None Detected'}</span>
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Package Manager</span>
+                <span className="detail-field-val" style={{ textTransform: 'uppercase' }}>
+                  {project.repository?.package_manager || 'None'}
+                </span>
+              </div>
+
+              <div className="detail-field">
+                <span className="detail-field-key">Created Date</span>
+                <span className="detail-field-val">
+                  {new Date(project.created_at).toLocaleDateString('en-US', {
+                    month: 'long', day: 'numeric', year: 'numeric'
+                  })}
+                </span>
+              </div>
+            </div>
+          </SpotlightCard>
+
+          {/* Repository Ingestion Details Card */}
+          <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div className="detail-section-title" style={{ margin: 0 }}>
+                  Repository Ingestion & Discovery
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '6px 12px' }}
+                  onClick={handleTriggerIngest}
+                  disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
+                >
+                  {triggeringIngest ? 'Triggering...' : 'Trigger Re-Ingestion'}
+                </button>
+              </div>
+
+              {loadingRuns ? (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>Loading ingestion history...</p>
+                </div>
+              ) : runs.length === 0 ? (
+                <div style={{ padding: '30px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '12px' }}>
+                    No ingestion runs found. Trigger an ingestion to analyze this repository's codebase.
+                  </p>
+                  <button className="btn btn-primary" onClick={handleTriggerIngest} disabled={triggeringIngest}>
+                    Start Ingestion
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '20px' }}>
+                  {/* Left Column: List of Runs */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', borderRight: '1px solid var(--border)', paddingRight: '15px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '4px' }}>
+                      Ingestion Runs
+                    </div>
+                    {runs.map((r) => {
+                      const isActive = selectedRun?.id === r.id;
+                      return (
+                        <div
+                          key={r.id}
+                          onClick={() => setSelectedRun(r)}
+                          style={{
+                            padding: '10px',
+                            borderRadius: '6px',
+                            background: isActive ? 'var(--elevated)' : 'transparent',
+                            border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)' }}>
+                              {r.commit_sha ? r.commit_sha.substring(0, 7) : 'Latest'}
+                            </span>
+                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                              {r.status}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)' }}>
+                            {new Date(r.started_at).toLocaleString()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Right Column: Selected Run Details */}
+                  {selectedRun && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {/* Run Header / Counters */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--primary)' }}>{selectedRun.files_found}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Files Found</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#4ade80' }}>{selectedRun.files_ingested}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Ingested</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#fbbf24' }}>{selectedRun.files_skipped}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Skipped</div>
+                        </div>
+                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--accent)' }}>{selectedRun.package_manager || 'None'}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Package Mgr</div>
+                        </div>
+                      </div>
+
+                      {selectedRun.error_message && (
+                        <div style={{ padding: '12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(248, 113, 113, 0.5)', color: '#fca5a5', fontSize: '12px' }}>
+                          <strong>Ingestion Error:</strong> {selectedRun.error_message}
+                        </div>
+                      )}
+
+                      {/* File Tabs / Lists */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)' }}>
+                          File Manifest Analysis
+                        </div>
+
+                        {runFiles.length === 0 ? (
+                          <p style={{ color: 'var(--dim)', fontSize: '12px' }}>No files indexed in this run.</p>
+                        ) : (
+                          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
+                              <thead>
+                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '28px' }}>
+                                  <th style={{ padding: '6px 12px' }}>File Path</th>
+                                  <th style={{ padding: '6px 12px' }}>Language</th>
+                                  <th style={{ padding: '6px 12px' }}>Size</th>
+                                  <th style={{ padding: '6px 12px' }}>Status / Reason</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {runFiles.map((f: any) => (
+                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '26px' }}>
+                                    <td style={{ padding: '6px 12px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {f.path}
+                                    </td>
+                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{f.language}</td>
+                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
+                                    <td style={{ padding: '6px 12px' }}>
+                                      {f.status === 'INGESTED' ? (
+                                        <span style={{ color: '#4ade80' }}>Ingested</span>
+                                      ) : (
+                                        <span style={{ color: '#fbbf24' }} title={f.skip_reason}>Skipped ({f.skip_reason})</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </SpotlightCard>
+
+          {/* Configured Endpoints Card */}
+          <SpotlightCard spotlightColor="rgba(81, 207, 102, 0.1)">
+            <div style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div className="detail-section-title" style={{ margin: 0 }}>
+                  Configured Target Websites ({targets.length})
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                  onClick={() => setShowAddTarget(true)}
+                >
+                  <Plus size={12} /> Add Target
+                </button>
+              </div>
+
+              {targets.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No targets linked yet. Add a website URL to prove target domain ownership.</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {targets.map((t) => (
+                    <div key={t.id} className="target-pill">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <Globe size={15} color="var(--accent)" />
+                        <div>
+                          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--primary)' }}>{t.domain}</div>
+                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>
+                            Token: {t.verification_token.substring(0, 26)}…
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span className={`badge ${t.is_verified ? 'badge-verified' : 'badge-pending'}`}>
+                          {t.is_verified ? 'Authorized' : 'Pending Verification'}
+                        </span>
+
+                        <button
+                          className="btn btn-secondary"
+                          style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                          onClick={() => setSelectedTarget(t)}
+                        >
+                          Verify Token
+                        </button>
+
+                        <button
+                          className="btn btn-danger btn-icon"
+                          onClick={() => setDeleteTargetRequest({ id: t.id, domain: t.domain })}
+                          style={{ padding: '5px' }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </SpotlightCard>
+        </div>
+      )}
+
+      {activeTab === 'scanner' && (
+        <LiveScanSimulator projectName={name} />
+      )}
+
+      {/* Modals */}
+      {showAddTarget && (
+        <AddTargetModal
+          projectId={project.id}
+          projectName={name}
+          onClose={() => setShowAddTarget(false)}
+          onTargetAdded={() => {
+            setShowAddTarget(false);
+            refetch();
+            toast.success('Target domain added.');
+          }}
+        />
+      )}
+
+      {selectedTarget && (
+        <VerificationModal
+          target={selectedTarget}
+          onClose={() => setSelectedTarget(null)}
+          onTargetUpdated={() => {
+            refetch();
+            toast.success('Verification updated.');
+          }}
+        />
+      )}
+      {deleteTargetRequest && (
+        <ConfirmModal
+          title="Remove target domain?"
+          message={`Are you sure you want to remove \"${deleteTargetRequest.domain}\" from this project?`}
+          confirmText="Remove target"
+          danger
+          onConfirm={handleDeleteTarget}
+          onCancel={() => setDeleteTargetRequest(null)}
+        />
+      )}
+
     </div>
   );
 };

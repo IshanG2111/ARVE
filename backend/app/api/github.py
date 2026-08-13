@@ -1,111 +1,53 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+
 import httpx
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.models.models import User
-from app.schemas.schemas import GitHubRepo
-from app.api.deps import get_current_user
+from app.schemas.schemas import BranchResponse
 
 router = APIRouter(prefix="/github", tags=["github"])
 
-@router.get("/repos", response_model=List[GitHubRepo])
-async def list_github_repositories(
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Returns repositories accessible with the GitHub access token obtained
-    from the authenticated Firebase GitHub provider.
-    """
-    if current_user.github_access_token and current_user.github_access_token != "mock_github_access_token_123":
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                "https://api.github.com/user/repos?sort=updated&per_page=30",
-                headers={"Authorization": f"Bearer {current_user.github_access_token}"}
-            )
-            if resp.status_code == 200:
-                repos = resp.json()
-                return [
-                    GitHubRepo(
-                        id=str(r["id"]),
-                        name=r["name"],
-                        full_name=r["full_name"],
-                        html_url=r["html_url"],
-                        default_branch=r.get("default_branch", "main"),
-                        private=r.get("private", False),
-                        updated_at=r.get("updated_at", ""),
-                        language=r.get("language"),
-                        description=r.get("description")
-                    )
-                    for r in repos
-                ]
 
-    if not (settings.is_development and current_user.github_access_token == "mock_github_access_token_123"):
-        raise HTTPException(status_code=403, detail="GitHub repository access is unavailable")
-
-    # Development-only sample repositories
-    login = current_user.github_login or current_user.email.split("@")[0]
-    return [
-        GitHubRepo(
-            id="101",
-            name="arve-sec-demo-app",
-            full_name=f"{login}/arve-sec-demo-app",
-            html_url=f"https://github.com/{login}/arve-sec-demo-app",
-            default_branch="main",
-            language="TypeScript",
-            description="Next.js e-commerce app requiring security verification"
-        ),
-        GitHubRepo(
-            id="102",
-            name="fintech-api-gateway",
-            full_name=f"{login}/fintech-api-gateway",
-            html_url=f"https://github.com/{login}/fintech-api-gateway",
-            default_branch="main",
-            language="Python",
-            description="FastAPI microservices gateway for financial transactions"
-        ),
-        GitHubRepo(
-            id="103",
-            name="auth-portal-v2",
-            full_name=f"{login}/auth-portal-v2",
-            html_url=f"https://github.com/{login}/auth-portal-v2",
-            default_branch="main",
-            language="JavaScript",
-            description="Identity and access management portal"
-        ),
-    ]
-
-
-@router.get("/branches")
+@router.get("/branches", response_model=List[BranchResponse])
 async def get_branches_by_full_name(
     full_name: str,
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Returns branches for a given repo full_name (owner/repo).
-    Used by the wizard before the repository is persisted in the DB.
-    """
-    from app.schemas.schemas import BranchResponse
+    """Return branches for a repository before it is stored on a Project."""
+    if not full_name or "/" not in full_name:
+        raise HTTPException(status_code=400, detail="Repository must be in owner/name format")
+
     token = current_user.github_access_token
-    is_real = bool(token and token != "mock_github_access_token_123")
+    if settings.is_development and token == "mock_github_access_token_123":
+        return [
+            BranchResponse(name="main", protected=True),
+            BranchResponse(name="develop", protected=False),
+            BranchResponse(name="staging", protected=False),
+        ]
 
-    if is_real and full_name:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"https://api.github.com/repos/{full_name}/branches?per_page=50",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            if resp.status_code == 200:
-                return [
-                    BranchResponse(name=b["name"], protected=b.get("protected", False))
-                    for b in resp.json()
-                ]
+    if not token:
+        raise HTTPException(status_code=403, detail="GitHub access token is unavailable")
 
-    if not (settings.is_development and token == "mock_github_access_token_123"):
-        raise HTTPException(status_code=403, detail="GitHub branch access is unavailable")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(
+            f"https://api.github.com/repos/{full_name}/branches?per_page=50",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
 
-    # Development-only fallback
+    if response.status_code in {401, 403}:
+        raise HTTPException(status_code=403, detail="GitHub access to this repository was denied")
+    if response.status_code == 404:
+        raise HTTPException(status_code=404, detail="GitHub repository not found or not accessible")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Unable to retrieve GitHub branches")
+
     return [
-        BranchResponse(name="main", protected=True),
-        BranchResponse(name="develop", protected=False),
-        BranchResponse(name="staging", protected=False),
+        BranchResponse(name=item["name"], protected=item.get("protected", False))
+        for item in response.json()
     ]
