@@ -1,73 +1,33 @@
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import uuid
+from tests.conftest import client, TestingSessionLocal, engine
 
-from app.main import app
-from app.core.database import Base, get_db
-
-from sqlalchemy.pool import StaticPool
-
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_db():
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-client = TestClient(app)
 
 def test_root_endpoint():
     response = client.get("/")
     assert response.status_code == 200
     assert response.json()["status"] == "online"
 
-def test_auth_and_project_flow():
-    random_email = f"test_{uuid.uuid4().hex[:6]}@example.com"
-    password = "secretpassword123"
-
-    # 1. Register User
-    reg_resp = client.post(
-        "/api/auth/register",
-        json={"email": random_email, "password": password, "full_name": "Security Tester"}
+def test_firebase_auth_and_project_flow():
+    # 1. Login with Firebase ID token
+    fb_resp = client.post(
+        "/api/auth/firebase",
+        json={
+            "id_token": "mock_firebase_token_test123",
+            "github_access_token": "mock_gh_token_456"
+        }
     )
-    assert reg_resp.status_code == 201, reg_resp.text
-    user_data = reg_resp.json()
-    assert user_data["email"] == random_email
-
-    # 2. Login
-    login_resp = client.post(
-        "/api/auth/login/json",
-        json={"email": random_email, "password": password}
-    )
-    assert login_resp.status_code == 200, login_resp.text
-    token = login_resp.json()["access_token"]
+    assert fb_resp.status_code == 200
+    token = fb_resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    # 3. Get /me
+    # 2. Verify user profile via /api/auth/me
     me_resp = client.get("/api/auth/me", headers=headers)
     assert me_resp.status_code == 200
-    assert me_resp.json()["email"] == random_email
+    user_data = me_resp.json()
+    assert user_data["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
+    assert user_data["email"] == "octocat@github.com"
 
-    # 4. Create Project with GitHub Repository
+    # 3. Create Project with GitHub Repository & Target Website
     proj_resp = client.post(
         "/api/projects",
         json={
@@ -85,7 +45,18 @@ def test_auth_and_project_flow():
     proj_data = proj_resp.json()
     assert proj_data["repo_name"] == "octocat-dev/fintech-api-gateway"
     assert len(proj_data["targets"]) == 1
-    # 5. Create Project without Deployment URL (Optional deployment link)
+
+    # 4. Test PATCH /api/projects/{project_id} update endpoint
+    patch_resp = client.patch(
+        f"/api/projects/{proj_data['id']}",
+        json={"name": "Updated Fintech Gateway", "branch": "release/v1"},
+        headers=headers
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["name"] == "Updated Fintech Gateway"
+    assert patch_resp.json()["branch"] == "release/v1"
+
+    # 5. Create Project without Deployment URL
     proj_no_dep_resp = client.post(
         "/api/projects",
         json={
@@ -104,45 +75,5 @@ def test_auth_and_project_flow():
     assert proj_no_dep_data["deployment_url"] is None
     assert len(proj_no_dep_data["targets"]) == 0
 
-def test_github_oauth_mock():
-    # Test mock GitHub login callback
-    login_resp = client.post(
-        "/api/github/callback",
-        json={"code": "mock_code", "is_mock": True}
-    )
-    assert login_resp.status_code == 200
-    token = login_resp.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # Verify user profile has github_login
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    assert me_resp.json()["github_login"] == "octocat-dev"
-
-    # Verify repos endpoint
-    repos_resp = client.get("/api/github/repos", headers=headers)
-    assert repos_resp.status_code == 200
-    assert len(repos_resp.json()) >= 1
-
-
-def test_firebase_auth():
-    # Test Firebase login with mock token
-    fb_resp = client.post(
-        "/api/auth/firebase",
-        json={
-            "id_token": "mock_firebase_token_test123",
-            "github_access_token": "mock_gh_token_456"
-        }
-    )
-    assert fb_resp.status_code == 200
-    token = fb_resp.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # Verify user profile returned via /api/auth/me has firebase_uid
-    me_resp = client.get("/api/auth/me", headers=headers)
-    assert me_resp.status_code == 200
-    user_data = me_resp.json()
-    assert user_data["firebase_uid"] == "firebase_uid_mock_firebase_token_test123"
-    assert user_data["email"] == "octocat@github.com"
 
 

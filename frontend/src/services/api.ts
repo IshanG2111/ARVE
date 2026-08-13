@@ -51,26 +51,6 @@ export async function loginWithFirebase(idToken: string, githubAccessToken?: str
   return data;
 }
 
-export async function getGitHubAuthUrl(): Promise<{ auth_url: string; is_configured: boolean }> {
-
-  const res = await fetch(`${BASE}/github/auth-url`, { credentials: 'include' });
-  return handleResponse(res);
-}
-
-export async function githubCallback(code: string, isMock = false): Promise<{ access_token: string }> {
-  const res = await fetch(`${BASE}/github/callback`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ code, is_mock: isMock }),
-  });
-  const data = await handleResponse<{ access_token: string }>(res);
-  if (data.access_token) {
-    localStorage.setItem('arve_token', data.access_token);
-  }
-  return data;
-}
-
 export async function logout() {
   localStorage.removeItem('arve_token');
   try {
@@ -217,7 +197,6 @@ Object.assign(api, {
   getProject,
   createProject,
   deleteProject,
-  githubCallback,
   logout,
   addTarget,
   deleteTarget,

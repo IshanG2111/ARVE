@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # Environment
+    ARVE_ENV: str = "dev"
+
     # Firebase Auth Settings
     FIREBASE_PROJECT_ID: Optional[str] = "arve-fe63b"
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
@@ -50,6 +53,26 @@ class Settings(BaseSettings):
         "env_file": ENV_FILES,
         "extra": "ignore",
     }
+
+    @property
+    def arve_env(self) -> str:
+        return self.ARVE_ENV.lower()
+
+    @property
+    def database_url(self) -> str:
+        url = self.DATABASE_URL
+        if url and url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://"):]
+        return url
+
+    @property
+    def firebase_service_account_json(self) -> Optional[str]:
+        return self.FIREBASE_SERVICE_ACCOUNT_JSON
+
+    @property
+    def firebase_credentials_path(self) -> Optional[str]:
+        return self.FIREBASE_CREDENTIALS_PATH
+
 
     # Lowercase properties matching standard settings pattern
     @property

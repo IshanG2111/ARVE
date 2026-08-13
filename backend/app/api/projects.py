@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.models import User, Project, Repository
-from app.schemas.schemas import ProjectCreate, ProjectResponse
+from app.schemas.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -61,7 +61,7 @@ def create_project(
     name = project_in.name or (project_in.repo_name or "").split("/")[-1] or "Untitled"
 
     dep_url = project_in.deployment_url.strip() if project_in.deployment_url and project_in.deployment_url.strip() else None
-    target_url = dep_url or project_in.target_domain
+    target_url = dep_url or getattr(project_in, "target_domain", None)
 
     project = Project(
         user_id=current_user.id,
@@ -112,6 +112,37 @@ def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return project
+
+
+@router.patch("/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: str,
+    project_in: ProjectUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = db.query(Project).filter(
+        Project.id == project_id, Project.user_id == current_user.id
+    ).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project_in.name is not None:
+        project.name = project_in.name
+    if project_in.description is not None:
+        project.description = project_in.description
+    if project_in.branch is not None:
+        project.branch = project_in.branch
+        project.default_branch = project_in.branch
+    if project_in.deployment_url is not None:
+        project.deployment_url = project_in.deployment_url
+    if project_in.verified is not None:
+        project.verified = project_in.verified
+
+    db.commit()
+    db.refresh(project)
+    return project
+
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)

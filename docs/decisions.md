@@ -14,6 +14,11 @@ This document records key architectural decisions, design trade-offs, security c
 7. [ADR-007: Graph Intelligence — Decoupling PostgreSQL Application State & Neo4j Security Graphs](#adr-007-graph-intelligence--decoupling-postgresql-application-state--neo4j-security-graphs)
 8. [ADR-008: Ingestion Engine — Cloud-Native Tarball Streaming with Async Concurrent Fallback](#adr-008-ingestion-engine--cloud-native-tarball-streaming-with-async-concurrent-fallback)
 9. [ADR-009: Ingestion Scope & Multi-Ecosystem Framework Detection](#adr-009-ingestion-scope--multi-ecosystem-framework-detection)
+10. [ADR-010: Authentication Model — Firebase-Exclusive Authentication Architecture](#adr-010-authentication-model--firebase-exclusive-authentication-architecture)
+11. [ADR-011: Project Integration — Backend Core & Engine Pipeline Unification](#adr-011-project-integration--backend-core--engine-pipeline-unification)
+12. [ADR-012: Configuration Layer — Explicit Settings Property Mapping for Firebase Admin SDK](#adr-012-configuration-layer--explicit-settings-property-mapping-for-firebase-admin-sdk)
+13. [ADR-013: API Hygiene — Removal of Obsolete Auth Endpoints & Router Duplication](#adr-013-api-hygiene--removal-of-obsolete-auth-endpoints--router-duplication)
+
 
 ---
 
@@ -150,3 +155,76 @@ Real-world AI and web repositories span diverse languages (Python, TS, Go, Rust,
 ### AI Reasoning & Trade-off Analysis
 - Eliminates false repository rejection bugs caused by large binary or build artifacts in git history.
 - Accurately identifies technology stacks across frontend, backend, and infrastructure layers for downstream SAST scanners.
+
+---
+
+## ADR-010: Authentication Model — Firebase-Exclusive Authentication Architecture
+
+### Context
+Previously, ARVE maintained a dual-authentication mechanism: Firebase Authentication on the client side and a direct GitHub OAuth fallback (`/auth/github/login` -> `/auth/github/callback`). Maintaining two parallel OAuth callback pipelines created session state ambiguity, duplicate callback URL configuration requirements, and potential token mismatch between Firebase user IDs and direct OAuth user records.
+
+### Decision
+1. **Mandatory Firebase Provider:** Enforce **Firebase Authentication** as the sole, canonical authentication path for all users.
+2. **Deprecated Direct OAuth Fallback:** Disable direct `/auth/github/login` and `/auth/github/callback` backend routes, returning `400 Bad Request` with an explicit directive to use `POST /api/auth/firebase`.
+3. **Frontend Enforcement:** Update `useAuth.tsx` to handle authentication strictly via `signInWithPopup(auth, githubProvider)` without fallback redirects.
+
+### AI Reasoning & Trade-off Analysis
+- **Security & Consistency:** Guarantees every user record is normalized with a unified `firebase_uid`, preventing account duplication across login strategies.
+- **Architectural Simplification:** Reduces backend authorization complexity and eliminates client-side window redirection bugs caused by popup-to-redirect fallbacks.
+
+---
+
+## ADR-011: Project Integration — Backend Core & Engine Pipeline Unification
+
+### Context
+The platform evolved across two project streams: `main` contained the stabilized backend core (Firebase Auth, Neon PostgreSQL database schemas, Alembic migrations, and Infisical secret integration), while `IG` contained Phase 2 Repository Ingestion Engine components (`AnalysisRun`, `RepositoryFile`, framework detectors, snapshot generators) and updated frontend dashboard components.
+
+### Decision
+Merge and unify both streams into a single canonical codebase:
+1. **Backend Foundation:** Adopt `main`'s authentication module (`firebase_auth.py`), database configuration (`database.py`), settings (`config.py`), and project/repository CRUD routes (`api/projects.py`, `api/repositories.py`).
+2. **Ingestion Engine:** Preserve and integrate `IG`'s engine models (`AnalysisRun`, `RepositoryFile`), schemas (`schemas.py`), ingestion services (`ingestion/`), and API endpoints (`api/ingestion.py`).
+3. **Frontend UI:** Retain `IG`'s React 19 + TypeScript frontend dashboard, custom confirmation modals (`ConfirmModal`, `ProjectWizardModal`), and halftone visual design system.
+
+### AI Reasoning & Trade-off Analysis
+- Combines structural production backend stability (Neon DB + Infisical) with advanced repository parsing capabilities without regressing existing UI/UX features.
+- Fully validated via a 27/27 passing Pytest suite and zero-error TypeScript build.
+
+---
+
+## ADR-012: Configuration Layer — Explicit Settings Property Mapping for Firebase Admin SDK
+
+### Context
+`firebase_auth.py` inspects `settings.firebase_service_account_json`, `settings.firebase_credentials_path`, `settings.arve_env`, and `settings.database_url`. The Pydantic `Settings` class in `config.py` declared uppercased environment fields (`FIREBASE_SERVICE_ACCOUNT_JSON`, etc.) but lacked lowercase `@property` accessors, causing `AttributeError` exceptions and triggering unwanted PyJWT fallback logs during startup.
+
+### Decision
+Define explicit `@property` getters on the Pydantic `Settings` class in `config.py`:
+- `arve_env` -> returns `self.ARVE_ENV.lower()`
+- `database_url` -> normalizes `postgres://` to `postgresql://`
+- `firebase_service_account_json` -> returns `self.FIREBASE_SERVICE_ACCOUNT_JSON`
+- `firebase_credentials_path` -> returns `self.FIREBASE_CREDENTIALS_PATH`
+
+### AI Reasoning & Trade-off Analysis
+- Ensures strict type safety and backward compatibility across snake_case and UPPER_CASE attribute conventions.
+- Guarantees seamless `firebase-admin` SDK initialization on FastAPI startup with zero configuration warnings.
+
+---
+
+## ADR-013: API Hygiene — Removal of Obsolete Auth Endpoints & Router Duplication
+
+### Context
+During Phase 1/Phase 2 backend unification, `backend/app/main.py` registered `auth_router` twice (once inside `api_router` under `/api/auth` and once directly at root `/auth`), resulting in duplicate OpenAPI routes. Additionally, `backend/app/api/auth.py` still exported legacy OAuth endpoints (`/github/login`, `/github/callback`, `/register`, `/login`, `/login/json`).
+
+### Decision
+1. **Router Consolidation:** Remove root-level `app.include_router(auth_router)` from `main.py`, exposing authentication endpoints exclusively under `/api/auth/`.
+2. **Endpoint Pruning:** Remove all legacy direct/mock authentication endpoints (`/github/login`, `/github/callback`, `/register`, `/login`, `/login/json`) from `backend/app/api/auth.py`, and remove legacy direct OAuth failsafes (`GET /api/github/auth-url`, `POST /api/github/callback`) from `backend/app/api/github.py`.
+3. **Canonical Firebase Auth Surfaces:** Restrict active authentication endpoints exclusively to:
+   - `POST /api/auth/firebase` (Firebase ID Token verification & user session setup)
+   - `GET /api/auth/me` (Authenticated user profile retrieval)
+   - `POST /api/auth/logout` (Session teardown & cookie cleanup)
+
+### AI Reasoning & Trade-off Analysis
+- Prevents API surface bloat, eliminates OpenAPI Swagger documentation confusion, and enforces best security practices by standardizing on single-source-of-truth Firebase Authentication.
+- Confirmed with 25/25 passing backend Pytest cases and zero-error frontend production build.
+
+
+

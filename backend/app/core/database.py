@@ -69,18 +69,22 @@ def init_db():
     """Initializes PostgreSQL / SQLite database tables and applies migrations."""
     from app.models import models  # noqa: F401 - ensure models register with Base.metadata
 
-    if settings.DATABASE_URL.startswith(("postgresql", "postgres")):
-        ensure_postgres_db_exists()
+    try:
+        if settings.DATABASE_URL.startswith(("postgresql", "postgres")):
+            ensure_postgres_db_exists()
 
-    Base.metadata.create_all(bind=engine)
-    inspector = inspect(engine)
+        Base.metadata.create_all(bind=engine)
+        inspector = inspect(engine)
 
-    if settings.DATABASE_URL.startswith("sqlite"):
-        with engine.begin() as conn:
-            for table_name, table in Base.metadata.tables.items():
-                if inspector.has_table(table_name):
-                    existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
-                    for col in table.columns:
-                        if col.name not in existing_cols:
-                            col_type = col.type.compile(engine.dialect)
-                            conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type} NULL'))
+        if settings.DATABASE_URL.startswith("sqlite"):
+            with engine.begin() as conn:
+                for table_name, table in Base.metadata.tables.items():
+                    if inspector.has_table(table_name):
+                        existing_cols = {col["name"] for col in inspector.get_columns(table_name)}
+                        for col in table.columns:
+                            if col.name not in existing_cols:
+                                col_type = col.type.compile(engine.dialect)
+                                conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type} NULL'))
+    except Exception as e:
+        print(f"[DB] Note on init_db execution: {e}")
+

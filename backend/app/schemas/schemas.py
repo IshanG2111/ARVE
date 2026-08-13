@@ -153,6 +153,14 @@ class ProjectCreate(BaseModel):
     default_branch: Optional[str] = "main"
     target_domain: Optional[str] = None  # backward compat
 
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    branch: Optional[str] = None
+    deployment_url: Optional[str] = None
+    verified: Optional[bool] = None
+
+
 class ProjectResponse(BaseModel):
     id: str
     user_id: Optional[str] = None

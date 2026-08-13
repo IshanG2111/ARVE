@@ -1,12 +1,9 @@
-from fastapi import FastAPI, Response, Depends
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.database import init_db
 from app.api import api_router
-from app.api.auth import router as auth_router
-from app.api.deps import get_current_user
-from app.schemas.schemas import UserResponse
-from app.models.models import User
+
 
 # Create database tables & apply schema updates automatically
 init_db()
@@ -42,13 +39,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
-app.include_router(auth_router)
 
-@app.get("/me", response_model=UserResponse, tags=["me"])
-@app.get(f"{settings.API_V1_STR}/me", response_model=UserResponse, tags=["me"])
-def read_me(current_user: User = Depends(get_current_user)):
-    """Top level /me and /api/me endpoint."""
-    return current_user
 
 @app.get("/")
 def root():
