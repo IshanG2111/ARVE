@@ -42,8 +42,10 @@ async function handleResponse<T>(res: Response): Promise<T> {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `HTTP ${res.status}`);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return (await res.json()) as T;
 }
 
 // ─── Auth ───────────────────────────────────────────────────────────────────
@@ -189,7 +191,6 @@ Object.assign(api, {
   createProject,
   updateProject,
   deleteProject,
-  logout,
   addTarget,
   getTargets,
   deleteTarget,
