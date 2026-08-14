@@ -317,29 +317,107 @@ export const ProjectDetailPage: React.FC = () => {
 
           {/* Repository Ingestion Card */}
           <SpotlightCard>
-            <div style={{ padding: '22px 24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
-                  Repository Codebase Ingestion & AST Index
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Header Bar: Title, Run Switcher, and Ingest Action */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                    REPOSITORY CODEBASE INGESTION & AST INDEX
+                  </div>
+                  <div style={{ fontSize: '15px', fontWeight: 650, color: 'var(--primary)', marginTop: '2px' }}>
+                    Deterministic AST File Explorer
+                  </div>
                 </div>
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: '11.5px', padding: '5px 12px' }}
-                  onClick={handleTriggerIngest}
-                  disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
-                >
-                  <RefreshCw size={12} className={triggeringIngest ? 'spin' : ''} />
-                  {triggeringIngest ? 'Ingesting…' : 'Trigger Ingestion'}
-                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {runs.length > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Run:</span>
+                      <select
+                        value={selectedRun?.id || ''}
+                        onChange={(e) => {
+                          const r = runs.find((item) => item.id === e.target.value);
+                          if (r) setSelectedRun(r);
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '11.5px',
+                          fontFamily: 'var(--font-code)',
+                          background: 'var(--elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                          outline: 'none',
+                        }}
+                      >
+                        {runs.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            #{r.commit_sha ? r.commit_sha.substring(0, 7) : 'Active'} ({r.files_ingested || 0} files) • {r.status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <button
+                      type="button"
+                      onClick={() => setManifestView('tree')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontFamily: 'var(--font-code)',
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: manifestView === 'tree' ? 'var(--surface)' : 'transparent',
+                        color: manifestView === 'tree' ? 'var(--primary)' : 'var(--muted)',
+                        boxShadow: manifestView === 'tree' ? 'var(--shadow-subtle)' : 'none',
+                        fontWeight: manifestView === 'tree' ? 600 : 400,
+                      }}
+                    >
+                      Tree View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManifestView('table')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontFamily: 'var(--font-code)',
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: manifestView === 'table' ? 'var(--surface)' : 'transparent',
+                        color: manifestView === 'table' ? 'var(--primary)' : 'var(--muted)',
+                        boxShadow: manifestView === 'table' ? 'var(--shadow-subtle)' : 'none',
+                        fontWeight: manifestView === 'table' ? 600 : 400,
+                      }}
+                    >
+                      List View
+                    </button>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={handleTriggerIngest}
+                    disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
+                  >
+                    <RefreshCw size={13} className={triggeringIngest ? 'spin' : ''} />
+                    {triggeringIngest ? 'Ingesting…' : 'Trigger Ingestion'}
+                  </button>
+                </div>
               </div>
 
               {loadingRuns ? (
-                <div style={{ padding: '24px', display: 'flex', justifyContent: 'center' }}>
+                <div style={{ padding: '40px', display: 'flex', justifyContent: 'center' }}>
                   <ARVELoader size={64} />
                 </div>
               ) : runs.length === 0 ? (
-                <div style={{ padding: '24px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12.5px', marginBottom: '10px' }}>
+                <div style={{ padding: '36px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '14px' }}>
                     No ingestion runs recorded yet. Trigger an ingestion to index this repository's AST.
                   </p>
                   <button className="btn btn-primary" onClick={handleTriggerIngest} disabled={triggeringIngest}>
@@ -347,187 +425,99 @@ export const ProjectDetailPage: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.4fr', gap: '18px' }}>
-                  {/* Left: Runs List */}
-                  <div
-                    data-lenis-prevent="true"
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '6px',
-                      maxHeight: '380px',
-                      overflowY: 'auto',
-                      overscrollBehavior: 'contain',
-                      touchAction: 'pan-y',
-                      borderRight: '1px solid var(--border)',
-                      paddingRight: '12px',
-                    }}
-                  >
-                    <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '4px', fontFamily: 'var(--font-code)' }}>
-                      Ingestion Runs
-                    </div>
-                    {runs.map((r) => {
-                      const isActive = selectedRun?.id === r.id;
-                      return (
-                        <div
-                          key={r.id}
-                          onClick={() => setSelectedRun(r)}
-                          style={{
-                            padding: '9px 12px',
-                            borderRadius: 'var(--radius-md)',
-                            background: isActive ? 'var(--elevated)' : 'transparent',
-                            border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
-                            cursor: 'pointer',
-                            transition: 'all 160ms ease',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
-                            <span style={{ fontSize: '11.5px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)', fontWeight: 550 }}>
-                              {r.commit_sha ? r.commit_sha.substring(0, 7) : 'Latest'}
-                            </span>
-                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
-                              {r.status}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                            {new Date(r.started_at).toLocaleString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right: Run Manifest Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {/* Top Metric Summary across full width */}
                   {selectedRun && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      {/* Metric summary */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_found}</div>
-                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Files Found</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_found}
                         </div>
-                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--success)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_ingested}</div>
-                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Ingested</div>
-                        </div>
-                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--warning)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_skipped}</div>
-                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Skipped</div>
-                        </div>
-                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{selectedRun.package_manager || 'None'}</div>
-                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Package Mgr</div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Discovered
                         </div>
                       </div>
-
-                      {/* File Manifest / File Tree */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                            Repository File Manifest ({runFiles.length} files)
-                          </div>
-                          {runFiles.length > 0 && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                              <button
-                                type="button"
-                                onClick={() => setManifestView('tree')}
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '10.5px',
-                                  fontFamily: 'var(--font-code)',
-                                  borderRadius: 'var(--radius-xs)',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  background: manifestView === 'tree' ? 'var(--surface)' : 'transparent',
-                                  color: manifestView === 'tree' ? 'var(--primary)' : 'var(--muted)',
-                                  boxShadow: manifestView === 'tree' ? 'var(--shadow-subtle)' : 'none',
-                                  fontWeight: manifestView === 'tree' ? 600 : 400,
-                                }}
-                              >
-                                Tree View
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setManifestView('table')}
-                                style={{
-                                  padding: '2px 8px',
-                                  fontSize: '10.5px',
-                                  fontFamily: 'var(--font-code)',
-                                  borderRadius: 'var(--radius-xs)',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  background: manifestView === 'table' ? 'var(--surface)' : 'transparent',
-                                  color: manifestView === 'table' ? 'var(--primary)' : 'var(--muted)',
-                                  boxShadow: manifestView === 'table' ? 'var(--shadow-subtle)' : 'none',
-                                  fontWeight: manifestView === 'table' ? 600 : 400,
-                                }}
-                              >
-                                List View
-                              </button>
-                            </div>
-                          )}
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--success)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_ingested}
                         </div>
-
-                        {runFiles.length === 0 ? (
-                          <p style={{ color: 'var(--muted)', fontSize: '12px' }}>No files indexed in this run.</p>
-                        ) : manifestView === 'tree' ? (
-                          <div
-                            data-lenis-prevent="true"
-                            style={{
-                              maxHeight: '340px',
-                              overflowY: 'auto',
-                              overscrollBehavior: 'contain',
-                              touchAction: 'pan-y',
-                            }}
-                          >
-                            <FileTree
-                              elements={buildFileTree(runFiles)}
-                              highlightColor="var(--accent)"
-                            />
-                          </div>
-                        ) : (
-                          <div
-                            data-lenis-prevent="true"
-                            style={{
-                              maxHeight: '280px',
-                              overflowY: 'auto',
-                              overscrollBehavior: 'contain',
-                              touchAction: 'pan-y',
-                              border: '1px solid var(--border)',
-                              borderRadius: 'var(--radius-md)',
-                            }}
-                          >
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                              <thead>
-                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '26px' }}>
-                                  <th style={{ padding: '4px 10px' }}>File Path</th>
-                                  <th style={{ padding: '4px 10px' }}>Language</th>
-                                  <th style={{ padding: '4px 10px' }}>Size</th>
-                                  <th style={{ padding: '4px 10px' }}>Status</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {runFiles.map((f: any) => (
-                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '24px' }}>
-                                    <td style={{ padding: '4px 10px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {f.path}
-                                    </td>
-                                    <td style={{ padding: '4px 10px', color: 'var(--muted)' }}>{f.language}</td>
-                                    <td style={{ padding: '4px 10px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
-                                    <td style={{ padding: '4px 10px' }}>
-                                      {f.status === 'INGESTED' ? (
-                                        <span style={{ color: 'var(--success)' }}>Ingested</span>
-                                      ) : (
-                                        <span style={{ color: 'var(--warning)' }} title={f.skip_reason}>Skipped</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Ingested
+                        </div>
                       </div>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--warning)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_skipped}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Skipped
+                        </div>
+                      </div>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.package_manager || 'Standard'}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Package Manager
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Full Space File Tree / Manifest View */}
+                  {runFiles.length === 0 ? (
+                    <div style={{ padding: '32px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                      <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No files indexed in this run.</p>
+                    </div>
+                  ) : manifestView === 'tree' ? (
+                    <div data-lenis-prevent="true" style={{ width: '100%' }}>
+                      <FileTree
+                        elements={buildFileTree(runFiles)}
+                        highlightColor="var(--accent)"
+                        title={`Repository File Tree (${runFiles.length} files)`}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      data-lenis-prevent="true"
+                      style={{
+                        maxHeight: '440px',
+                        overflowY: 'auto',
+                        overscrollBehavior: 'contain',
+                        touchAction: 'pan-y',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--surface)',
+                      }}
+                    >
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '32px' }}>
+                            <th style={{ padding: '8px 14px' }}>File Path</th>
+                            <th style={{ padding: '8px 14px' }}>Language</th>
+                            <th style={{ padding: '8px 14px' }}>Size</th>
+                            <th style={{ padding: '8px 14px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runFiles.map((f: any) => (
+                            <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '32px' }}>
+                              <td style={{ padding: '8px 14px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {f.path}
+                              </td>
+                              <td style={{ padding: '8px 14px', color: 'var(--muted)', textTransform: 'uppercase', fontSize: '11px' }}>{f.language}</td>
+                              <td style={{ padding: '8px 14px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
+                              <td style={{ padding: '8px 14px' }}>
+                                {f.status === 'INGESTED' ? (
+                                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Ingested</span>
+                                ) : (
+                                  <span className="badge badge-pending" style={{ fontSize: '10.5px' }} title={f.skip_reason}>Skipped</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
