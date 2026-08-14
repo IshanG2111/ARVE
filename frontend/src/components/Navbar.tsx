@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useProjects } from '../hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
@@ -21,6 +21,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { logout } = useAuth();
@@ -28,7 +29,8 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
 
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
   
-  const currentRepoParam = searchParams.get('repo');
+  const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
+  const currentRepoParam = searchParams.get('repo') || pathProjectId;
   const activeProject = projects.find(p => p.id === currentRepoParam) || projects[0];
   const activeRepoName = activeProject?.repo_name || activeProject?.name || 'IshanG2111 / ARVE-Engine';
   const activeBranch = activeProject?.default_branch || 'main';

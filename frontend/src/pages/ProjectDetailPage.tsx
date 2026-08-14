@@ -192,13 +192,13 @@ export const ProjectDetailPage: React.FC = () => {
   const isVerified = project.verified || targets.some((t) => t.is_verified);
 
   return (
-    <div style={{ maxWidth: '1160px', margin: '0 auto', padding: '32px 28px 64px', position: 'relative', zIndex: 1 }} className="anim-fade-up">
+    <div style={{ maxWidth: '1160px', margin: '0 auto', padding: '28px 24px 80px', position: 'relative', zIndex: 1, color: 'var(--primary)' }}>
       <HalftoneBackground interactive={false} showHero={false} />
 
       {/* Navigation Breadcrumb */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '18px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        style={{ marginBottom: '18px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
@@ -206,26 +206,26 @@ export const ProjectDetailPage: React.FC = () => {
       </button>
 
       {/* Header Banner */}
-      <SpotlightCard style={{ marginBottom: '24px' }}>
-        <div style={{ padding: '22px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <SpotlightCard style={{ marginBottom: '22px' }}>
+        <div style={{ padding: '22px 26px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: 650, color: 'var(--primary)' }}>{name}</h1>
+              <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>{name}</h1>
               <span className={`badge ${isVerified ? 'badge-verified' : 'badge-pending'}`}>
                 <span className={`dot ${isVerified ? 'dot-green' : 'dot-amber'}`} />
                 {isVerified ? 'AST Authorized' : 'Pending Domain Auth'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)', flexWrap: 'wrap' }}>
-              <span style={{ color: 'var(--accent)' }}>{repoFull}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)', flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{repoFull}</span>
               <span>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <GitBranch size={11} /> {branch}
+                <GitBranch size={12} /> {branch}
               </span>
               <span>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Code size={11} /> {language}
+                <Code size={12} /> {language}
               </span>
             </div>
           </div>
@@ -234,7 +234,7 @@ export const ProjectDetailPage: React.FC = () => {
             <button
               className="btn btn-primary"
               onClick={() => setShowAddTarget(true)}
-              style={{ fontSize: '12px', padding: '7px 14px' }}
+              style={{ fontSize: '12px', padding: '8px 16px', gap: '6px' }}
             >
               <Plus size={13} /> Add Target Endpoint
             </button>
@@ -242,8 +242,8 @@ export const ProjectDetailPage: React.FC = () => {
         </div>
       </SpotlightCard>
 
-      {/* Tabs */}
-      <div style={{ marginBottom: '20px' }}>
+      {/* Tabs Switcher */}
+      <div style={{ marginBottom: '22px' }}>
         <AnimatedTabs
           tabs={[
             { id: 'details', label: 'Codebase Specs & Ingestion', icon: <Layers size={13} /> },
@@ -620,7 +620,7 @@ export const ProjectDetailPage: React.FC = () => {
       )}
 
       {activeTab === 'scanner' && (
-        <div className="anim-fade-up">
+        <div>
           <LiveScanSimulator projectName={name} />
         </div>
       )}
@@ -666,14 +666,16 @@ export const ProjectDetailPage: React.FC = () => {
 
       {deleteTargetRequest && (
         <ConfirmModal
+          onCancel={() => setDeleteTargetRequest(null)}
+          onConfirm={handleDeleteTarget}
           title="Remove target domain?"
-          message={`Are you sure you want to remove \"${deleteTargetRequest.domain}\" from this project?`}
+          message={`Are you sure you want to remove "${deleteTargetRequest.domain}" from this project?`}
           confirmText="Remove Target"
           danger
-          onConfirm={handleDeleteTarget}
-          onCancel={() => setDeleteTargetRequest(null)}
         />
       )}
     </div>
   );
 };
+
+export default ProjectDetailPage;

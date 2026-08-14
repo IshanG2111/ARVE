@@ -1,12 +1,17 @@
 import * as React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface HoverExpandItem {
   id?: string;
   label: string;
   sublabel?: string;
+  icon?: React.ReactNode;
+  statusBadge?: React.ReactNode;
+  commitHash?: string;
+  timestamp?: string;
+  statValue?: string;
   image?: string;
   imageAlt?: string;
   description?: string;
@@ -19,32 +24,45 @@ export interface HoverExpandProps {
   expandedHeight?: number;
   className?: string;
   defaultExpandedIndex?: number | null;
+  activeIndex?: number | null;
+  onActiveChange?: (index: number | null) => void;
 }
 
 export function HoverExpand({
   items,
-  collapsedHeight = 64,
-  expandedHeight = 220,
+  collapsedHeight = 58,
+  expandedHeight = 320,
   className,
-  defaultExpandedIndex = 1,
+  defaultExpandedIndex = 0,
+  activeIndex: controlledActiveIndex,
+  onActiveChange,
 }: HoverExpandProps) {
-  const [activeIndex, setActiveIndex] = React.useState<number | null>(
-    defaultExpandedIndex ?? null,
+  const [internalActiveIndex, setInternalActiveIndex] = React.useState<number | null>(
+    defaultExpandedIndex ?? 0,
   );
   const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
+
+  const activeIndex = controlledActiveIndex !== undefined ? controlledActiveIndex : internalActiveIndex;
+
+  const handleToggle = (i: number) => {
+    const next = activeIndex === i ? null : i;
+    if (onActiveChange) {
+      onActiveChange(next);
+    } else {
+      setInternalActiveIndex(next);
+    }
+  };
 
   const hasContentMode = items.some((item) => !!item.content);
 
   return (
     <div
-      className={cn("w-full overflow-hidden", className)}
+      className={cn("w-full overflow-hidden flex flex-col", className)}
       style={{
         borderRadius: 'var(--radius-lg, 16px)',
         border: '1px solid var(--border)',
         background: 'var(--surface)',
         boxShadow: 'var(--shadow-subtle)',
-        display: 'flex',
-        flexDirection: 'column',
       }}
     >
       {items.map((item, i) => {
@@ -52,7 +70,6 @@ export function HoverExpand({
           ? activeIndex === i
           : hoveredIndex === i || activeIndex === i;
         const isHovered = hoveredIndex === i;
-        const isOtherHovered = hoveredIndex !== null && !isHovered && !isExpanded;
 
         return (
           <React.Fragment key={item.id ?? i}>
@@ -61,13 +78,13 @@ export function HoverExpand({
                 style={{
                   width: '100%',
                   background: isExpanded ? 'var(--elevated)' : 'transparent',
-                  transition: 'background 200ms ease',
+                  transition: 'background 220ms ease',
                 }}
               >
                 {/* Header Clickable Row */}
                 <button
                   type="button"
-                  onClick={() => setActiveIndex(isExpanded ? null : i)}
+                  onClick={() => handleToggle(i)}
                   onMouseEnter={() => setHoveredIndex(i)}
                   onMouseLeave={() => setHoveredIndex(null)}
                   style={{
@@ -76,7 +93,7 @@ export function HoverExpand({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '16px 24px',
+                    padding: '14px 24px',
                     cursor: 'pointer',
                     background: isHovered && !isExpanded ? 'var(--elevated)' : 'transparent',
                     border: 'none',
@@ -85,80 +102,124 @@ export function HoverExpand({
                     transition: 'background 160ms ease',
                   }}
                 >
+                  {/* Left: Number + Icon + Title */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0, flex: 1 }}>
                     <span
                       style={{
-                        fontSize: '13px',
+                        fontSize: '12px',
                         fontFamily: 'var(--font-code)',
                         fontWeight: 650,
                         color: isExpanded ? 'var(--accent)' : 'var(--muted)',
+                        opacity: isExpanded ? 1 : 0.7,
                         flexShrink: 0,
+                        letterSpacing: '0.04em',
                       }}
                     >
                       {String(i + 1).padStart(2, "0")}
                     </span>
 
+                    {item.icon && (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: isExpanded ? 'rgba(201, 154, 82, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                          border: isExpanded ? '1px solid var(--accent)' : '1px solid var(--border)',
+                          color: isExpanded ? 'var(--accent)' : 'var(--muted)',
+                          flexShrink: 0,
+                          transition: 'all 200ms ease',
+                        }}
+                      >
+                        {item.icon}
+                      </span>
+                    )}
+
                     <span
                       style={{
-                        fontSize: '15.5px',
-                        fontWeight: 650,
-                        color: 'var(--primary)',
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-code)',
+                        color: isExpanded ? 'var(--primary)' : 'var(--primary)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.07em',
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        letterSpacing: '-0.01em',
                       }}
                     >
                       {item.label}
                     </span>
-
-                    {item.description && (
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          color: 'var(--muted)',
-                          fontFamily: 'var(--font-code)',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          opacity: 0.8,
-                          marginLeft: '4px',
-                        }}
-                        className="hidden md:inline"
-                      >
-                        — {item.description}
-                      </span>
-                    )}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0, marginLeft: '12px' }}>
-                    {item.sublabel && (
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontFamily: 'var(--font-code)',
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          color: isExpanded ? 'var(--accent)' : 'var(--muted)',
-                        }}
-                      >
-                        {item.sublabel}
-                      </span>
+                  {/* Right: Badges / Hash / Timestamp / StatValue / Chevron */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexShrink: 0, marginLeft: '16px' }}>
+                    {isExpanded ? (
+                      <>
+                        {item.statusBadge}
+                        {item.commitHash && (
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              fontFamily: 'var(--font-code)',
+                              color: 'var(--muted)',
+                              opacity: 0.85,
+                            }}
+                            className="hidden sm:inline"
+                          >
+                            {item.commitHash}
+                          </span>
+                        )}
+                        {item.timestamp && (
+                          <span
+                            style={{
+                              fontSize: '12px',
+                              fontFamily: 'var(--font-code)',
+                              color: 'var(--muted)',
+                              opacity: 0.7,
+                            }}
+                            className="hidden md:inline"
+                          >
+                            {item.timestamp}
+                          </span>
+                        )}
+                        <motion.div
+                          animate={{ rotate: 180 }}
+                          transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'var(--accent)',
+                          }}
+                        >
+                          <ChevronDown size={16} />
+                        </motion.div>
+                      </>
+                    ) : (
+                      <>
+                        {item.statValue && (
+                          <span
+                            style={{
+                              fontSize: '11.5px',
+                              fontFamily: 'var(--font-code)',
+                              fontWeight: 600,
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.05em',
+                              color: 'var(--muted)',
+                            }}
+                          >
+                            {item.statValue}
+                          </span>
+                        )}
+                        <span style={{ color: 'var(--muted)', opacity: 0.6, display: 'flex', alignItems: 'center' }}>
+                          <ChevronRight size={15} />
+                        </span>
+                      </>
                     )}
-
-                    <motion.div
-                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                      transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: isExpanded ? 'var(--accent)' : 'var(--muted)',
-                      }}
-                    >
-                      <ChevronDown size={17} />
-                    </motion.div>
                   </div>
                 </button>
 
@@ -198,7 +259,7 @@ export function HoverExpand({
                 }}
                 animate={{
                   height: isExpanded ? expandedHeight : collapsedHeight,
-                  opacity: isOtherHovered ? 0.45 : 1,
+                  opacity: hoveredIndex !== null && !isHovered ? 0.45 : 1,
                 }}
                 transition={{
                   height: {
@@ -211,7 +272,7 @@ export function HoverExpand({
                 }}
                 onHoverStart={() => setHoveredIndex(i)}
                 onHoverEnd={() => setHoveredIndex(null)}
-                onClick={() => setActiveIndex(activeIndex === i ? null : i)}
+                onClick={() => handleToggle(i)}
               >
                 {item.image && (
                   <motion.div
@@ -264,22 +325,6 @@ export function HoverExpand({
                       >
                         {item.label}
                       </span>
-
-                      {item.description && (
-                        <span
-                          style={{
-                            fontSize: '12px',
-                            color: isExpanded ? 'rgba(255,255,255,0.75)' : 'var(--muted)',
-                            fontFamily: 'var(--font-code)',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          className="hidden sm:inline"
-                        >
-                          — {item.description}
-                        </span>
-                      )}
                     </div>
 
                     {item.sublabel && (
