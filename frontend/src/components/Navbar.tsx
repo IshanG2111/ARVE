@@ -5,6 +5,8 @@ import { useProjects } from '../hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatedThemeToggler } from '@/registry/magicui/animated-theme-toggler';
 import { GitHubIcon } from './GitHubIcon';
+import { ProjectWizardModal } from './ProjectWizardModal';
+import { useToast } from './ui/ToastProvider';
 import {
   LogOut,
   ChevronDown,
@@ -24,16 +26,26 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const { logout } = useAuth();
   const { data: projects = [] } = useProjects();
 
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
   
   const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
   const currentRepoParam = searchParams.get('repo') || pathProjectId;
   const activeProject = projects.find(p => p.id === currentRepoParam) || projects[0];
   const activeRepoName = activeProject?.repo_name || activeProject?.name || 'IshanG2111 / ARVE-Engine';
   const activeBranch = activeProject?.default_branch || 'main';
+
+  const handleOpenConnect = () => {
+    if (onOpenConnectModal) {
+      onOpenConnectModal();
+    } else {
+      setShowConnectModal(true);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -213,8 +225,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
                     <button
                       onClick={() => {
                         setRepoDropdownOpen(false);
-                        if (onOpenConnectModal) onOpenConnectModal();
-                        else navigate('/dashboard');
+                        handleOpenConnect();
                       }}
                       style={{
                         width: '100%',
@@ -317,10 +328,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
           {/* Connect Repository Primary Button */}
           {user && (
             <button
-              onClick={() => {
-                if (onOpenConnectModal) onOpenConnectModal();
-                else navigate('/dashboard');
-              }}
+              onClick={handleOpenConnect}
               className="btn btn-primary"
               style={{
                 padding: '6px 14px',
@@ -352,6 +360,19 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
           )}
         </div>
       </div>
+
+      {/* Global Project Wizard Modal */}
+      {showConnectModal && (
+        <ProjectWizardModal
+          onClose={() => setShowConnectModal(false)}
+          onCreated={() => {
+            setShowConnectModal(false);
+            queryClient.invalidateQueries({ queryKey: ['projects'] });
+            toast.success('Repository workspace connected successfully.');
+            navigate('/dashboard');
+          }}
+        />
+      )}
     </header>
   );
 };

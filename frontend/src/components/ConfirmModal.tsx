@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -30,7 +31,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onCancel, busy]);
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}>
       <div className="modal anim-fade-up" style={{ maxWidth: '440px' }} role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
         <div className="modal-header">
@@ -75,6 +76,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

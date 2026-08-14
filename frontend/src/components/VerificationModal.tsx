@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ShieldCheck, AlertCircle, RefreshCw, Globe, Copy, Check } from 'lucide-react';
 import { api, type TargetWebsite, type VerificationResult } from '../services/api';
 import { CodeBlock } from './ui/code-block';
@@ -61,7 +62,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal anim-fade-up" style={{ maxWidth: '560px' }}>
         {/* Header */}
@@ -202,6 +203,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

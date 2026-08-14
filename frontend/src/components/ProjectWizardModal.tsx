@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useGitHubRepos, useBranchesByName } from '../hooks/useRepositories';
 import { useCreateProject } from '../hooks/useProjects';
 import type { GitHubRepo } from '../types';
@@ -130,7 +131,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
     );
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay" data-lenis-prevent="true" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal anim-fade-up" data-lenis-prevent="true">
         {/* Header */}
@@ -387,6 +388,7 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
           onCancel={() => setPendingPrivateRepo(null)}
         />
       )}
-    </div>
+    </div>,
+    document.body
   );
 };

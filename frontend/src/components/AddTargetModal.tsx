@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Globe, AlertCircle } from 'lucide-react';
 import { api, type TargetWebsite } from '../services/api';
 
@@ -43,7 +44,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
     }
   };
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal anim-fade-up" style={{ maxWidth: '480px' }}>
         <div className="modal-header">
@@ -97,6 +98,7 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
