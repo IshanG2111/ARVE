@@ -132,17 +132,43 @@
   --terminal-text:    #F4EFE6;
 }
 
-/* ── Smooth Global Theme Transitions ─────────────────────────────────────── */
+/* ── Smooth Global Theme Transitions & View Transitions ─────────────────── */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 360ms;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::view-transition-old(root) {
+  animation: 360ms cubic-bezier(0.16, 1, 0.3, 1) both fadeOutTheme;
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  animation: 360ms cubic-bezier(0.16, 1, 0.3, 1) both fadeInTheme;
+  z-index: 9999;
+}
+
+@keyframes fadeOutTheme {
+  from { opacity: 1; filter: brightness(1); }
+  to { opacity: 0; filter: brightness(0.96); }
+}
+
+@keyframes fadeInTheme {
+  from { opacity: 0; filter: brightness(1.04); }
+  to { opacity: 1; filter: brightness(1); }
+}
+
 html.theme-transition,
 html.theme-transition *,
 html.theme-transition *::before,
 html.theme-transition *::after {
-  transition: background-color 320ms var(--ease-smooth),
-              border-color 320ms var(--ease-smooth),
-              color 320ms var(--ease-smooth),
-              box-shadow 320ms var(--ease-smooth),
-              fill 320ms var(--ease-smooth),
-              stroke 320ms var(--ease-smooth) !important;
+  transition: background-color 340ms var(--ease-smooth),
+              border-color 340ms var(--ease-smooth),
+              color 340ms var(--ease-smooth),
+              box-shadow 340ms var(--ease-smooth),
+              fill 340ms var(--ease-smooth),
+              stroke 340ms var(--ease-smooth) !important;
 }
 
 /* ── Reset & Base ───────────────────────────────────────────────────────── */

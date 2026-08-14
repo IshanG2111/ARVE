@@ -11,6 +11,21 @@ export interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
+function applyThemeDirect(t: Theme) {
+  if (typeof window === 'undefined') return;
+  const root = window.document.documentElement;
+  root.classList.add('theme-transition');
+  if (t === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+  localStorage.setItem('theme', t);
+  setTimeout(() => {
+    root.classList.remove('theme-transition');
+  }, 380);
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
@@ -23,43 +38,57 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const transitionTimerRef = useRef<number | null>(null);
 
-  const applyTheme = (t: Theme, withTransition: boolean = false) => {
-    if (typeof document !== 'undefined') {
-      if (withTransition) {
-        document.documentElement.classList.add('theme-transition');
-        if (transitionTimerRef.current) {
-          window.clearTimeout(transitionTimerRef.current);
-        }
-        transitionTimerRef.current = window.setTimeout(() => {
-          document.documentElement.classList.remove('theme-transition');
-          transitionTimerRef.current = null;
-        }, 340);
-      }
+  const applyThemeDOM = (t: Theme, withTransition: boolean = false) => {
+    if (typeof window === 'undefined') return;
+    const root = window.document.documentElement;
 
-      if (t === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
+    if (withTransition) {
+      root.classList.add('theme-transition');
+      if (transitionTimerRef.current) {
+        window.clearTimeout(transitionTimerRef.current);
       }
-      localStorage.setItem('theme', t);
+      transitionTimerRef.current = window.setTimeout(() => {
+        root.classList.remove('theme-transition');
+        transitionTimerRef.current = null;
+      }, 380);
     }
+
+    if (t === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', t);
   };
 
   useEffect(() => {
-    applyTheme(theme, false);
+    applyThemeDOM(theme, false);
   }, [theme]);
 
   const toggleTheme = () => {
-    setThemeState((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark';
-      applyTheme(next, true);
-      return next;
-    });
+    const next = theme === 'dark' ? 'light' : 'dark';
+
+    if (typeof window !== 'undefined' && 'startViewTransition' in window.document) {
+      (window.document as any).startViewTransition(() => {
+        setThemeState(next);
+        applyThemeDOM(next, true);
+      });
+    } else {
+      setThemeState(next);
+      applyThemeDOM(next, true);
+    }
   };
 
   const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-    applyTheme(newTheme, true);
+    if (typeof window !== 'undefined' && 'startViewTransition' in window.document) {
+      (window.document as any).startViewTransition(() => {
+        setThemeState(newTheme);
+        applyThemeDOM(newTheme, true);
+      });
+    } else {
+      setThemeState(newTheme);
+      applyThemeDOM(newTheme, true);
+    }
   };
 
   const isDark = theme === 'dark';
@@ -74,38 +103,32 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
-    const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+    const isDark = typeof window !== 'undefined' && window.document.documentElement.classList.contains('dark');
     return {
       theme: (isDark ? 'dark' : 'light') as Theme,
       isDark,
       toggleTheme: () => {
-        if (typeof document !== 'undefined') {
-          const next = !document.documentElement.classList.contains('dark');
-          document.documentElement.classList.add('theme-transition');
-          if (next) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
+        if (typeof window !== 'undefined') {
+          const next = !window.document.documentElement.classList.contains('dark');
+          const nextTheme: Theme = next ? 'dark' : 'light';
+          if ('startViewTransition' in window.document) {
+            (window.document as any).startViewTransition(() => {
+              applyThemeDirect(nextTheme);
+            });
           } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
+            applyThemeDirect(nextTheme);
           }
-          setTimeout(() => {
-            document.documentElement.classList.remove('theme-transition');
-          }, 340);
         }
       },
       setTheme: (t: Theme) => {
-        if (typeof document !== 'undefined') {
-          document.documentElement.classList.add('theme-transition');
-          if (t === 'dark') {
-            document.documentElement.classList.add('dark');
+        if (typeof window !== 'undefined') {
+          if ('startViewTransition' in window.document) {
+            (window.document as any).startViewTransition(() => {
+              applyThemeDirect(t);
+            });
           } else {
-            document.documentElement.classList.remove('dark');
+            applyThemeDirect(t);
           }
-          localStorage.setItem('theme', t);
-          setTimeout(() => {
-            document.documentElement.classList.remove('theme-transition');
-          }, 340);
         }
       },
     };

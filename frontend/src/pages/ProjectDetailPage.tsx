@@ -10,6 +10,7 @@ import { AddTargetModal } from '../components/AddTargetModal';
 import { VerificationModal } from '../components/VerificationModal';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { AnimatedTabs } from '../components/ui/AnimatedTabs';
+import { FileTree, buildFileTree } from '../components/ui/file-tree';
 import { useToast } from '../components/ui/ToastProvider';
 import { api, type TargetWebsite } from '../services/api';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -48,6 +49,7 @@ export const ProjectDetailPage: React.FC = () => {
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [triggeringIngest, setTriggeringIngest] = useState(false);
   const [deleteTargetRequest, setDeleteTargetRequest] = useState<{ id: string; domain: string } | null>(null);
+  const [manifestView, setManifestView] = useState<'tree' | 'table'>('tree');
 
   const projectId = project?.id;
 
@@ -418,14 +420,71 @@ export const ProjectDetailPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* File Manifest */}
+                      {/* File Manifest / File Tree */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                          File Manifest Analysis ({runFiles.length} files)
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
+                            Repository File Manifest ({runFiles.length} files)
+                          </div>
+                          {runFiles.length > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                              <button
+                                type="button"
+                                onClick={() => setManifestView('tree')}
+                                style={{
+                                  padding: '2px 8px',
+                                  fontSize: '10.5px',
+                                  fontFamily: 'var(--font-code)',
+                                  borderRadius: 'var(--radius-xs)',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  background: manifestView === 'tree' ? 'var(--surface)' : 'transparent',
+                                  color: manifestView === 'tree' ? 'var(--primary)' : 'var(--muted)',
+                                  boxShadow: manifestView === 'tree' ? 'var(--shadow-subtle)' : 'none',
+                                  fontWeight: manifestView === 'tree' ? 600 : 400,
+                                }}
+                              >
+                                Tree View
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setManifestView('table')}
+                                style={{
+                                  padding: '2px 8px',
+                                  fontSize: '10.5px',
+                                  fontFamily: 'var(--font-code)',
+                                  borderRadius: 'var(--radius-xs)',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  background: manifestView === 'table' ? 'var(--surface)' : 'transparent',
+                                  color: manifestView === 'table' ? 'var(--primary)' : 'var(--muted)',
+                                  boxShadow: manifestView === 'table' ? 'var(--shadow-subtle)' : 'none',
+                                  fontWeight: manifestView === 'table' ? 600 : 400,
+                                }}
+                              >
+                                List View
+                              </button>
+                            </div>
+                          )}
                         </div>
 
                         {runFiles.length === 0 ? (
                           <p style={{ color: 'var(--muted)', fontSize: '12px' }}>No files indexed in this run.</p>
+                        ) : manifestView === 'tree' ? (
+                          <div
+                            data-lenis-prevent="true"
+                            style={{
+                              maxHeight: '340px',
+                              overflowY: 'auto',
+                              overscrollBehavior: 'contain',
+                              touchAction: 'pan-y',
+                            }}
+                          >
+                            <FileTree
+                              elements={buildFileTree(runFiles)}
+                              highlightColor="var(--accent)"
+                            />
+                          </div>
                         ) : (
                           <div
                             data-lenis-prevent="true"
