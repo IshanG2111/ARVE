@@ -256,66 +256,75 @@ export const ProjectDetailPage: React.FC = () => {
       </div>
 
       {activeTab === 'details' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
-          {/* Metadata Card */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Repository Specs & Infrastructure Card */}
           <SpotlightCard>
-            <div style={{ padding: '22px 24px' }}>
-              <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '16px' }}>
-                Repository Specs & Infrastructure
+            <div style={{ padding: '22px 26px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  REPOSITORY SPECS & INFRASTRUCTURE
+                </div>
+                {repoUrl && (
+                  <a
+                    href={repoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: '11.5px', color: 'var(--accent)', fontFamily: 'var(--font-code)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    {repoFull} <ExternalLink size={12} />
+                  </a>
+                )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>GitHub Repository</span>
-                  {repoUrl ? (
-                    <a
-                      href={repoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: 'var(--accent)', fontFamily: 'var(--font-code)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      {repoFull} <ExternalLink size={11} />
-                    </a>
-                  ) : (
-                    <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{repoFull}</span>
-                  )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>GitHub Repository</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                    {repoFull}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>Active Branch</span>
-                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{branch}</span>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Active Branch</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {branch}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>Language Runtime</span>
-                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{language}</span>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Language Runtime</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {language}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>Detected Frameworks</span>
-                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{project.repository?.frameworks || 'Standard Runtime'}</span>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Detected Frameworks</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {project.repository?.frameworks || 'Standard Runtime'}
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>Package Manager</span>
-                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)', textTransform: 'uppercase' }}>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Package Manager</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)', textTransform: 'uppercase' }}>
                     {project.repository?.package_manager || 'None'}
-                  </span>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', fontSize: '12.5px' }}>
-                  <span style={{ color: 'var(--muted)' }}>Created Date</span>
-                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Indexed Since</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
                     {new Date(project.created_at).toLocaleDateString('en-US', {
                       month: 'short', day: 'numeric', year: 'numeric'
                     })}
-                  </span>
+                  </div>
                 </div>
               </div>
             </div>
           </SpotlightCard>
 
-          {/* Repository Ingestion Card */}
+          {/* Repository Ingestion & AST File Explorer Card */}
           <SpotlightCard>
             <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
               {/* Header Bar: Title, Run Switcher, and Ingest Action */}
@@ -324,7 +333,7 @@ export const ProjectDetailPage: React.FC = () => {
                   <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
                     REPOSITORY CODEBASE INGESTION & AST INDEX
                   </div>
-                  <div style={{ fontSize: '15px', fontWeight: 650, color: 'var(--primary)', marginTop: '2px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--primary)', marginTop: '2px' }}>
                     Deterministic AST File Explorer
                   </div>
                 </div>
@@ -428,7 +437,7 @@ export const ProjectDetailPage: React.FC = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
                   {/* Top Metric Summary across full width */}
                   {selectedRun && (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
                       <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
                         <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
                           {selectedRun.files_found}
@@ -474,7 +483,7 @@ export const ProjectDetailPage: React.FC = () => {
                       <FileTree
                         elements={buildFileTree(runFiles)}
                         highlightColor="var(--accent)"
-                        title={`Repository File Tree (${runFiles.length} files)`}
+                        defaultOpenIds={['src', 'app', 'components', 'lib', 'public']}
                       />
                     </div>
                   ) : (
@@ -527,14 +536,14 @@ export const ProjectDetailPage: React.FC = () => {
 
           {/* Configured Endpoints Card */}
           <SpotlightCard>
-            <div style={{ padding: '22px 24px' }}>
+            <div style={{ padding: '22px 26px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
                   Configured Target Endpoints ({targets.length})
                 </div>
                 <button
                   className="btn btn-secondary"
-                  style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                  style={{ fontSize: '11.5px', padding: '4px 12px' }}
                   onClick={() => setShowAddTarget(true)}
                 >
                   <Plus size={12} /> Add Target
@@ -542,8 +551,8 @@ export const ProjectDetailPage: React.FC = () => {
               </div>
 
               {targets.length === 0 ? (
-                <div style={{ padding: '16px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12px' }}>No target endpoints configured. Add a website URL to prove domain authorization.</p>
+                <div style={{ padding: '20px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No target endpoints configured. Add a website URL to prove domain authorization.</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -554,7 +563,7 @@ export const ProjectDetailPage: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        padding: '10px 14px',
+                        padding: '12px 16px',
                         background: 'var(--elevated)',
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
@@ -562,18 +571,18 @@ export const ProjectDetailPage: React.FC = () => {
                         flexWrap: 'wrap',
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Globe size={14} color="var(--info)" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Globe size={16} color="var(--info)" />
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: 550, color: 'var(--primary)' }}>{t.domain}</div>
-                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>{t.domain}</div>
+                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                             <span>Token: {t.verification_token.substring(0, 22)}…</span>
                             <button
                               onClick={() => copyToken(t.verification_token, t.id)}
                               style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px', display: 'flex' }}
                               title="Copy token"
                             >
-                              {copiedTokenId === t.id ? <Check size={11} color="var(--success)" /> : <Copy size={11} />}
+                              {copiedTokenId === t.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
                             </button>
                           </div>
                         </div>
