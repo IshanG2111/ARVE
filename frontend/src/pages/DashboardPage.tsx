@@ -22,6 +22,7 @@ import {
   Activity,
   Crosshair,
   CheckCircle2,
+  Trash2,
 } from 'lucide-react';
 import type { Project } from '@/types';
 
@@ -186,6 +187,23 @@ export const DashboardPage: React.FC = () => {
           {/* Quick Actions for this repository */}
           {currentProject && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDeleteProjectRequest({ id: currentProject.id, name: projectDisplayName(currentProject) })}
+                style={{
+                  padding: '7px 12px',
+                  fontSize: '12px',
+                  gap: '6px',
+                  color: 'var(--critical)',
+                  borderColor: 'var(--critical-border)',
+                }}
+                id="dashboard-delete-repo-btn"
+                title="Delete this repository workspace"
+              >
+                <Trash2 size={13} />
+                Delete Repo
+              </button>
+
               <button
                 className="btn btn-secondary"
                 onClick={() => setAddTargetProjectId({ id: currentProject.id, name: projectDisplayName(currentProject) })}

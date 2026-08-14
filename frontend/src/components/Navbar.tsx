@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useProjects } from '../hooks/useProjects';
+import { useProjects, useDeleteProject } from '../hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatedThemeToggler } from '@/registry/magicui/animated-theme-toggler';
 import { GitHubIcon } from './GitHubIcon';
 import { ProjectWizardModal } from './ProjectWizardModal';
+import { ConfirmModal } from './ConfirmModal';
 import { useToast } from './ui/ToastProvider';
 import {
   LogOut,
@@ -13,6 +14,7 @@ import {
   Plus,
   GitBranch,
   Check,
+  Trash2,
 } from 'lucide-react';
 import type { User } from '@/types';
 
@@ -29,9 +31,11 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
   const toast = useToast();
   const { logout } = useAuth();
   const { data: projects = [] } = useProjects();
+  const deleteProject = useDeleteProject();
 
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [deleteProjectRequest, setDeleteProjectRequest] = useState<{ id: string; name: string } | null>(null);
   
   const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
   const currentRepoParam = searchParams.get('repo') || pathProjectId;
@@ -186,33 +190,73 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
                     projects.map((p) => {
                       const isSelected = p.id === activeProject?.id;
                       return (
-                        <button
+                        <div
                           key={p.id}
-                          onClick={() => {
-                            setRepoDropdownOpen(false);
-                            navigate(`/dashboard?repo=${p.id}`);
-                          }}
                           style={{
-                            width: '100%',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            padding: '8px 10px',
                             borderRadius: 'var(--radius-sm)',
                             background: isSelected ? 'var(--elevated)' : 'transparent',
-                            border: 'none',
-                            color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            textAlign: 'left',
+                            paddingRight: '4px',
+                            gap: '4px',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <GitBranch size={13} color="var(--accent)" />
-                            <span style={{ fontWeight: isSelected ? 600 : 400 }}>{p.name || p.repo_name}</span>
-                          </div>
-                          {isSelected && <Check size={13} color="var(--accent)" />}
-                        </button>
+                          <button
+                            onClick={() => {
+                              setRepoDropdownOpen(false);
+                              navigate(`/dashboard?repo=${p.id}`);
+                            }}
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 10px',
+                              background: 'transparent',
+                              border: 'none',
+                              color: isSelected ? 'var(--primary)' : 'var(--text-secondary)',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              minWidth: 0,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <GitBranch size={13} color="var(--accent)" style={{ flexShrink: 0 }} />
+                              <span style={{ fontWeight: isSelected ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {p.name || p.repo_name}
+                              </span>
+                            </div>
+                            {isSelected && <Check size={13} color="var(--accent)" style={{ flexShrink: 0, marginLeft: '6px' }} />}
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRepoDropdownOpen(false);
+                              setDeleteProjectRequest({ id: p.id, name: p.name || p.repo_name || 'Repository' });
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              color: 'var(--muted)',
+                              padding: '6px',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              transition: 'color 160ms ease',
+                            }}
+                            title={`Delete ${p.name || p.repo_name}`}
+                            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--critical)')}
+                            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--muted)')}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
                       );
                     })
                   ) : (
@@ -371,6 +415,31 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
             toast.success('Repository workspace connected successfully.');
             navigate('/dashboard');
           }}
+        />
+      )}
+
+      {/* Delete Workspace Confirmation Modal */}
+      {deleteProjectRequest && (
+        <ConfirmModal
+          onCancel={() => setDeleteProjectRequest(null)}
+          onConfirm={() => {
+            deleteProject.mutate(deleteProjectRequest.id, {
+              onSuccess: () => {
+                toast.success(`Repository "${deleteProjectRequest.name}" removed.`);
+                setDeleteProjectRequest(null);
+                queryClient.invalidateQueries({ queryKey: ['projects'] });
+                navigate('/dashboard');
+              },
+              onError: (err) => {
+                toast.error(err instanceof Error ? err.message : 'Failed to delete repository');
+              },
+            });
+          }}
+          title="Disconnect repository workspace?"
+          message={`Are you sure you want to remove "${deleteProjectRequest.name}"? Its target domain mappings and AST index history will also be removed.`}
+          confirmText="Disconnect"
+          danger
+          busy={deleteProject.isPending}
         />
       )}
     </header>

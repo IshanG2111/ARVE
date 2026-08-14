@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useProject } from '../hooks/useProjects';
+import { useProject, useDeleteProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
 import { ARVELoader } from '../components/ui/ARVELoader';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
@@ -35,12 +35,14 @@ export const ProjectDetailPage: React.FC = () => {
   const toast = useToast();
 
   const { data: project, isLoading, error, refetch } = useProject(id ?? '');
+  const deleteProject = useDeleteProject();
 
   const [activeTab, setActiveTab] = useState<'details' | 'scanner'>('details');
   const [showAddTarget, setShowAddTarget] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
   const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
   const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
+  const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
 
   // Ingestion history states
   const [runs, setRuns] = useState<any[]>([]);
@@ -230,7 +232,23 @@ export const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowDeleteProjectModal(true)}
+              style={{
+                fontSize: '12px',
+                padding: '8px 14px',
+                gap: '6px',
+                color: 'var(--critical)',
+                borderColor: 'var(--critical-border)',
+              }}
+              id="detail-delete-repo-btn"
+              title="Delete this repository workspace"
+            >
+              <Trash2 size={13} /> Delete Repo
+            </button>
+
             <button
               className="btn btn-primary"
               onClick={() => setShowAddTarget(true)}
@@ -672,6 +690,29 @@ export const ProjectDetailPage: React.FC = () => {
           message={`Are you sure you want to remove "${deleteTargetRequest.domain}" from this project?`}
           confirmText="Remove Target"
           danger
+        />
+      )}
+
+      {showDeleteProjectModal && (
+        <ConfirmModal
+          onCancel={() => setShowDeleteProjectModal(false)}
+          onConfirm={() => {
+            if (!projectId) return;
+            deleteProject.mutate(projectId, {
+              onSuccess: () => {
+                toast.success(`Repository "${name}" deleted.`);
+                navigate('/dashboard');
+              },
+              onError: (err) => {
+                toast.error(err instanceof Error ? err.message : 'Failed to delete repository');
+              },
+            });
+          }}
+          title="Delete repository workspace?"
+          message={`Are you sure you want to delete "${name}"? All associated target domains, AST index snapshots, and security scan telemetry will be permanently removed.`}
+          confirmText="Delete Repository"
+          danger
+          busy={deleteProject.isPending}
         />
       )}
     </div>
