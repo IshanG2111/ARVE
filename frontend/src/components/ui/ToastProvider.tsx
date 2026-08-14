@@ -28,7 +28,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const toast = useCallback((message: string, type: ToastType = 'info') => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => removeToast(id), 3600);
+    setTimeout(() => removeToast(id), 3200);
   }, [removeToast]);
 
   const success = useCallback((msg: string) => toast(msg, 'success'), [toast]);
@@ -46,7 +46,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           zIndex: 9999,
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px',
+          gap: '8px',
           maxWidth: '380px',
           pointerEvents: 'none',
         }}
@@ -59,26 +59,24 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               pointerEvents: 'auto',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
-              padding: '12px 16px',
-              borderRadius: '8px',
-              background: 'rgba(13, 16, 24, 0.95)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
+              gap: '10px',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--surface)',
               border: t.type === 'success'
-                ? '1px solid rgba(81, 207, 102, 0.3)'
+                ? '1px solid var(--success-border)'
                 : t.type === 'error'
-                ? '1px solid rgba(255, 107, 107, 0.3)'
+                ? '1px solid var(--critical-border)'
                 : '1px solid var(--border-strong)',
-              boxShadow: '0 12px 32px rgba(0, 0, 0, 0.5)',
+              boxShadow: 'var(--shadow-elevated)',
               color: 'var(--primary)',
-              fontSize: '13px',
+              fontSize: '12.5px',
               fontFamily: 'var(--font-ui)',
             }}
           >
-            {t.type === 'success' && <CheckCircle2 size={16} color="var(--success)" style={{ flexShrink: 0 }} />}
-            {t.type === 'error' && <AlertTriangle size={16} color="var(--critical)" style={{ flexShrink: 0 }} />}
-            {t.type === 'info' && <Info size={16} color="var(--accent)" style={{ flexShrink: 0 }} />}
+            {t.type === 'success' && <CheckCircle2 size={15} color="var(--success)" style={{ flexShrink: 0 }} />}
+            {t.type === 'error' && <AlertTriangle size={15} color="var(--critical)" style={{ flexShrink: 0 }} />}
+            {t.type === 'info' && <Info size={15} color="var(--accent)" style={{ flexShrink: 0 }} />}
 
             <span style={{ flex: 1, lineHeight: 1.4 }}>{t.message}</span>
 
@@ -94,7 +92,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 alignItems: 'center',
               }}
             >
-              <X size={14} />
+              <X size={13} />
             </button>
           </div>
         ))}

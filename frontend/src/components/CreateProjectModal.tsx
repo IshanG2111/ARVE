@@ -99,7 +99,7 @@ export const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ onClose,
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Project'}
+              Create Project
             </button>
           </div>
         </form>

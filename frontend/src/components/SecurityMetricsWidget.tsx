@@ -1,6 +1,7 @@
 import React from 'react';
 import { SpotlightCard } from './ui/SpotlightCard';
-import { GitBranch, Globe, ShieldCheck } from 'lucide-react';
+import { CountUpNumber } from './ui/CountUpNumber';
+import { GitBranch, Globe, ShieldCheck, Cpu } from 'lucide-react';
 import type { Project } from '@/types';
 
 interface SecurityMetricsWidgetProps {
@@ -17,64 +18,180 @@ export const SecurityMetricsWidget: React.FC<SecurityMetricsWidgetProps> = ({ pr
   const authRate = totalTargets > 0 ? Math.round((verifiedTargets / totalTargets) * 100) : 0;
 
   return (
-    <div className="metrics-grid-container" style={{ marginBottom: '28px' }}>
+    <div style={{ marginBottom: '28px' }}>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '14px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: '12px',
         }}
       >
-        {/* Repositories */}
-        <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.06)">
+        {/* Connected Codebases */}
+        <SpotlightCard>
           <div style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-code)',
+                  color: 'var(--muted)',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                }}
+              >
                 Repositories
               </span>
-              <GitBranch size={15} color="var(--accent)" />
+              <div
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: 'var(--elevated)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--accent)',
+                }}
+              >
+                <GitBranch size={14} />
+              </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
-              {totalProjects}
+
+            <div style={{ fontSize: '26px', fontWeight: 650, fontFamily: 'var(--font-code)', color: 'var(--primary)', lineHeight: 1.1 }}>
+              <CountUpNumber value={totalProjects} />
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '2px' }}>
-              Connected codebase{totalProjects !== 1 ? 's' : ''}
+
+            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
+              Linked GitHub workspace{totalProjects !== 1 ? 's' : ''}
             </div>
           </div>
         </SpotlightCard>
 
         {/* Target Domains */}
-        <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.06)">
+        <SpotlightCard>
           <div style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Target Domains
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-code)',
+                  color: 'var(--muted)',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                }}
+              >
+                Target Endpoints
               </span>
-              <Globe size={15} color="var(--accent)" />
+              <div
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: 'var(--elevated)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--info)',
+                }}
+              >
+                <Globe size={14} />
+              </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
-              {totalTargets}
+
+            <div style={{ fontSize: '26px', fontWeight: 650, fontFamily: 'var(--font-code)', color: 'var(--primary)', lineHeight: 1.1 }}>
+              <CountUpNumber value={totalTargets} />
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '2px' }}>
+
+            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
               {verifiedTargets} authorized domain{verifiedTargets !== 1 ? 's' : ''}
             </div>
           </div>
         </SpotlightCard>
 
-        {/* Authorization Rate */}
-        <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.06)">
+        {/* Verification / Security Health */}
+        <SpotlightCard>
           <div style={{ padding: '18px 20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Authorized Rate
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-code)',
+                  color: 'var(--muted)',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                }}
+              >
+                Verification Health
               </span>
-              <ShieldCheck size={15} color={authRate === 100 && totalTargets > 0 ? 'var(--success)' : 'var(--muted)'} />
+              <div
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: 'var(--elevated)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: authRate === 100 && totalTargets > 0 ? 'var(--success)' : 'var(--warning)',
+                }}
+              >
+                <ShieldCheck size={14} />
+              </div>
             </div>
-            <div style={{ fontSize: '26px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
-              {authRate}%
+
+            <div style={{ fontSize: '26px', fontWeight: 650, fontFamily: 'var(--font-code)', color: 'var(--primary)', lineHeight: 1.1 }}>
+              <CountUpNumber value={authRate} suffix="%" />
             </div>
-            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '2px' }}>
-              {totalTargets === 0 ? 'No targets configured' : `${verifiedTargets} of ${totalTargets} endpoints verified`}
+
+            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
+              {totalTargets === 0 ? 'No targets configured' : `${verifiedTargets} of ${totalTargets} endpoints authorized`}
+            </div>
+          </div>
+        </SpotlightCard>
+
+        {/* AST Engine Telemetry Status */}
+        <SpotlightCard>
+          <div style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-code)',
+                  color: 'var(--muted)',
+                  letterSpacing: '0.04em',
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                }}
+              >
+                Engine Status
+              </span>
+              <div
+                style={{
+                  width: '26px',
+                  height: '26px',
+                  borderRadius: 'var(--radius-xs)',
+                  background: 'var(--elevated)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--success)',
+                }}
+              >
+                <Cpu size={14} />
+              </div>
+            </div>
+
+            <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px', minHeight: '29px' }}>
+              <span className="status-pulse">
+                <span className="pulse-dot" /> Operational
+              </span>
+            </div>
+
+            <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
+              OWASP & AST AST graph ready
             </div>
           </div>
         </SpotlightCard>

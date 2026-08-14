@@ -1,89 +1,49 @@
-import React, { useEffect, useState } from 'react';
-import { motion, type Variants } from 'framer-motion';
+import React from 'react';
+import { Loader } from './Loader';
 
-interface LoadingAnimationProps {
-  label?: string;
+export interface LoadingAnimationProps {
+  size?: number;
   fullScreen?: boolean;
+  text?: string;
+  className?: string;
 }
 
-const BOOT_MESSAGES = [
-  'Initializing…',
-  'Mapping AST graph…',
-  'Synthesizing…',
-];
-
-const dotVariants: Variants = {
-  animate: (i: number) => ({
-    opacity: [0.2, 0.8, 0.2],
-    scale: [0.8, 1.2, 0.8],
-    transition: {
-      duration: 1.8,
-      repeat: Infinity,
-      delay: i * 0.25,
-      ease: 'easeInOut',
-    },
-  }),
-};
-
 export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
-  label,
+  size = 64,
   fullScreen = false,
+  text,
+  className = '',
 }) => {
-  const [logIndex, setLogIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setLogIndex((prev) => (prev + 1) % BOOT_MESSAGES.length);
-    }, 2400);
-    return () => clearInterval(interval);
-  }, []);
-
-  const activeText = label || BOOT_MESSAGES[logIndex];
-
   return (
     <div
+      className={`universal-loading-animation ${className}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '20px',
-        padding: fullScreen ? '0' : '48px 24px',
+        gap: text ? '16px' : '0',
+        padding: fullScreen ? '0' : '40px 16px',
         minHeight: fullScreen ? '75vh' : 'auto',
         userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        {[0, 1, 2].map((i) => (
-          <motion.div
-            key={i}
-            custom={i}
-            animate="animate"
-            variants={dotVariants}
-            style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: 'var(--secondary)',
-            }}
-          />
-        ))}
-      </div>
-
-      <motion.span
-        key={activeText}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 0.6 }}
-        transition={{ duration: 0.4 }}
-        style={{
-          fontSize: '11px',
-          color: 'var(--muted)',
-          fontFamily: 'var(--font-code)',
-          letterSpacing: '0.06em',
-        }}
-      >
-        {activeText}
-      </motion.span>
+      <Loader size={size} />
+      {text && (
+        <p
+          style={{
+            fontSize: '13px',
+            fontFamily: 'var(--font-code, monospace)',
+            color: 'var(--text-muted, #888)',
+            letterSpacing: '0.05em',
+            margin: 0,
+          }}
+        >
+          {text}
+        </p>
+      )}
     </div>
   );
 };
+
+export default LoadingAnimation;

@@ -32,13 +32,30 @@ export function CodeBlock({ code, language, tabs }: CodeBlockProps) {
   };
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/50 dark:border-slate-800/80 dark:bg-slate-950/40 backdrop-blur-md transition-all duration-300">
-      
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        overflow: 'hidden',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--border)',
+        background: 'var(--terminal-bg)',
+        color: 'var(--terminal-text)',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-slate-200/60 px-4 py-2 dark:border-slate-800/60 bg-slate-100/30 dark:bg-slate-900/10">
-        
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid var(--border)',
+          padding: '6px 12px',
+          background: 'rgba(0, 0, 0, 0.15)',
+        }}
+      >
         {/* Tabs / Label */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', overflowX: 'auto' }}>
           {hasTabs ? (
             tabs.map((tab, idx) => {
               const isActive = idx === activeTabIdx;
@@ -49,40 +66,59 @@ export function CodeBlock({ code, language, tabs }: CodeBlockProps) {
                     setActiveTabIdx(idx);
                     setCopied(false);
                   }}
-                  className={`relative px-3 py-1.5 text-[11px] font-medium tracking-wide uppercase rounded-md transition-all duration-200 cursor-pointer ${
-                    isActive
-                      ? 'bg-white text-slate-900 shadow-sm border border-slate-200/50 dark:bg-slate-900 dark:text-slate-100 dark:border-slate-800/50'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200/30 dark:hover:bg-slate-800/20'
-                  }`}
+                  style={{
+                    padding: '3px 8px',
+                    fontSize: '11px',
+                    fontFamily: 'var(--font-code)',
+                    fontWeight: 500,
+                    borderRadius: 'var(--radius-xs)',
+                    border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
+                    background: isActive ? 'var(--elevated-2)' : 'transparent',
+                    color: isActive ? 'var(--primary)' : 'var(--muted)',
+                    cursor: 'pointer',
+                    transition: 'all 160ms ease',
+                  }}
                 >
                   {tab.label}
                 </button>
               );
             })
           ) : (
-            <span className="text-[10px] font-mono font-medium tracking-wider uppercase text-slate-400 dark:text-slate-500">
+            <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
               {currentLanguage || 'code'}
             </span>
           )}
         </div>
 
-        {/* Actions */}
+        {/* Copy action */}
         <button
           onClick={handleCopy}
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200/60 bg-white/50 text-slate-500 hover:text-slate-800 dark:border-slate-800/60 dark:bg-slate-950/40 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-900/80 transition-all duration-200 cursor-pointer"
+          style={{
+            display: 'flex',
+            height: '24px',
+            width: '24px',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 'var(--radius-xs)',
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            color: 'var(--muted)',
+            cursor: 'pointer',
+            padding: 0,
+          }}
           title="Copy code"
         >
           {copied ? (
-            <Check className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400 transition-transform duration-200 scale-110" />
+            <Check size={12} color="var(--success)" />
           ) : (
-            <Copy className="h-3.5 w-3.5 transition-transform duration-200 hover:scale-105" />
+            <Copy size={12} />
           )}
         </button>
       </div>
 
       {/* Code Display */}
-      <div className="relative max-h-[420px] overflow-y-auto p-4 text-[12.5px] font-mono leading-relaxed text-slate-800 dark:text-slate-200 bg-transparent overflow-x-auto">
-        <pre className="whitespace-pre select-all">{currentCode}</pre>
+      <div style={{ maxHeight: '360px', overflowY: 'auto', padding: '12px 16px', fontSize: '12px', fontFamily: 'var(--font-code)', lineHeight: 1.65, overflowX: 'auto' }}>
+        <pre style={{ margin: 0, whiteSpace: 'pre', userSelect: 'all' }}>{currentCode}</pre>
       </div>
     </div>
   );

@@ -5,10 +5,9 @@ export const Footer: React.FC = () => {
     <footer className="app-footer">
       <div className="page-container footer-inner">
         <div className="footer-brand">
-          <div className="brand-name" style={{ fontSize: '13px' }}>
-            <div className="brand-icon" style={{ width: '18px', height: '18px', fontSize: '9px' }}>A</div>
+          <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '0.08em', color: 'var(--primary)' }}>
             ARVE
-          </div>
+          </span>
           <span className="footer-text">
             Adaptive Remediation &amp; Verification Engine • Built for GitHub Security Workflow
           </span>
@@ -17,9 +16,9 @@ export const Footer: React.FC = () => {
         <div className="footer-links">
           <span className="status-pulse" style={{ fontSize: '10.5px' }}>
             <span className="pulse-dot" />
-            Engines Operational
+            Engines Active
           </span>
-          <span className="footer-text">v1.0.0</span>
+          <span className="footer-text">v1.0</span>
         </div>
       </div>
     </footer>

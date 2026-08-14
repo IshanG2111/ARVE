@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTheme } from '@/hooks/useTheme';
 
 interface HalftoneBackgroundProps {
   interactive?: boolean;
@@ -11,6 +12,7 @@ export const HalftoneBackground: React.FC<HalftoneBackgroundProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
+  const { isDark } = useTheme();
 
   useEffect(() => {
     if (!interactive) return;
@@ -42,31 +44,54 @@ export const HalftoneBackground: React.FC<HalftoneBackgroundProps> = ({
         pointerEvents: 'none',
         zIndex: 0,
         overflow: 'hidden',
+        backgroundColor: 'var(--bg)',
+        transition: 'background-color 320ms cubic-bezier(0.16, 1, 0.3, 1)',
       }}
     >
       {/* Hero artwork with parallax */}
       {showHero && (
-        <img
-          src="/assets/arve-hero-1920x1080.png"
-          alt=""
-          className="hero-art"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: '70% 60%',
-            transform: `translate(${offsetX}px, ${offsetY}px) scale(1.05)`,
-            transition: 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
-            opacity: 0.9,
-          }}
-        />
+        <>
+          {/* Dark Mode Hero Image (arve-hero-1920x1080.png) */}
+          <img
+            src="/assets/arve-hero-1920x1080.png"
+            alt=""
+            className="hero-art hidden dark:block"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: '70% 60%',
+              transform: `translate(${offsetX}px, ${offsetY}px) scale(1.05)`,
+              transition: 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
+              opacity: 0.9,
+            }}
+          />
+
+          {/* Light Mode Hero Image (l1.svg) */}
+          <img
+            src="/assets/l1.svg"
+            alt=""
+            className="hero-art block dark:hidden"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: '70% 60%',
+              transform: `translate(${offsetX}px, ${offsetY}px) scale(1.05)`,
+              transition: 'transform 0.6s cubic-bezier(0.23, 1, 0.32, 1)',
+              opacity: 0.95,
+            }}
+          />
+        </>
       )}
 
-      {/* Halftone dot pattern overlay */}
+      {/* Halftone dot pattern overlay (Dark mode) */}
       <div
-        className="halftone"
+        className="halftone hidden dark:block"
         style={{
           position: 'absolute',
           inset: 0,
@@ -87,14 +112,14 @@ export const HalftoneBackground: React.FC<HalftoneBackgroundProps> = ({
           backgroundImage: 'url(/assets/noise.svg)',
           backgroundRepeat: 'repeat',
           backgroundSize: '200px 200px',
-          opacity: 0.35,
+          opacity: isDark ? 0.35 : 0.15,
           mixBlendMode: 'overlay',
         }}
       />
 
-      {/* Radial vignette */}
+      {/* Radial vignette (Dark mode) */}
       <div
-        className="vignette"
+        className="vignette hidden dark:block"
         style={{
           position: 'absolute',
           inset: 0,
@@ -103,12 +128,34 @@ export const HalftoneBackground: React.FC<HalftoneBackgroundProps> = ({
         }}
       />
 
-      {/* Top-left fade for text readability */}
+      {/* Radial vignette (Light mode) */}
       <div
+        className="vignette block dark:hidden"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `radial-gradient(ellipse at ${glowX}% ${glowY}%, transparent 0%, rgba(250, 247, 242, 0.25) 50%, rgba(250, 247, 242, 0.75) 100%)`,
+          transition: 'background 0.8s ease',
+        }}
+      />
+
+      {/* Top-left fade for text readability (Dark mode) */}
+      <div
+        className="hidden dark:block"
         style={{
           position: 'absolute',
           inset: 0,
           background: 'linear-gradient(135deg, rgba(8, 11, 18, 0.7) 0%, rgba(8, 11, 18, 0.3) 35%, transparent 65%)',
+        }}
+      />
+
+      {/* Top-left fade for text readability (Light mode) */}
+      <div
+        className="block dark:hidden"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(135deg, rgba(250, 247, 242, 0.85) 0%, rgba(250, 247, 242, 0.45) 40%, transparent 70%)',
         }}
       />
 
@@ -120,9 +167,11 @@ export const HalftoneBackground: React.FC<HalftoneBackgroundProps> = ({
           left: 0,
           right: 0,
           height: '120px',
-          background: 'linear-gradient(to top, rgba(8, 11, 18, 1) 0%, transparent 100%)',
+          background: `linear-gradient(to top, var(--bg) 0%, transparent 100%)`,
         }}
       />
     </div>
   );
 };
+
+export default HalftoneBackground;
