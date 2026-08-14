@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
+import { ARVELoader } from '../components/ui/ARVELoader';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 import { SpotlightCard } from '../components/ui/SpotlightCard';
 import { LiveScanSimulator } from '../components/LiveScanSimulator';
 import { AddTargetModal } from '../components/AddTargetModal';
 import { VerificationModal } from '../components/VerificationModal';
+import { IngestionOverlay } from '../components/ui/IngestionOverlay';
+import { AnimatedTabs } from '../components/ui/AnimatedTabs';
 import { useToast } from '../components/ui/ToastProvider';
 import { api, type TargetWebsite } from '../services/api';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -20,6 +23,9 @@ import {
   Code,
   Layers,
   Cpu,
+  Copy,
+  Check,
+  RefreshCw,
 } from 'lucide-react';
 
 export const ProjectDetailPage: React.FC = () => {
@@ -32,6 +38,8 @@ export const ProjectDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'details' | 'scanner'>('details');
   const [showAddTarget, setShowAddTarget] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+  const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
 
   // Ingestion history states
   const [runs, setRuns] = useState<any[]>([]);
@@ -50,9 +58,17 @@ export const ProjectDetailPage: React.FC = () => {
       const data = await api.getAnalysisRuns(projectId);
       setRuns(data);
       if (data.length > 0) {
-        setSelectedRun(data[0]);
+        const activeRun = data.find((r: any) => r.status === 'COMPLETED') || data[0];
+        setSelectedRun(activeRun);
+        try {
+          const files = await api.getAnalysisFiles(activeRun.id);
+          setRunFiles(files || []);
+        } catch {
+          setRunFiles([]);
+        }
       } else {
         setSelectedRun(null);
+        setRunFiles([]);
       }
     } catch (err) {
       console.error('Failed to fetch runs:', err);
@@ -65,7 +81,7 @@ export const ProjectDetailPage: React.FC = () => {
     if (!selectedRun?.id) return;
     try {
       const data = await api.getAnalysisFiles(selectedRun.id);
-      setRunFiles(data);
+      setRunFiles(data || []);
     } catch (err) {
       console.error('Failed to fetch run files:', err);
     }
@@ -88,12 +104,32 @@ export const ProjectDetailPage: React.FC = () => {
   const handleTriggerIngest = async () => {
     if (!projectId) return;
     setTriggeringIngest(true);
+    setShowIngestionOverlay(true);
     try {
       await api.triggerIngestion(projectId);
-      toast.success('Ingestion pipeline triggered.');
-      setTimeout(() => {
-        fetchRuns();
-      }, 1000);
+      toast.success('Codebase ingestion pipeline triggered.');
+      
+      // Dynamic real-time background polling
+      let attempts = 0;
+      const pollTimer = setInterval(async () => {
+        attempts++;
+        try {
+          const data = await api.getAnalysisRuns(projectId);
+          setRuns(data);
+          const completedRun = data.find((r: any) => r.status === 'COMPLETED');
+          if (completedRun) {
+            setSelectedRun(completedRun);
+            const files = await api.getAnalysisFiles(completedRun.id);
+            setRunFiles(files || []);
+          }
+          await refetch();
+          if (attempts >= 10 || (data.length > 0 && data[0].status === 'COMPLETED')) {
+            clearInterval(pollTimer);
+          }
+        } catch {
+          // ignore
+        }
+      }, 1200);
     } catch (err: any) {
       toast.error(err.message || 'Failed to trigger ingestion');
     } finally {
@@ -114,23 +150,30 @@ export const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  const copyToken = (token: string, targetId: string) => {
+    navigator.clipboard.writeText(token);
+    setCopiedTokenId(targetId);
+    toast.success('Verification token copied');
+    setTimeout(() => setCopiedTokenId(null), 2000);
+  };
+
   if (isLoading) {
     return (
-      <div className="screen-center">
-        <LoadingAnimation label="PARSING ARVE AST GRAPH & TARGET METADATA…" fullScreen={false} />
+      <div className="screen-center" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingAnimation fullScreen={false} />
       </div>
     );
   }
 
   if (error || !project) {
     return (
-      <div className="project-detail">
-        <SpotlightCard spotlightColor="rgba(255, 107, 107, 0.1)">
+      <div className="project-detail" style={{ maxWidth: '1160px', margin: '0 auto', padding: '36px 28px' }}>
+        <SpotlightCard>
           <div className="empty-state" style={{ padding: '64px 24px' }}>
             <h2 className="empty-title">Project not found</h2>
-            <p className="empty-sub">This project does not exist or you don't have permission to view it.</p>
+            <p className="empty-sub">This workspace does not exist or you don't have access.</p>
             <button className="btn btn-primary" onClick={() => navigate('/dashboard')} id="back-dashboard">
-              Back to Security Command Center
+              Return to Command Center
             </button>
           </div>
         </SpotlightCard>
@@ -147,13 +190,13 @@ export const ProjectDetailPage: React.FC = () => {
   const isVerified = project.verified || targets.some((t) => t.is_verified);
 
   return (
-    <div className="project-detail anim-fade-up">
+    <div style={{ maxWidth: '1160px', margin: '0 auto', padding: '32px 28px 64px', position: 'relative', zIndex: 1 }} className="anim-fade-up">
       <HalftoneBackground interactive={false} showHero={false} />
 
       {/* Navigation Breadcrumb */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        style={{ marginBottom: '18px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
@@ -161,26 +204,26 @@ export const ProjectDetailPage: React.FC = () => {
       </button>
 
       {/* Header Banner */}
-      <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.12)" style={{ marginBottom: '24px' }}>
-        <div style={{ padding: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <SpotlightCard style={{ marginBottom: '24px' }}>
+        <div style={{ padding: '22px 24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--primary)' }}>{name}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '20px', fontWeight: 650, color: 'var(--primary)' }}>{name}</h1>
               <span className={`badge ${isVerified ? 'badge-verified' : 'badge-pending'}`}>
                 <span className={`dot ${isVerified ? 'dot-green' : 'dot-amber'}`} />
                 {isVerified ? 'AST Authorized' : 'Pending Domain Auth'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '8px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '6px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)', flexWrap: 'wrap' }}>
               <span style={{ color: 'var(--accent)' }}>{repoFull}</span>
               <span>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <GitBranch size={12} /> {branch}
+                <GitBranch size={11} /> {branch}
               </span>
               <span>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Code size={12} /> {language}
+                <Code size={11} /> {language}
               </span>
             </div>
           </div>
@@ -189,122 +232,136 @@ export const ProjectDetailPage: React.FC = () => {
             <button
               className="btn btn-primary"
               onClick={() => setShowAddTarget(true)}
-              style={{ fontSize: '12px', padding: '8px 14px' }}
+              style={{ fontSize: '12px', padding: '7px 14px' }}
             >
-              <Plus size={14} /> Add Target Endpoint
+              <Plus size={13} /> Add Target Endpoint
             </button>
           </div>
         </div>
       </SpotlightCard>
 
-      {/* Sub Tabs */}
-      <div className="dashboard-nav-tabs">
-        <button
-          className={`dashboard-tab-btn ${activeTab === 'details' ? 'active' : ''}`}
-          onClick={() => setActiveTab('details')}
-        >
-          <Layers size={14} /> Project Details & Endpoints
-        </button>
-        <button
-          className={`dashboard-tab-btn ${activeTab === 'scanner' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scanner')}
-        >
-          <Cpu size={14} /> Live AST Security Scanner
-        </button>
+      {/* Tabs */}
+      <div style={{ marginBottom: '20px' }}>
+        <AnimatedTabs
+          tabs={[
+            { id: 'details', label: 'Codebase Specs & Ingestion', icon: <Layers size={13} /> },
+            { id: 'scanner', label: 'Live AST Security Scanner', icon: <Cpu size={13} /> },
+          ]}
+          activeTab={activeTab}
+          onChange={(t) => setActiveTab(t as 'details' | 'scanner')}
+          layoutIdPrefix="project-detail-tabs"
+        />
       </div>
 
       {activeTab === 'details' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
           {/* Metadata Card */}
-          <SpotlightCard spotlightColor="rgba(56, 189, 248, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <div className="detail-section-title">Repository Specs & Infrastructure</div>
-
-              <div className="detail-field">
-                <span className="detail-field-key">GitHub Repository</span>
-                {repoUrl ? (
-                  <a
-                    href={repoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="detail-field-val"
-                    style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
-                  >
-                    {repoFull} <ExternalLink size={11} style={{ display: 'inline', marginLeft: '4px' }} />
-                  </a>
-                ) : (
-                  <span className="detail-field-val">{repoFull}</span>
-                )}
+          <SpotlightCard>
+            <div style={{ padding: '22px 24px' }}>
+              <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600, marginBottom: '16px' }}>
+                Repository Specs & Infrastructure
               </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Active Branch</span>
-                <span className="detail-field-val">{branch}</span>
-              </div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>GitHub Repository</span>
+                  {repoUrl ? (
+                    <a
+                      href={repoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: 'var(--accent)', fontFamily: 'var(--font-code)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      {repoFull} <ExternalLink size={11} />
+                    </a>
+                  ) : (
+                    <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{repoFull}</span>
+                  )}
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Language Runtime</span>
-                <span className="detail-field-val">{language}</span>
-              </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Active Branch</span>
+                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{branch}</span>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Detected Frameworks</span>
-                <span className="detail-field-val">{project.repository?.frameworks || 'None Detected'}</span>
-              </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Language Runtime</span>
+                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{language}</span>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Package Manager</span>
-                <span className="detail-field-val" style={{ textTransform: 'uppercase' }}>
-                  {project.repository?.package_manager || 'None'}
-                </span>
-              </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Detected Frameworks</span>
+                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>{project.repository?.frameworks || 'Standard Runtime'}</span>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Created Date</span>
-                <span className="detail-field-val">
-                  {new Date(project.created_at).toLocaleDateString('en-US', {
-                    month: 'long', day: 'numeric', year: 'numeric'
-                  })}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', borderBottom: '1px solid var(--border)', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Package Manager</span>
+                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)', textTransform: 'uppercase' }}>
+                    {project.repository?.package_manager || 'None'}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 0', fontSize: '12.5px' }}>
+                  <span style={{ color: 'var(--muted)' }}>Created Date</span>
+                  <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {new Date(project.created_at).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric'
+                    })}
+                  </span>
+                </div>
               </div>
             </div>
           </SpotlightCard>
 
-          {/* Repository Ingestion Details Card */}
-          <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
-            <div style={{ padding: '24px' }}>
+          {/* Repository Ingestion Card */}
+          <SpotlightCard>
+            <div style={{ padding: '22px 24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div className="detail-section-title" style={{ margin: 0 }}>
-                  Repository Ingestion & Discovery
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Repository Codebase Ingestion & AST Index
                 </div>
                 <button
                   className="btn btn-secondary"
-                  style={{ fontSize: '11.5px', padding: '6px 12px' }}
+                  style={{ fontSize: '11.5px', padding: '5px 12px' }}
                   onClick={handleTriggerIngest}
                   disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
                 >
-                  {triggeringIngest ? 'Triggering...' : 'Trigger Re-Ingestion'}
+                  <RefreshCw size={12} className={triggeringIngest ? 'spin' : ''} />
+                  {triggeringIngest ? 'Ingesting…' : 'Trigger Ingestion'}
                 </button>
               </div>
 
               {loadingRuns ? (
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>Loading ingestion history...</p>
+                <div style={{ padding: '24px', display: 'flex', justifyContent: 'center' }}>
+                  <ARVELoader size={64} />
                 </div>
               ) : runs.length === 0 ? (
-                <div style={{ padding: '30px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '12px' }}>
-                    No ingestion runs found. Trigger an ingestion to analyze this repository's codebase.
+                <div style={{ padding: '24px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px', marginBottom: '10px' }}>
+                    No ingestion runs recorded yet. Trigger an ingestion to index this repository's AST.
                   </p>
                   <button className="btn btn-primary" onClick={handleTriggerIngest} disabled={triggeringIngest}>
-                    Start Ingestion
+                    Start First Ingestion
                   </button>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '20px' }}>
-                  {/* Left Column: List of Runs */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', borderRight: '1px solid var(--border)', paddingRight: '15px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.4fr', gap: '18px' }}>
+                  {/* Left: Runs List */}
+                  <div
+                    data-lenis-prevent="true"
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '6px',
+                      maxHeight: '380px',
+                      overflowY: 'auto',
+                      overscrollBehavior: 'contain',
+                      touchAction: 'pan-y',
+                      borderRight: '1px solid var(--border)',
+                      paddingRight: '12px',
+                    }}
+                  >
+                    <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: '4px', fontFamily: 'var(--font-code)' }}>
                       Ingestion Runs
                     </div>
                     {runs.map((r) => {
@@ -314,23 +371,23 @@ export const ProjectDetailPage: React.FC = () => {
                           key={r.id}
                           onClick={() => setSelectedRun(r)}
                           style={{
-                            padding: '10px',
-                            borderRadius: '6px',
+                            padding: '9px 12px',
+                            borderRadius: 'var(--radius-md)',
                             background: isActive ? 'var(--elevated)' : 'transparent',
-                            border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
+                            border: `1px solid ${isActive ? 'var(--border-strong)' : 'transparent'}`,
                             cursor: 'pointer',
-                            transition: 'all 0.2s',
+                            transition: 'all 160ms ease',
                           }}
                         >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '3px' }}>
+                            <span style={{ fontSize: '11.5px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)', fontWeight: 550 }}>
                               {r.commit_sha ? r.commit_sha.substring(0, 7) : 'Latest'}
                             </span>
-                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
+                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9.5px', padding: '1px 5px' }}>
                               {r.status}
                             </span>
                           </div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)' }}>
+                          <div style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
                             {new Date(r.started_at).toLocaleString()}
                           </div>
                         </div>
@@ -338,67 +395,71 @@ export const ProjectDetailPage: React.FC = () => {
                     })}
                   </div>
 
-                  {/* Right Column: Selected Run Details */}
+                  {/* Right: Run Manifest Details */}
                   {selectedRun && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {/* Run Header / Counters */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--primary)' }}>{selectedRun.files_found}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Files Found</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {/* Metric summary */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
+                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_found}</div>
+                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Files Found</div>
                         </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#4ade80' }}>{selectedRun.files_ingested}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Ingested</div>
+                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--success)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_ingested}</div>
+                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Ingested</div>
                         </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#fbbf24' }}>{selectedRun.files_skipped}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Skipped</div>
+                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--warning)', fontFamily: 'var(--font-code)' }}>{selectedRun.files_skipped}</div>
+                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Skipped</div>
                         </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--accent)' }}>{selectedRun.package_manager || 'None'}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Package Mgr</div>
+                        <div style={{ padding: '10px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', textAlign: 'center' }}>
+                          <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{selectedRun.package_manager || 'None'}</div>
+                          <div style={{ fontSize: '9.5px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Package Mgr</div>
                         </div>
                       </div>
 
-                      {selectedRun.error_message && (
-                        <div style={{ padding: '12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(248, 113, 113, 0.5)', color: '#fca5a5', fontSize: '12px' }}>
-                          <strong>Ingestion Error:</strong> {selectedRun.error_message}
-                        </div>
-                      )}
-
-                      {/* File Tabs / Lists */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)' }}>
-                          File Manifest Analysis
+                      {/* File Manifest */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '10.5px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
+                          File Manifest Analysis ({runFiles.length} files)
                         </div>
 
                         {runFiles.length === 0 ? (
-                          <p style={{ color: 'var(--dim)', fontSize: '12px' }}>No files indexed in this run.</p>
+                          <p style={{ color: 'var(--muted)', fontSize: '12px' }}>No files indexed in this run.</p>
                         ) : (
-                          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
+                          <div
+                            data-lenis-prevent="true"
+                            style={{
+                              maxHeight: '280px',
+                              overflowY: 'auto',
+                              overscrollBehavior: 'contain',
+                              touchAction: 'pan-y',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-md)',
+                            }}
+                          >
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
                               <thead>
-                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '28px' }}>
-                                  <th style={{ padding: '6px 12px' }}>File Path</th>
-                                  <th style={{ padding: '6px 12px' }}>Language</th>
-                                  <th style={{ padding: '6px 12px' }}>Size</th>
-                                  <th style={{ padding: '6px 12px' }}>Status / Reason</th>
+                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '26px' }}>
+                                  <th style={{ padding: '4px 10px' }}>File Path</th>
+                                  <th style={{ padding: '4px 10px' }}>Language</th>
+                                  <th style={{ padding: '4px 10px' }}>Size</th>
+                                  <th style={{ padding: '4px 10px' }}>Status</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {runFiles.map((f: any) => (
-                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '26px' }}>
-                                    <td style={{ padding: '6px 12px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '24px' }}>
+                                    <td style={{ padding: '4px 10px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                       {f.path}
                                     </td>
-                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{f.language}</td>
-                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
-                                    <td style={{ padding: '6px 12px' }}>
+                                    <td style={{ padding: '4px 10px', color: 'var(--muted)' }}>{f.language}</td>
+                                    <td style={{ padding: '4px 10px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
+                                    <td style={{ padding: '4px 10px' }}>
                                       {f.status === 'INGESTED' ? (
-                                        <span style={{ color: '#4ade80' }}>Ingested</span>
+                                        <span style={{ color: 'var(--success)' }}>Ingested</span>
                                       ) : (
-                                        <span style={{ color: '#fbbf24' }} title={f.skip_reason}>Skipped ({f.skip_reason})</span>
+                                        <span style={{ color: 'var(--warning)' }} title={f.skip_reason}>Skipped</span>
                                       )}
                                     </td>
                                   </tr>
@@ -416,11 +477,11 @@ export const ProjectDetailPage: React.FC = () => {
           </SpotlightCard>
 
           {/* Configured Endpoints Card */}
-          <SpotlightCard spotlightColor="rgba(81, 207, 102, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div className="detail-section-title" style={{ margin: 0 }}>
-                  Configured Target Websites ({targets.length})
+          <SpotlightCard>
+            <div style={{ padding: '22px 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Configured Target Endpoints ({targets.length})
                 </div>
                 <button
                   className="btn btn-secondary"
@@ -432,26 +493,47 @@ export const ProjectDetailPage: React.FC = () => {
               </div>
 
               {targets.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No targets linked yet. Add a website URL to prove target domain ownership.</p>
+                <div style={{ padding: '16px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12px' }}>No target endpoints configured. Add a website URL to prove domain authorization.</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {targets.map((t) => (
-                    <div key={t.id} className="target-pill">
+                    <div
+                      key={t.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: 'var(--elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Globe size={15} color="var(--accent)" />
+                        <Globe size={14} color="var(--info)" />
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--primary)' }}>{t.domain}</div>
-                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>
-                            Token: {t.verification_token.substring(0, 26)}…
+                          <div style={{ fontSize: '13px', fontWeight: 550, color: 'var(--primary)' }}>{t.domain}</div>
+                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+                            <span>Token: {t.verification_token.substring(0, 22)}…</span>
+                            <button
+                              onClick={() => copyToken(t.verification_token, t.id)}
+                              style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                              title="Copy token"
+                            >
+                              {copiedTokenId === t.id ? <Check size={11} color="var(--success)" /> : <Copy size={11} />}
+                            </button>
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className={`badge ${t.is_verified ? 'badge-verified' : 'badge-pending'}`}>
-                          {t.is_verified ? 'Authorized' : 'Pending Verification'}
+                          <span className={`dot ${t.is_verified ? 'dot-green' : 'dot-amber'}`} />
+                          {t.is_verified ? 'Authorized' : 'Pending'}
                         </span>
 
                         <button
@@ -459,13 +541,13 @@ export const ProjectDetailPage: React.FC = () => {
                           style={{ fontSize: '11.5px', padding: '4px 10px' }}
                           onClick={() => setSelectedTarget(t)}
                         >
-                          Verify Token
+                          Specs
                         </button>
 
                         <button
                           className="btn btn-danger btn-icon"
                           onClick={() => setDeleteTargetRequest({ id: t.id, domain: t.domain })}
-                          style={{ padding: '5px' }}
+                          style={{ width: '26px', height: '26px' }}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -480,10 +562,26 @@ export const ProjectDetailPage: React.FC = () => {
       )}
 
       {activeTab === 'scanner' && (
-        <LiveScanSimulator projectName={name} />
+        <div className="anim-fade-up">
+          <LiveScanSimulator projectName={name} />
+        </div>
       )}
 
-      {/* Modals */}
+      {/* Modals & Ingestion Overlay */}
+      <IngestionOverlay
+        isOpen={showIngestionOverlay}
+        projectName={name}
+        onClose={() => {
+          setShowIngestionOverlay(false);
+          fetchRuns();
+          refetch();
+        }}
+        onComplete={() => {
+          fetchRuns();
+          refetch();
+        }}
+      />
+
       {showAddTarget && (
         <AddTargetModal
           projectId={project.id}
@@ -503,21 +601,21 @@ export const ProjectDetailPage: React.FC = () => {
           onClose={() => setSelectedTarget(null)}
           onTargetUpdated={() => {
             refetch();
-            toast.success('Verification updated.');
+            toast.success('Domain authorization updated.');
           }}
         />
       )}
+
       {deleteTargetRequest && (
         <ConfirmModal
           title="Remove target domain?"
           message={`Are you sure you want to remove \"${deleteTargetRequest.domain}\" from this project?`}
-          confirmText="Remove target"
+          confirmText="Remove Target"
           danger
           onConfirm={handleDeleteTarget}
           onCancel={() => setDeleteTargetRequest(null)}
         />
       )}
-
     </div>
   );
 };

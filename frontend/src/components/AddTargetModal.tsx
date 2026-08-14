@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Globe, AlertCircle } from 'lucide-react';
 import { api, type TargetWebsite } from '../services/api';
 
@@ -13,18 +13,26 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
   projectId,
   projectName,
   onClose,
-  onTargetAdded
+  onTargetAdded,
 }) => {
   const [domain, setDomain] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const newTarget = await api.addTarget(projectId, domain);
+      const newTarget = await api.addTarget(projectId, domain.trim());
       onTargetAdded(newTarget);
       onClose();
     } catch (err: unknown) {
@@ -36,53 +44,55 @@ export const AddTargetModal: React.FC<AddTargetModalProps> = ({
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="card modal" style={{ maxWidth: '460px' }}>
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal anim-fade-up" style={{ maxWidth: '480px' }}>
         <div className="modal-header">
           <div>
             <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Globe size={16} color="var(--accent)" />
-              Add Target Domain
+              Add Target Endpoint Domain
             </div>
             <div className="modal-sub">{projectName}</div>
           </div>
           <button className="btn btn-ghost btn-icon" onClick={onClose} id="close-add-target">
-            <X size={16} />
+            <X size={15} />
           </button>
         </div>
 
         {error && (
-          <div className="alert alert-error" style={{ marginBottom: '16px' }}>
-            <AlertCircle size={13} style={{ flexShrink: 0 }} />
+          <div className="alert alert-error" style={{ marginBottom: '14px' }}>
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: '1px' }} />
             <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="field" style={{ marginBottom: '20px' }}>
-            <label className="label">Target Domain / URL</label>
+          <div className="field" style={{ marginBottom: '18px' }}>
+            <label className="label">Target Domain / Hostname</label>
             <div className="input-wrap">
               <span className="input-icon"><Globe size={14} /></span>
               <input
                 type="text"
                 required
                 className="input"
-                placeholder="my-site.com or https://staging.my-site.com"
+                placeholder="app.example.com or https://staging.example.com"
                 value={domain}
-                onChange={e => setDomain(e.target.value)}
+                onChange={(e) => setDomain(e.target.value)}
                 autoFocus
                 id="target-domain-input"
               />
             </div>
-            <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-              Only add domains you own or are explicitly authorized to test.
+            <span style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
+              Only add domains you own or have explicit authorization to verify.
             </span>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
             <button type="submit" className="btn btn-primary" disabled={loading} id="submit-add-target">
-              {loading ? 'Adding…' : 'Add & Generate Token'}
+              Add Endpoint &amp; Generate Token
             </button>
           </div>
         </form>
