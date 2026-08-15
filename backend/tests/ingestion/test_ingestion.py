@@ -246,7 +246,7 @@ def test_ingestion_fails_without_token():
             )
             db.add(project)
             db.commit()
-            db.refresh(repo)
+            db.refresh(project)
 
             service = IngestionService(db)
             run = service.create_analysis_run(project_id=project.id)
@@ -282,7 +282,7 @@ def test_analysis_run_creation():
         )
         db.add(project)
         db.commit()
-        db.refresh(repo)
+        db.refresh(project)
 
         service = IngestionService(db)
         run = service.create_analysis_run(project_id=project.id)

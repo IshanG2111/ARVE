@@ -12,6 +12,10 @@ This document records key architectural decisions, design trade-offs, security c
 5. [ADR-005: Data Layer — SQLite for Local Dev, SQLAlchemy ORM for Portability](#adr-005-data-layer--sqlite-for-local-dev-sqlalchemy-orm-for-portability)
 6. [ADR-006: Scanner Strategy — Orchestrating External Tools over Custom Parsers](#adr-006-scanner-strategy--orchestrating-external-tools-over-custom-parsers)
 7. [ADR-007: Graph Intelligence — Decoupling PostgreSQL Application State & Neo4j Security Graphs](#adr-007-graph-intelligence--decoupling-postgresql-application-state--neo4j-security-graphs)
+8. [ADR-008: Repository Ingestion — Commit Pinning & In-Memory Tarball Streaming](#adr-008-repository-ingestion--commit-pinning--in-memory-tarball-streaming)
+9. [ADR-009: ARVE Normalization Layer & SHA-256 Content Fingerprinting](#adr-009-arve-normalization-layer--sha-256-content-fingerprinting)
+10. [ADR-010: Data Model — Single-Repo Project Denormalization](#adr-010-data-model--single-repo-project-denormalization)
+11. [ADR-011: Ingestion Guardrails — Hard Source Limits & Size Blacklists](#adr-011-ingestion-guardrails--hard-source-limits--size-blacklists)
 
 ---
 
@@ -115,3 +119,66 @@ Store transactional application data in PostgreSQL/SQLite and construct graph st
 ### AI Reasoning & Trade-off Analysis
 - Relational databases handle ACID user transactions and project CRUD cleanly.
 - Graph databases excel at multi-hop graph queries (`MATCH path = (entry:Endpoint)-[*]->(asset:SensitiveAsset)`).
+
+---
+
+## ADR-008: Repository Ingestion — Commit Pinning & In-Memory Tarball Streaming
+
+### Context
+Phase 2 requires fetching repository files reproducibly from GitHub while handling rate limits, large repository trees, and latency.
+
+### Decision
+1. **Commit SHA Pinning:** Every analysis run resolves and pins the exact 40-character Git commit SHA on `analysis_runs.commit_sha`.
+2. **Dedicated Client (`GitHubClient`):** Pure REST API v3 client separated strictly from filtering, database, and AST logic.
+3. **Hybrid Content Retrieval:** Authenticated tokens stream the full repository tarball (`/repos/{owner}/{repo}/tarball/{sha}`) and extract filtered files entirely in-memory (`tarfile` + `io.BytesIO`). If tarball streaming is unavailable or fails, fall back to concurrent batch fetching (`asyncio.gather` + `httpx.AsyncClient` with semaphore rate limiting).
+
+### AI Reasoning & Trade-off Analysis
+- **Reproducibility:** Pinning commit SHAs ensures that scans on the same commit produce 100% identical file lists and SHA-256 hashes regardless of subsequent branch updates.
+- **Performance:** In-memory tarball streaming downloads the entire codebase in a single HTTP request, eliminating thousands of individual file API calls and avoiding GitHub rate limits.
+- **Safety:** In-memory extraction never touches the physical host disk, preventing path traversal attacks from malicious tarball contents.
+
+---
+
+## ADR-009: ARVE Normalization Layer & SHA-256 Content Fingerprinting
+
+### Context
+Downstream security scanners and AST engines must operate on a canonical file contract without being coupled to GitHub API payloads or specific version control providers.
+
+### Decision
+1. Ingested files are passed through a provider-neutral `DataNormalizer` to create `NormalizedFile` records (`path`, `filename`, `extension`, `language`, `size`, `sha256`, `content`, `status`, `skip_reason`).
+2. Compute `SHA-256(content)` for every ingested file and store it in `repository_files.sha256`.
+
+### AI Reasoning & Trade-off Analysis
+- **Provider Decoupling:** Allows future support for GitLab, Bitbucket, ZIP archives, or local directories without modifying AST or vulnerability engines.
+- **Incremental Analysis:** SHA-256 hashes enable diff-based delta analysis between commits (skipping re-analysis of unchanged files).
+
+---
+
+## ADR-010: Data Model — Single-Repo Project Denormalization
+
+### Context
+The original schema had a standalone `repositories` table with a foreign key to `projects`. In practice, each ARVE security project tracks exactly one primary repository and its verified deployment target.
+
+### Decision
+Denormalize repository metadata fields directly onto the `projects` table (`repo_id`, `repo_owner`, `repo_name`, `repo_url`, `default_branch`, `repo_language`, `repo_frameworks`, `repo_package_manager`, `repo_size_kb`, `repo_visibility`), and associate `analysis_runs` and `repository_files` directly with the `project_id`.
+
+### AI Reasoning & Trade-off Analysis
+- **Simplicity:** Eliminates unnecessary table joins on every project dashboard query.
+- **Clarity:** Accurately reflects ARVE's 1-to-1 project-to-repository security auditing model.
+
+---
+
+## ADR-011: Ingestion Guardrails — Hard Source Limits & Size Blacklists
+
+### Context
+Large mono-repos or repositories containing binary assets, build artifacts, or vendor dependencies can overwhelm server memory and exhaust security scanner memory budgets.
+
+### Decision
+Enforce strict pre-download and post-filter guardrails:
+1. **Directory Exclusion:** Blacklist `.git/`, `node_modules/`, `venv/`, `dist/`, `build/`, `target/`, `coverage/`, `vendor/`, `.cache/`.
+2. **File Size Limit:** Skip individual files exceeding 1 MB (`status = SKIPPED`, `skip_reason = file_too_large`).
+3. **Repository Caps:** Reject repositories exceeding **5,000 ingestible source files** or **200 MB total uncompressed source size** before downloading.
+
+### AI Reasoning & Trade-off Analysis
+- Protects the worker runtime against Denial-of-Service or memory exhaustion while covering 99%+ of AI-generated web applications within the v1 scope.
+

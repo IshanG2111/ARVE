@@ -71,7 +71,10 @@ def test_firebase_auth_and_project_flow():
 
 
 def test_ingestion_requires_authenticated_project():
-    response = client.post("/api/projects/not-real/ingest")
+    from app.main import app as fastapi_app
+    from fastapi.testclient import TestClient
+    unauth_client = TestClient(fastapi_app)
+    response = unauth_client.post("/api/projects/not-real/ingest")
     assert response.status_code == 401
 
 
