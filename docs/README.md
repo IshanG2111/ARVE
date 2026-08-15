@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **Phase 0** | **Project Foundation** | ✅ **Completed** | Shared dev environment, FastAPI backend, React (Vite/TS) frontend, SQLite/PostgreSQL DB setup, environment config. |
 | **Phase 1** | **Authentication + GitHub Integration** | ✅ **Completed** | Firebase Authentication + GitHub OAuth Provider, Firebase ID Token validation in FastAPI, User session management, GitHub repo listing & selection. |
-| **Phase 2** | **Repository Intelligence** | ⏳ **In Progress** | Repository ingestion, language/framework/dependency detection, route & API extraction into structured application models. |
+| **Phase 2** | **Repository Ingestion & Normalization** | ✅ **Completed** | GitHub authenticated tree ingestion, file filtering, language/framework detection, SHA-256 normalization, and analysis run state machine. |
 | **Phase 3** | **Security Detection Engine** | 📅 **Planned** | Semgrep, Gitleaks, Trivy, and OWASP ZAP scanner orchestration & AST data-flow analysis. |
 | **Phase 4** | **ARVE Security Dataset** | 📅 **Planned** | Security pattern corpus combining OWASP/Juliet ground truth, AI-generated apps, and vulnerability mutations. |
 | **Phase 5** | **ML Security Pattern Engine** | 📅 **Planned** | Code/security embeddings, HDBSCAN/K-Means vector clustering, and LLM pattern interpretation. |
