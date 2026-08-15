@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, X } from 'lucide-react';
 
 interface ConfirmModalProps {
@@ -21,48 +22,61 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onCancel,
   danger = false,
   busy = false,
-}) => (
-  <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}>
-    <div className="card modal" style={{ maxWidth: '430px' }} role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-      <div className="modal-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '34px',
-            height: '34px',
-            borderRadius: '9px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: danger ? 'var(--critical-bg)' : 'var(--surface)',
-            border: `1px solid ${danger ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
-            color: danger ? 'var(--critical)' : 'var(--primary)',
-            flexShrink: 0,
-          }}>
-            <AlertTriangle size={17} />
-          </div>
-          <div>
-            <div className="modal-title" id="confirm-modal-title">{title}</div>
-          </div>
-        </div>
-        <button className="btn btn-ghost btn-icon" onClick={onCancel} disabled={busy} aria-label="Close">
-          <X size={16} />
-        </button>
-      </div>
+}) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !busy) onCancel();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel, busy]);
 
-      <div style={{ fontSize: '13px', color: 'var(--secondary)', lineHeight: 1.6, marginBottom: '22px' }}>
-        {message}
-      </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-        {cancelText && (
-          <button className="btn btn-ghost" onClick={onCancel} disabled={busy}>
-            {cancelText}
+  return createPortal(
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && !busy && onCancel()}>
+      <div className="modal anim-fade-up" style={{ maxWidth: '440px' }} role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: danger ? 'var(--critical-bg)' : 'var(--elevated)',
+                border: `1px solid ${danger ? 'var(--critical-border)' : 'var(--border)'}`,
+                color: danger ? 'var(--critical)' : 'var(--primary)',
+                flexShrink: 0,
+              }}
+            >
+              <AlertTriangle size={16} />
+            </div>
+            <div>
+              <div className="modal-title" id="confirm-modal-title">{title}</div>
+            </div>
+          </div>
+          <button className="btn btn-ghost btn-icon" onClick={onCancel} disabled={busy} aria-label="Close">
+            <X size={15} />
           </button>
-        )}
-        <button className={danger ? 'btn btn-danger' : 'btn btn-primary'} onClick={onConfirm} disabled={busy}>
-          {busy ? 'Please wait…' : confirmText}
-        </button>
+        </div>
+
+        <div style={{ fontSize: '13px', color: 'var(--secondary)', lineHeight: 1.6, marginBottom: '20px' }}>
+          {message}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+          {cancelText && (
+            <button className="btn btn-secondary" onClick={onCancel} disabled={busy}>
+              {cancelText}
+            </button>
+          )}
+          <button className={danger ? 'btn btn-danger' : 'btn btn-primary'} onClick={onConfirm} disabled={busy}>
+            {busy ? 'Processing…' : confirmText}
+          </button>
+        </div>
       </div>
-    </div>
-  </div>
-);
+    </div>,
+    document.body
+  );
+};

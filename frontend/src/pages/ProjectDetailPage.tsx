@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useProject } from '../hooks/useProjects';
+import { useProject, useDeleteProject } from '../hooks/useProjects';
 import { LoadingAnimation } from '../components/ui/LoadingAnimation';
+import { ARVELoader } from '../components/ui/ARVELoader';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 import { SpotlightCard } from '../components/ui/SpotlightCard';
 import { LiveScanSimulator } from '../components/LiveScanSimulator';
 import { AddTargetModal } from '../components/AddTargetModal';
 import { VerificationModal } from '../components/VerificationModal';
+import { IngestionOverlay } from '../components/ui/IngestionOverlay';
+import { AnimatedTabs } from '../components/ui/AnimatedTabs';
+import { FileTree, buildFileTree } from '../components/ui/file-tree';
 import { useToast } from '../components/ui/ToastProvider';
 import { api, type TargetWebsite } from '../services/api';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -20,6 +24,9 @@ import {
   Code,
   Layers,
   Cpu,
+  Copy,
+  Check,
+  RefreshCw,
 } from 'lucide-react';
 
 export const ProjectDetailPage: React.FC = () => {
@@ -28,10 +35,14 @@ export const ProjectDetailPage: React.FC = () => {
   const toast = useToast();
 
   const { data: project, isLoading, error, refetch } = useProject(id ?? '');
+  const deleteProject = useDeleteProject();
 
   const [activeTab, setActiveTab] = useState<'details' | 'scanner'>('details');
   const [showAddTarget, setShowAddTarget] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
+  const [copiedTokenId, setCopiedTokenId] = useState<string | null>(null);
+  const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
+  const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
 
   // Ingestion history states
   const [runs, setRuns] = useState<any[]>([]);
@@ -40,6 +51,7 @@ export const ProjectDetailPage: React.FC = () => {
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [triggeringIngest, setTriggeringIngest] = useState(false);
   const [deleteTargetRequest, setDeleteTargetRequest] = useState<{ id: string; domain: string } | null>(null);
+  const [manifestView, setManifestView] = useState<'tree' | 'table'>('tree');
 
   const projectId = project?.id;
 
@@ -50,9 +62,17 @@ export const ProjectDetailPage: React.FC = () => {
       const data = await api.getAnalysisRuns(projectId);
       setRuns(data);
       if (data.length > 0) {
-        setSelectedRun(data[0]);
+        const activeRun = data.find((r: any) => r.status === 'COMPLETED') || data[0];
+        setSelectedRun(activeRun);
+        try {
+          const files = await api.getAnalysisFiles(activeRun.id);
+          setRunFiles(files || []);
+        } catch {
+          setRunFiles([]);
+        }
       } else {
         setSelectedRun(null);
+        setRunFiles([]);
       }
     } catch (err) {
       console.error('Failed to fetch runs:', err);
@@ -65,7 +85,7 @@ export const ProjectDetailPage: React.FC = () => {
     if (!selectedRun?.id) return;
     try {
       const data = await api.getAnalysisFiles(selectedRun.id);
-      setRunFiles(data);
+      setRunFiles(data || []);
     } catch (err) {
       console.error('Failed to fetch run files:', err);
     }
@@ -88,12 +108,32 @@ export const ProjectDetailPage: React.FC = () => {
   const handleTriggerIngest = async () => {
     if (!projectId) return;
     setTriggeringIngest(true);
+    setShowIngestionOverlay(true);
     try {
       await api.triggerIngestion(projectId);
-      toast.success('Ingestion pipeline triggered.');
-      setTimeout(() => {
-        fetchRuns();
-      }, 1000);
+      toast.success('Codebase ingestion pipeline triggered.');
+      
+      // Dynamic real-time background polling
+      let attempts = 0;
+      const pollTimer = setInterval(async () => {
+        attempts++;
+        try {
+          const data = await api.getAnalysisRuns(projectId);
+          setRuns(data);
+          const completedRun = data.find((r: any) => r.status === 'COMPLETED');
+          if (completedRun) {
+            setSelectedRun(completedRun);
+            const files = await api.getAnalysisFiles(completedRun.id);
+            setRunFiles(files || []);
+          }
+          await refetch();
+          if (attempts >= 10 || (data.length > 0 && data[0].status === 'COMPLETED')) {
+            clearInterval(pollTimer);
+          }
+        } catch {
+          // ignore
+        }
+      }, 1200);
     } catch (err: any) {
       toast.error(err.message || 'Failed to trigger ingestion');
     } finally {
@@ -114,23 +154,30 @@ export const ProjectDetailPage: React.FC = () => {
     }
   };
 
+  const copyToken = (token: string, targetId: string) => {
+    navigator.clipboard.writeText(token);
+    setCopiedTokenId(targetId);
+    toast.success('Verification token copied');
+    setTimeout(() => setCopiedTokenId(null), 2000);
+  };
+
   if (isLoading) {
     return (
-      <div className="screen-center">
-        <LoadingAnimation label="PARSING ARVE AST GRAPH & TARGET METADATA…" fullScreen={false} />
+      <div className="screen-center" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <LoadingAnimation fullScreen={false} />
       </div>
     );
   }
 
   if (error || !project) {
     return (
-      <div className="project-detail">
-        <SpotlightCard spotlightColor="rgba(255, 107, 107, 0.1)">
+      <div className="project-detail" style={{ maxWidth: '1160px', margin: '0 auto', padding: '36px 28px' }}>
+        <SpotlightCard>
           <div className="empty-state" style={{ padding: '64px 24px' }}>
             <h2 className="empty-title">Project not found</h2>
-            <p className="empty-sub">This project does not exist or you don't have permission to view it.</p>
+            <p className="empty-sub">This workspace does not exist or you don't have access.</p>
             <button className="btn btn-primary" onClick={() => navigate('/dashboard')} id="back-dashboard">
-              Back to Security Command Center
+              Return to Command Center
             </button>
           </div>
         </SpotlightCard>
@@ -147,13 +194,13 @@ export const ProjectDetailPage: React.FC = () => {
   const isVerified = project.verified || targets.some((t) => t.is_verified);
 
   return (
-    <div className="project-detail anim-fade-up">
+    <div style={{ maxWidth: '1160px', margin: '0 auto', padding: '28px 24px 80px', position: 'relative', zIndex: 1, color: 'var(--primary)' }}>
       <HalftoneBackground interactive={false} showHero={false} />
 
       {/* Navigation Breadcrumb */}
       <button
         className="btn btn-ghost"
-        style={{ marginBottom: '20px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        style={{ marginBottom: '18px', paddingLeft: 0, color: 'var(--muted)', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
         onClick={() => navigate('/dashboard')}
         id="back-btn"
       >
@@ -161,19 +208,19 @@ export const ProjectDetailPage: React.FC = () => {
       </button>
 
       {/* Header Banner */}
-      <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.12)" style={{ marginBottom: '24px' }}>
-        <div style={{ padding: '24px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+      <SpotlightCard style={{ marginBottom: '22px' }}>
+        <div style={{ padding: '22px 26px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: '22px', fontWeight: 600, color: 'var(--primary)' }}>{name}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <h1 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>{name}</h1>
               <span className={`badge ${isVerified ? 'badge-verified' : 'badge-pending'}`}>
                 <span className={`dot ${isVerified ? 'dot-green' : 'dot-amber'}`} />
                 {isVerified ? 'AST Authorized' : 'Pending Domain Auth'}
               </span>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '8px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
-              <span style={{ color: 'var(--accent)' }}>{repoFull}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '8px', fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)', flexWrap: 'wrap' }}>
+              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{repoFull}</span>
               <span>•</span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <GitBranch size={12} /> {branch}
@@ -185,229 +232,319 @@ export const ProjectDetailPage: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowDeleteProjectModal(true)}
+              style={{
+                fontSize: '12px',
+                padding: '8px 14px',
+                gap: '6px',
+                color: 'var(--critical)',
+                borderColor: 'var(--critical-border)',
+              }}
+              id="detail-delete-repo-btn"
+              title="Delete this repository workspace"
+            >
+              <Trash2 size={13} /> Delete Repo
+            </button>
+
             <button
               className="btn btn-primary"
               onClick={() => setShowAddTarget(true)}
-              style={{ fontSize: '12px', padding: '8px 14px' }}
+              style={{ fontSize: '12px', padding: '8px 16px', gap: '6px' }}
             >
-              <Plus size={14} /> Add Target Endpoint
+              <Plus size={13} /> Add Target Endpoint
             </button>
           </div>
         </div>
       </SpotlightCard>
 
-      {/* Sub Tabs */}
-      <div className="dashboard-nav-tabs">
-        <button
-          className={`dashboard-tab-btn ${activeTab === 'details' ? 'active' : ''}`}
-          onClick={() => setActiveTab('details')}
-        >
-          <Layers size={14} /> Project Details & Endpoints
-        </button>
-        <button
-          className={`dashboard-tab-btn ${activeTab === 'scanner' ? 'active' : ''}`}
-          onClick={() => setActiveTab('scanner')}
-        >
-          <Cpu size={14} /> Live AST Security Scanner
-        </button>
+      {/* Tabs Switcher */}
+      <div style={{ marginBottom: '22px' }}>
+        <AnimatedTabs
+          tabs={[
+            { id: 'details', label: 'Codebase Specs & Ingestion', icon: <Layers size={13} /> },
+            { id: 'scanner', label: 'Live AST Security Scanner', icon: <Cpu size={13} /> },
+          ]}
+          activeTab={activeTab}
+          onChange={(t) => setActiveTab(t as 'details' | 'scanner')}
+          layoutIdPrefix="project-detail-tabs"
+        />
       </div>
 
       {activeTab === 'details' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* Metadata Card */}
-          <SpotlightCard spotlightColor="rgba(56, 189, 248, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <div className="detail-section-title">Repository Specs & Infrastructure</div>
-
-              <div className="detail-field">
-                <span className="detail-field-key">GitHub Repository</span>
-                {repoUrl ? (
+          {/* Repository Specs & Infrastructure Card */}
+          <SpotlightCard>
+            <div style={{ padding: '22px 26px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  REPOSITORY SPECS & INFRASTRUCTURE
+                </div>
+                {repoUrl && (
                   <a
                     href={repoUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="detail-field-val"
-                    style={{ color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                    style={{ fontSize: '11.5px', color: 'var(--accent)', fontFamily: 'var(--font-code)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                   >
-                    {repoFull} <ExternalLink size={11} style={{ display: 'inline', marginLeft: '4px' }} />
+                    {repoFull} <ExternalLink size={12} />
                   </a>
-                ) : (
-                  <span className="detail-field-val">{repoFull}</span>
                 )}
               </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Active Branch</span>
-                <span className="detail-field-val">{branch}</span>
-              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>GitHub Repository</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                    {repoFull}
+                  </div>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Language Runtime</span>
-                <span className="detail-field-val">{language}</span>
-              </div>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Active Branch</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {branch}
+                  </div>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Detected Frameworks</span>
-                <span className="detail-field-val">{project.repository?.frameworks || 'None Detected'}</span>
-              </div>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Language Runtime</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {language}
+                  </div>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Package Manager</span>
-                <span className="detail-field-val" style={{ textTransform: 'uppercase' }}>
-                  {project.repository?.package_manager || 'None'}
-                </span>
-              </div>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Detected Frameworks</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {project.repository?.frameworks || 'Standard Runtime'}
+                  </div>
+                </div>
 
-              <div className="detail-field">
-                <span className="detail-field-key">Created Date</span>
-                <span className="detail-field-val">
-                  {new Date(project.created_at).toLocaleDateString('en-US', {
-                    month: 'long', day: 'numeric', year: 'numeric'
-                  })}
-                </span>
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Package Manager</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)', textTransform: 'uppercase' }}>
+                    {project.repository?.package_manager || 'None'}
+                  </div>
+                </div>
+
+                <div style={{ padding: '14px 16px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Indexed Since</div>
+                  <div style={{ marginTop: '4px', fontSize: '13.5px', fontWeight: 600, fontFamily: 'var(--font-code)', color: 'var(--primary)' }}>
+                    {new Date(project.created_at).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric'
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           </SpotlightCard>
 
-          {/* Repository Ingestion Details Card */}
-          <SpotlightCard spotlightColor="rgba(126, 139, 245, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div className="detail-section-title" style={{ margin: 0 }}>
-                  Repository Ingestion & Discovery
+          {/* Repository Ingestion & AST File Explorer Card */}
+          <SpotlightCard>
+            <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Header Bar: Title, Run Switcher, and Ingest Action */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                    REPOSITORY CODEBASE INGESTION & AST INDEX
+                  </div>
+                  <div style={{ fontSize: '16px', fontWeight: 650, color: 'var(--primary)', marginTop: '2px' }}>
+                    Deterministic AST File Explorer
+                  </div>
                 </div>
-                <button
-                  className="btn btn-secondary"
-                  style={{ fontSize: '11.5px', padding: '6px 12px' }}
-                  onClick={handleTriggerIngest}
-                  disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
-                >
-                  {triggeringIngest ? 'Triggering...' : 'Trigger Re-Ingestion'}
-                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  {runs.length > 1 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Run:</span>
+                      <select
+                        value={selectedRun?.id || ''}
+                        onChange={(e) => {
+                          const r = runs.find((item) => item.id === e.target.value);
+                          if (r) setSelectedRun(r);
+                        }}
+                        style={{
+                          padding: '5px 10px',
+                          fontSize: '11.5px',
+                          fontFamily: 'var(--font-code)',
+                          background: 'var(--elevated)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 'var(--radius-sm)',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                          outline: 'none',
+                        }}
+                      >
+                        {runs.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            #{r.commit_sha ? r.commit_sha.substring(0, 7) : 'Active'} ({r.files_ingested || 0} files) • {r.status}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--elevated)', padding: '2px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <button
+                      type="button"
+                      onClick={() => setManifestView('tree')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontFamily: 'var(--font-code)',
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: manifestView === 'tree' ? 'var(--surface)' : 'transparent',
+                        color: manifestView === 'tree' ? 'var(--primary)' : 'var(--muted)',
+                        boxShadow: manifestView === 'tree' ? 'var(--shadow-subtle)' : 'none',
+                        fontWeight: manifestView === 'tree' ? 600 : 400,
+                      }}
+                    >
+                      Tree View
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManifestView('table')}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '11px',
+                        fontFamily: 'var(--font-code)',
+                        borderRadius: 'var(--radius-xs)',
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: manifestView === 'table' ? 'var(--surface)' : 'transparent',
+                        color: manifestView === 'table' ? 'var(--primary)' : 'var(--muted)',
+                        boxShadow: manifestView === 'table' ? 'var(--shadow-subtle)' : 'none',
+                        fontWeight: manifestView === 'table' ? 600 : 400,
+                      }}
+                    >
+                      List View
+                    </button>
+                  </div>
+
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: '12px', padding: '6px 14px' }}
+                    onClick={handleTriggerIngest}
+                    disabled={triggeringIngest || (selectedRun && ['PENDING', 'FETCHING', 'PROCESSING'].includes(selectedRun.status))}
+                  >
+                    <RefreshCw size={13} className={triggeringIngest ? 'spin' : ''} />
+                    {triggeringIngest ? 'Ingesting…' : 'Trigger Ingestion'}
+                  </button>
+                </div>
               </div>
 
               {loadingRuns ? (
-                <div style={{ padding: '20px', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>Loading ingestion history...</p>
+                <div style={{ padding: '40px', display: 'flex', justifyContent: 'center' }}>
+                  <ARVELoader size={64} />
                 </div>
               ) : runs.length === 0 ? (
-                <div style={{ padding: '30px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '12px' }}>
-                    No ingestion runs found. Trigger an ingestion to analyze this repository's codebase.
+                <div style={{ padding: '36px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '13px', marginBottom: '14px' }}>
+                    No ingestion runs recorded yet. Trigger an ingestion to index this repository's AST.
                   </p>
                   <button className="btn btn-primary" onClick={handleTriggerIngest} disabled={triggeringIngest}>
-                    Start Ingestion
+                    Start First Ingestion
                   </button>
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2.5fr', gap: '20px' }}>
-                  {/* Left Column: List of Runs */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto', borderRight: '1px solid var(--border)', paddingRight: '15px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)', marginBottom: '4px' }}>
-                      Ingestion Runs
-                    </div>
-                    {runs.map((r) => {
-                      const isActive = selectedRun?.id === r.id;
-                      return (
-                        <div
-                          key={r.id}
-                          onClick={() => setSelectedRun(r)}
-                          style={{
-                            padding: '10px',
-                            borderRadius: '6px',
-                            background: isActive ? 'var(--elevated)' : 'transparent',
-                            border: `1px solid ${isActive ? 'var(--border)' : 'transparent'}`,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: isActive ? 'var(--accent)' : 'var(--primary)' }}>
-                              {r.commit_sha ? r.commit_sha.substring(0, 7) : 'Latest'}
-                            </span>
-                            <span className={`badge ${r.status === 'COMPLETED' ? 'badge-verified' : r.status === 'FAILED' ? 'badge-critical' : 'badge-pending'}`} style={{ fontSize: '9px', padding: '1px 6px' }}>
-                              {r.status}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)' }}>
-                            {new Date(r.started_at).toLocaleString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Right Column: Selected Run Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {/* Top Metric Summary across full width */}
                   {selectedRun && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {/* Run Header / Counters */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--primary)' }}>{selectedRun.files_found}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Files Found</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px' }}>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_found}
                         </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#4ade80' }}>{selectedRun.files_ingested}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Ingested</div>
-                        </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: '#fbbf24' }}>{selectedRun.files_skipped}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Skipped</div>
-                        </div>
-                        <div style={{ padding: '10px', borderRadius: '6px', background: 'var(--elevated)', textAlign: 'center' }}>
-                          <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--accent)' }}>{selectedRun.package_manager || 'None'}</div>
-                          <div style={{ fontSize: '10px', color: 'var(--dim)', textTransform: 'uppercase' }}>Package Mgr</div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Discovered
                         </div>
                       </div>
-
-                      {selectedRun.error_message && (
-                        <div style={{ padding: '12px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(248, 113, 113, 0.5)', color: '#fca5a5', fontSize: '12px' }}>
-                          <strong>Ingestion Error:</strong> {selectedRun.error_message}
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--success)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_ingested}
                         </div>
-                      )}
-
-                      {/* File Tabs / Lists */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--dim)' }}>
-                          File Manifest Analysis
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Ingested
                         </div>
-
-                        {runFiles.length === 0 ? (
-                          <p style={{ color: 'var(--dim)', fontSize: '12px' }}>No files indexed in this run.</p>
-                        ) : (
-                          <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '6px' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px', textAlign: 'left' }}>
-                              <thead>
-                                <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '28px' }}>
-                                  <th style={{ padding: '6px 12px' }}>File Path</th>
-                                  <th style={{ padding: '6px 12px' }}>Language</th>
-                                  <th style={{ padding: '6px 12px' }}>Size</th>
-                                  <th style={{ padding: '6px 12px' }}>Status / Reason</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {runFiles.map((f: any) => (
-                                  <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '26px' }}>
-                                    <td style={{ padding: '6px 12px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                      {f.path}
-                                    </td>
-                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{f.language}</td>
-                                    <td style={{ padding: '6px 12px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
-                                    <td style={{ padding: '6px 12px' }}>
-                                      {f.status === 'INGESTED' ? (
-                                        <span style={{ color: '#4ade80' }}>Ingested</span>
-                                      ) : (
-                                        <span style={{ color: '#fbbf24' }} title={f.skip_reason}>Skipped ({f.skip_reason})</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
                       </div>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--warning)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.files_skipped}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Files Skipped
+                        </div>
+                      </div>
+                      <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', border: '1px solid var(--border)', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>
+                          {selectedRun.package_manager || 'Standard'}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                          Package Manager
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Full Space File Tree / Manifest View */}
+                  {runFiles.length === 0 ? (
+                    <div style={{ padding: '32px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                      <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No files indexed in this run.</p>
+                    </div>
+                  ) : manifestView === 'tree' ? (
+                    <div data-lenis-prevent="true" style={{ width: '100%' }}>
+                      <FileTree
+                        elements={buildFileTree(runFiles)}
+                        highlightColor="var(--accent)"
+                        defaultOpenIds={['src', 'app', 'components', 'lib', 'public']}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      data-lenis-prevent="true"
+                      style={{
+                        maxHeight: '440px',
+                        overflowY: 'auto',
+                        overscrollBehavior: 'contain',
+                        touchAction: 'pan-y',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--surface)',
+                      }}
+                    >
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--elevated)', borderBottom: '1px solid var(--border)', color: 'var(--muted)', height: '32px' }}>
+                            <th style={{ padding: '8px 14px' }}>File Path</th>
+                            <th style={{ padding: '8px 14px' }}>Language</th>
+                            <th style={{ padding: '8px 14px' }}>Size</th>
+                            <th style={{ padding: '8px 14px' }}>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {runFiles.map((f: any) => (
+                            <tr key={f.id} style={{ borderBottom: '1px solid var(--border)', height: '32px' }}>
+                              <td style={{ padding: '8px 14px', fontFamily: 'var(--font-code)', color: 'var(--primary)', maxWidth: '360px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {f.path}
+                              </td>
+                              <td style={{ padding: '8px 14px', color: 'var(--muted)', textTransform: 'uppercase', fontSize: '11px' }}>{f.language}</td>
+                              <td style={{ padding: '8px 14px', color: 'var(--muted)' }}>{(f.size / 1024).toFixed(1)} KB</td>
+                              <td style={{ padding: '8px 14px' }}>
+                                {f.status === 'INGESTED' ? (
+                                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Ingested</span>
+                                ) : (
+                                  <span className="badge badge-pending" style={{ fontSize: '10.5px' }} title={f.skip_reason}>Skipped</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -416,15 +553,15 @@ export const ProjectDetailPage: React.FC = () => {
           </SpotlightCard>
 
           {/* Configured Endpoints Card */}
-          <SpotlightCard spotlightColor="rgba(81, 207, 102, 0.1)">
-            <div style={{ padding: '24px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div className="detail-section-title" style={{ margin: 0 }}>
-                  Configured Target Websites ({targets.length})
+          <SpotlightCard>
+            <div style={{ padding: '22px 26px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Configured Target Endpoints ({targets.length})
                 </div>
                 <button
                   className="btn btn-secondary"
-                  style={{ fontSize: '11.5px', padding: '4px 10px' }}
+                  style={{ fontSize: '11.5px', padding: '4px 12px' }}
                   onClick={() => setShowAddTarget(true)}
                 >
                   <Plus size={12} /> Add Target
@@ -432,26 +569,47 @@ export const ProjectDetailPage: React.FC = () => {
               </div>
 
               {targets.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', background: 'var(--bg)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No targets linked yet. Add a website URL to prove target domain ownership.</p>
+                <div style={{ padding: '20px', textAlign: 'center', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px dashed var(--border)' }}>
+                  <p style={{ color: 'var(--muted)', fontSize: '12.5px' }}>No target endpoints configured. Add a website URL to prove domain authorization.</p>
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {targets.map((t) => (
-                    <div key={t.id} className="target-pill">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Globe size={15} color="var(--accent)" />
+                    <div
+                      key={t.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        background: 'var(--elevated)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Globe size={16} color="var(--info)" />
                         <div>
-                          <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--primary)' }}>{t.domain}</div>
-                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--dim)' }}>
-                            Token: {t.verification_token.substring(0, 26)}…
+                          <div style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--primary)' }}>{t.domain}</div>
+                          <div style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            <span>Token: {t.verification_token.substring(0, 22)}…</span>
+                            <button
+                              onClick={() => copyToken(t.verification_token, t.id)}
+                              style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '2px', display: 'flex' }}
+                              title="Copy token"
+                            >
+                              {copiedTokenId === t.id ? <Check size={12} color="var(--success)" /> : <Copy size={12} />}
+                            </button>
                           </div>
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className={`badge ${t.is_verified ? 'badge-verified' : 'badge-pending'}`}>
-                          {t.is_verified ? 'Authorized' : 'Pending Verification'}
+                          <span className={`dot ${t.is_verified ? 'dot-green' : 'dot-amber'}`} />
+                          {t.is_verified ? 'Authorized' : 'Pending'}
                         </span>
 
                         <button
@@ -459,13 +617,13 @@ export const ProjectDetailPage: React.FC = () => {
                           style={{ fontSize: '11.5px', padding: '4px 10px' }}
                           onClick={() => setSelectedTarget(t)}
                         >
-                          Verify Token
+                          Specs
                         </button>
 
                         <button
                           className="btn btn-danger btn-icon"
                           onClick={() => setDeleteTargetRequest({ id: t.id, domain: t.domain })}
-                          style={{ padding: '5px' }}
+                          style={{ width: '26px', height: '26px' }}
                         >
                           <Trash2 size={12} />
                         </button>
@@ -480,10 +638,26 @@ export const ProjectDetailPage: React.FC = () => {
       )}
 
       {activeTab === 'scanner' && (
-        <LiveScanSimulator projectName={name} />
+        <div>
+          <LiveScanSimulator projectName={name} />
+        </div>
       )}
 
-      {/* Modals */}
+      {/* Modals & Ingestion Overlay */}
+      <IngestionOverlay
+        isOpen={showIngestionOverlay}
+        projectName={name}
+        onClose={() => {
+          setShowIngestionOverlay(false);
+          fetchRuns();
+          refetch();
+        }}
+        onComplete={() => {
+          fetchRuns();
+          refetch();
+        }}
+      />
+
       {showAddTarget && (
         <AddTargetModal
           projectId={project.id}
@@ -503,21 +677,46 @@ export const ProjectDetailPage: React.FC = () => {
           onClose={() => setSelectedTarget(null)}
           onTargetUpdated={() => {
             refetch();
-            toast.success('Verification updated.');
+            toast.success('Domain authorization updated.');
           }}
         />
       )}
+
       {deleteTargetRequest && (
         <ConfirmModal
-          title="Remove target domain?"
-          message={`Are you sure you want to remove \"${deleteTargetRequest.domain}\" from this project?`}
-          confirmText="Remove target"
-          danger
-          onConfirm={handleDeleteTarget}
           onCancel={() => setDeleteTargetRequest(null)}
+          onConfirm={handleDeleteTarget}
+          title="Remove target domain?"
+          message={`Are you sure you want to remove "${deleteTargetRequest.domain}" from this project?`}
+          confirmText="Remove Target"
+          danger
         />
       )}
 
+      {showDeleteProjectModal && (
+        <ConfirmModal
+          onCancel={() => setShowDeleteProjectModal(false)}
+          onConfirm={() => {
+            if (!projectId) return;
+            deleteProject.mutate(projectId, {
+              onSuccess: () => {
+                toast.success(`Repository "${name}" deleted.`);
+                navigate('/dashboard');
+              },
+              onError: (err) => {
+                toast.error(err instanceof Error ? err.message : 'Failed to delete repository');
+              },
+            });
+          }}
+          title="Delete repository workspace?"
+          message={`Are you sure you want to delete "${name}"? All associated target domains, AST index snapshots, and security scan telemetry will be permanently removed.`}
+          confirmText="Delete Repository"
+          danger
+          busy={deleteProject.isPending}
+        />
+      )}
     </div>
   );
 };
+
+export default ProjectDetailPage;
