@@ -1,101 +1,206 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SpotlightCard } from './ui/SpotlightCard';
-import { Play, CheckCircle2, ShieldCheck, Terminal, RefreshCw, Cpu, Code } from 'lucide-react';
+import { Play, CheckCircle2, ShieldCheck, Terminal, RefreshCw, Cpu, XCircle, Ban } from 'lucide-react';
 import { useToast } from './ui/ToastProvider';
+import { api } from '../services/api';
+import type { AnalysisRun, ScanStatusResponse } from '@/types';
 
-interface ScanFinding {
-  id: string;
-  ruleId: string;
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  title: string;
-  location: string;
-  snippet: string;
-  patch: string;
+interface LiveScanSimulatorProps {
+  projectId: string;
+  projectName?: string;
+  analysisRunId?: string;
+  analysisRun?: AnalysisRun | null;
 }
 
-export const LiveScanSimulator: React.FC<{ projectName?: string }> = ({ projectName = 'ARVE Core Repository' }) => {
-  const toast = useToast();
-  const [scanning, setScanning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState('');
-  const [logs, setLogs] = useState<string[]>([]);
-  const [findings, setFindings] = useState<ScanFinding[]>([]);
-  const [scanComplete, setScanComplete] = useState(false);
-  const [applyingPatch, setApplyingPatch] = useState<string | null>(null);
+const ACTIVE_STATUSES = new Set(['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING']);
+const TERMINAL_STATUSES = new Set(['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED']);
 
-  const startScan = () => {
-    setScanning(true);
-    setProgress(0);
-    setLogs(['[SYS] Initializing ARVE AST Analysis Engine...']);
-    setFindings([]);
-    setScanComplete(false);
-    toast.info(`Initiating deep AST scan for ${projectName}...`);
-  };
+function statusLabel(status?: string): string {
+  switch (status) {
+    case 'QUEUED': return 'Queued';
+    case 'INGESTING': return 'Preparing snapshot';
+    case 'SCANNING': return 'Running scanner';
+    case 'NORMALIZING': return 'Finalizing scan';
+    case 'COMPLETED': return 'Completed';
+    case 'PARTIAL': return 'Partial';
+    case 'FAILED': return 'Failed';
+    case 'CANCELLED': return 'Cancelled';
+    default: return status || 'Idle';
+  }
+}
+
+function statusColor(status?: string): string {
+  if (status === 'COMPLETED') return 'var(--success)';
+  if (status === 'PARTIAL') return 'var(--warning, #F59E0B)';
+  if (status === 'FAILED' || status === 'CANCELLED') return 'var(--critical)';
+  return 'var(--accent)';
+}
+
+export const LiveScanSimulator: React.FC<LiveScanSimulatorProps> = ({
+  projectId,
+  projectName = 'ARVE Core Repository',
+  analysisRunId,
+  analysisRun,
+}) => {
+  const toast = useToast();
+  const [scan, setScan] = useState<ScanStatusResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [message, setMessage] = useState('Ready to start an asynchronous Phase 3 scan.');
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current !== null) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const refreshStatus = useCallback(async (scanId: string) => {
+    const current = await api.getScanStatus(scanId);
+    setScan(current);
+    setMessage(current.current_stage || statusLabel(current.status));
+    if (TERMINAL_STATUSES.has(current.status)) {
+      stopPolling();
+      setLoading(false);
+    }
+    return current;
+  }, [stopPolling]);
+
+  const startPolling = useCallback((scanId: string) => {
+    stopPolling();
+    void refreshStatus(scanId).catch((error) => {
+      stopPolling();
+      setLoading(false);
+      setMessage(error instanceof Error ? error.message : 'Unable to read scan status');
+      toast.error(error instanceof Error ? error.message : 'Unable to read scan status');
+    });
+    pollRef.current = window.setInterval(() => {
+      void refreshStatus(scanId).catch((error) => {
+        stopPolling();
+        setLoading(false);
+        setMessage(error instanceof Error ? error.message : 'Unable to read scan status');
+      });
+    }, 2000);
+  }, [refreshStatus, stopPolling, toast]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
 
   useEffect(() => {
-    if (!scanning) return;
+    if (!projectId) {
+      setScan(null);
+      setLoading(false);
+      return;
+    }
 
-    const steps = [
-      { p: 15, msg: 'Fetching repository AST tree node mappings...', log: '[AST] Parsing Python & TypeScript source AST trees...' },
-      { p: 35, msg: 'Tracing ingress parameters & authentication context...', log: '[INGRESS] Resolving API endpoint parameters...' },
-      { p: 60, msg: 'Simulating OWASP attack vectors against dynamic AST graph...', log: '[SIM] Testing security invariants against AST graph...' },
-      { p: 85, msg: 'Evaluating CORS & deployment header verification specs...', log: '[POLICY] Validating domain verification token header rules...' },
-      { p: 100, msg: 'Scan complete! Analysis finished.', log: '[SUCCESS] AST Invariant scan executed successfully.' },
-    ];
+    let cancelled = false;
+    void api.getProjectScans(projectId)
+      .then((scans) => {
+        if (cancelled || scans.length === 0) return;
+        const latest = scans[0];
+        return api.getScanStatus(latest.id);
+      })
+      .then((latest) => {
+        if (cancelled || !latest) return;
+        setScan(latest);
+        setMessage(latest.current_stage || statusLabel(latest.status));
+        if (ACTIVE_STATUSES.has(latest.status)) {
+          setLoading(true);
+          startPolling(latest.id);
+        }
+      })
+      .catch(() => {
+        // A missing scan history is not an error for a new project.
+      });
 
-    let current = 0;
-    const timer = setInterval(() => {
-      if (current < steps.length) {
-        const s = steps[current];
-        setProgress(s.p);
-        setCurrentStep(s.msg);
-        setLogs((prev) => [...prev, s.log]);
-        current++;
-      } else {
-        clearInterval(timer);
-        setScanning(false);
-        setScanComplete(true);
-        setFindings([]);
-        toast.success('AST Security Scan complete!');
-      }
-    }, 800);
+    return () => {
+      cancelled = true;
+      stopPolling();
+    };
+  }, [projectId, startPolling, stopPolling]);
 
-    return () => clearInterval(timer);
-  }, [scanning, toast]);
+  const selectedRun = analysisRun ?? null;
+  const effectiveRunId = analysisRunId || selectedRun?.id;
+  const canStart = Boolean(projectId && effectiveRunId && !loading);
 
-  const handleApplyPatch = (findingId: string) => {
-    setApplyingPatch(findingId);
-    setTimeout(() => {
-      setFindings((prev) => prev.filter((f) => f.id !== findingId));
-      setApplyingPatch(null);
-      toast.success('Automated patch applied and verified successfully!');
-    }, 1000);
+  const startScan = async () => {
+    if (!projectId) {
+      toast.error('No project is selected.');
+      return;
+    }
+    if (!effectiveRunId) {
+      toast.error('No completed Phase 2 analysis run is selected. Ingest the repository first.');
+      return;
+    }
+
+    setLoading(true);
+    setCancelling(false);
+    setScan(null);
+    setMessage('Submitting scan to the Celery worker queue…');
+
+    try {
+      const created = await api.createScan(projectId, effectiveRunId);
+      toast.success('Scan queued successfully.');
+      startPolling(created.id);
+    } catch (error) {
+      setLoading(false);
+      const text = error instanceof Error ? error.message : 'Failed to start scan';
+      setMessage(text);
+      toast.error(text);
+    }
   };
+
+  const handleCancel = async () => {
+    if (!scan || !ACTIVE_STATUSES.has(scan.status)) return;
+    setCancelling(true);
+    try {
+      const cancelled = await api.cancelScan(scan.id);
+      setScan((previous) => previous ? { ...previous, ...cancelled, engine_statuses: previous.engine_statuses, engine_runs: previous.engine_runs } : previous);
+      stopPolling();
+      setLoading(false);
+      setMessage(cancelled.current_stage || 'Scan cancelled');
+      toast.success('Scan cancellation requested.');
+      await refreshStatus(scan.id);
+    } catch (error) {
+      setCancelling(false);
+      toast.error(error instanceof Error ? error.message : 'Failed to cancel scan');
+    }
+  };
+
+  const progress = scan?.progress_percent ?? 0;
+  const currentStatus = scan?.status;
+  const active = currentStatus ? ACTIVE_STATUSES.has(currentStatus) : loading;
+  const terminal = currentStatus ? TERMINAL_STATUSES.has(currentStatus) : false;
+  const engineRuns = scan?.engine_runs ?? [];
+
+  const timeline = useMemo(() => {
+    const items: string[] = [];
+    if (scan?.created_at) items.push('[QUEUE] Scan accepted by API and queued for asynchronous execution.');
+    if (scan?.status === 'INGESTING' || ['SCANNING', 'NORMALIZING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'].includes(scan?.status || '')) {
+      items.push('[SNAPSHOT] Validating the selected Phase 2 commit-pinned repository snapshot.');
+    }
+    if (['SCANNING', 'NORMALIZING', 'COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'].includes(scan?.status || '')) {
+      items.push('[DOCKER] Executing the registered scanner engine inside the isolated container.');
+    }
+    if (scan?.status === 'NORMALIZING' || terminal) {
+      items.push(`[RESULT] ${statusLabel(scan?.status)} — orchestration lifecycle updated.`);
+    }
+    if (scan?.error_message) items.push(`[ERROR] ${scan.error_message}`);
+    return items;
+  }, [scan, terminal]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      {/* Scanner Control Banner */}
       <SpotlightCard>
         <div style={{ padding: '22px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--accent-muted)',
-                  color: 'var(--accent)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
+              <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-md)', background: 'var(--accent-muted)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Cpu size={16} />
               </div>
               <div>
                 <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)' }}>
-                  AST Live Security Scanner
+                  Phase 3 Scan Orchestration
                 </h3>
                 <p style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '1px' }}>
                   Target Repository: <span style={{ fontFamily: 'var(--font-code)', color: 'var(--primary)', fontWeight: 550 }}>{projectName}</span>
@@ -105,193 +210,100 @@ export const LiveScanSimulator: React.FC<{ projectName?: string }> = ({ projectN
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <button
-              className="btn btn-primary"
-              onClick={startScan}
-              disabled={scanning}
-              style={{ padding: '8px 16px', gap: '7px' }}
-            >
-              {scanning ? (
-                <>
-                  <RefreshCw size={13} className="spin" />
-                  Scanning ({progress}%)
-                </>
-              ) : (
-                <>
-                  <Play size={13} />
-                  Run AST Scan
-                </>
-              )}
+            {active && (
+              <button className="btn btn-secondary" onClick={handleCancel} disabled={cancelling} style={{ padding: '8px 14px', gap: '7px' }}>
+                {cancelling ? <RefreshCw size={13} className="spin" /> : <Ban size={13} />}
+                {cancelling ? 'Cancelling…' : 'Cancel Scan'}
+              </button>
+            )}
+            <button className="btn btn-primary" onClick={startScan} disabled={!canStart} style={{ padding: '8px 16px', gap: '7px' }}>
+              {active ? <RefreshCw size={13} className="spin" /> : <Play size={13} />}
+              {active ? `Scanning (${progress}%)` : terminal ? 'Run Again' : 'Run Scan'}
             </button>
           </div>
         </div>
 
-        {/* Scan Progress bar */}
-        {scanning && (
-          <div style={{ padding: '0 24px 18px 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', marginBottom: '6px' }}>
-              <span>{currentStep}</span>
-              <span>{progress}%</span>
-            </div>
-            <div style={{ height: '3px', background: 'var(--elevated)', borderRadius: '2px', overflow: 'hidden' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${progress}%`,
-                  background: 'var(--accent)',
-                  transition: 'width 0.7s cubic-bezier(0.16, 1, 0.3, 1)',
-                }}
-              />
-            </div>
+        <div style={{ padding: '0 24px 18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', marginBottom: '6px' }}>
+            <span>{message}</span>
+            <span style={{ color: statusColor(currentStatus) }}>{currentStatus ? `${statusLabel(currentStatus)} · ${progress}%` : 'READY'}</span>
           </div>
-        )}
+          <div style={{ height: '3px', background: 'var(--elevated)', borderRadius: '2px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${progress}%`, background: statusColor(currentStatus), transition: 'width 0.4s ease' }} />
+          </div>
+          {selectedRun && (
+            <div style={{ marginTop: '10px', fontSize: '10.5px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
+              Phase 2 snapshot: {selectedRun.id.slice(0, 8)} · commit {selectedRun.commit_sha?.slice(0, 12) || 'unknown'} · {selectedRun.files_ingested} ingested files
+            </div>
+          )}
+        </div>
       </SpotlightCard>
 
-      {/* Terminal Log Console */}
       <SpotlightCard>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Terminal size={14} color="var(--muted)" />
           <span style={{ fontSize: '12px', fontFamily: 'var(--font-code)', color: 'var(--muted)', letterSpacing: '0.04em' }}>
-            SCAN ENGINE EXECUTION LOGS
+            SCAN ORCHESTRATION LOG
           </span>
         </div>
-        <div
-          style={{
-            padding: '16px 20px',
-            background: 'var(--terminal-bg)',
-            color: 'var(--terminal-text)',
-            fontFamily: 'var(--font-code)',
-            fontSize: '11.5px',
-            minHeight: '140px',
-            maxHeight: '220px',
-            overflowY: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '6px',
-          }}
-        >
-          {logs.length === 0 ? (
+        <div style={{ padding: '16px 20px', background: 'var(--terminal-bg)', color: 'var(--terminal-text)', fontFamily: 'var(--font-code)', fontSize: '11.5px', minHeight: '140px', maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {timeline.length === 0 ? (
             <span style={{ color: 'var(--dim)', fontStyle: 'italic' }}>
-              Ready to initialize AST analysis. Press "Run AST Scan" to begin.
+              Ready to start a real asynchronous Phase 3 scan. The selected Phase 2 snapshot will be materialized and executed in Docker.
             </span>
-          ) : (
-            logs.map((l, i) => (
-              <div key={i} style={{ opacity: 0.9, lineHeight: '1.5' }}>
-                {l}
-              </div>
-            ))
-          )}
+          ) : timeline.map((line, index) => (
+            <div key={`${line}-${index}`} style={{ opacity: 0.92, lineHeight: '1.5' }}>{line}</div>
+          ))}
+          {engineRuns.map((engine) => (
+            <div key={engine.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', marginTop: '3px' }}>
+              <span>[ENGINE] {engine.engine_name}</span>
+              <span style={{ color: engine.status === 'SUCCESS' ? 'var(--success)' : engine.status === 'FAILED' || engine.status === 'TIMEOUT' ? 'var(--critical)' : 'var(--muted)' }}>{engine.status}</span>
+            </div>
+          ))}
         </div>
       </SpotlightCard>
 
-      {/* Findings Section */}
-      {scanComplete && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>
-              Detected Vulnerability Findings ({findings.length})
-            </h4>
-          </div>
-
-          {findings.length === 0 ? (
-            <SpotlightCard>
-              <div style={{ padding: '32px 24px', textAlign: 'center' }}>
-                <div
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '50%',
-                    background: 'var(--success-bg)',
-                    color: 'var(--success)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 12px',
-                  }}
-                >
-                  <ShieldCheck size={22} />
+      {scan && (
+        <SpotlightCard>
+          <div style={{ padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Scan {scan.id.slice(0, 8)}</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '3px' }}>
+                  Commit {scan.commit_sha.slice(0, 12)} · Analysis Run {scan.analysis_run_id.slice(0, 8)}
                 </div>
-                <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>
-                  No Security Vulnerabilities Detected
-                </h4>
-                <p style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                  All AST security invariants and authorization rules passed for {projectName}.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: statusColor(scan.status), fontSize: '12px', fontWeight: 600 }}>
+                {scan.status === 'COMPLETED' ? <CheckCircle2 size={15} /> : scan.status === 'FAILED' || scan.status === 'CANCELLED' ? <XCircle size={15} /> : <RefreshCw size={14} className={active ? 'spin' : ''} />}
+                {statusLabel(scan.status)}
+              </div>
+            </div>
+
+            {scan.error_message && (
+              <div style={{ padding: '10px 12px', borderRadius: 'var(--radius-md)', background: 'var(--elevated)', color: 'var(--secondary)', fontSize: '11px', marginBottom: '12px' }}>
+                {scan.error_message}
+              </div>
+            )}
+
+            {scan.status === 'COMPLETED' ? (
+              <div style={{ padding: '20px', textAlign: 'center', borderRadius: 'var(--radius-md)', background: 'var(--success-bg)' }}>
+                <ShieldCheck size={22} color="var(--success)" style={{ marginBottom: '8px' }} />
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Phase 3 orchestration completed</div>
+                <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+                  The repository snapshot was validated and the registered Phase 3 scanner completed successfully. Security findings are intentionally deferred to Phase 4/5.
                 </p>
               </div>
-            </SpotlightCard>
-          ) : (
-            findings.map((f) => (
-              <SpotlightCard key={f.id}>
-                <div style={{ padding: '18px 20px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px' }}>
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                        <span
-                          className={`badge ${
-                            f.severity === 'CRITICAL'
-                              ? 'badge-critical'
-                              : f.severity === 'HIGH'
-                              ? 'badge-warning'
-                              : 'badge-neutral'
-                          }`}
-                        >
-                          {f.severity}
-                        </span>
-                        <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--accent)', fontWeight: 550 }}>
-                          {f.ruleId}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)', marginBottom: '3px' }}>
-                        {f.title}
-                      </div>
-                      <div style={{ fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Code size={11} /> {f.location}
-                      </div>
-                    </div>
-
-                    <button
-                      className="btn btn-secondary"
-                      style={{ fontSize: '11.5px', padding: '5px 12px', borderColor: 'var(--success-border)', color: 'var(--success)' }}
-                      onClick={() => handleApplyPatch(f.id)}
-                      disabled={applyingPatch === f.id}
-                    >
-                      {applyingPatch === f.id ? (
-                        <>
-                          <RefreshCw size={11} className="spin" /> Applying…
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={12} /> Apply Patch
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Diff Box */}
-                  <div
-                    style={{
-                      marginTop: '12px',
-                      padding: '10px 14px',
-                      background: 'var(--elevated)',
-                      borderRadius: 'var(--radius-md)',
-                      border: '1px solid var(--border)',
-                      fontFamily: 'var(--font-code)',
-                      fontSize: '11.5px',
-                      lineHeight: '1.6',
-                    }}
-                  >
-                    <div style={{ color: 'var(--critical)', textDecoration: 'line-through', opacity: 0.85 }}>
-                      - {f.snippet}
-                    </div>
-                    <div style={{ color: 'var(--success)', marginTop: '2px' }}>
-                      + {f.patch}
-                    </div>
-                  </div>
-                </div>
-              </SpotlightCard>
-            ))
-          )}
-        </div>
+            ) : scan.status === 'PARTIAL' ? (
+              <div style={{ padding: '20px', textAlign: 'center', borderRadius: 'var(--radius-md)', background: 'var(--elevated)' }}>
+                <XCircle size={22} color="var(--warning, #F59E0B)" style={{ marginBottom: '8px' }} />
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }}>Scan completed partially</div>
+                <p style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+                  One or more scanner executions failed or timed out. This is an expected Phase 3 terminal state, not a false success.
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </SpotlightCard>
       )}
     </div>
   );

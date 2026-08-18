@@ -78,11 +78,48 @@ export interface Project {
   scans?: Scan[];
 }
 
+export type ScanStatus =
+  | 'QUEUED'
+  | 'INGESTING'
+  | 'SCANNING'
+  | 'NORMALIZING'
+  | 'COMPLETED'
+  | 'PARTIAL'
+  | 'FAILED'
+  | 'CANCELLED';
+
+export interface ScanEngineRun {
+  id: string;
+  scan_id: string;
+  engine_name: string;
+  container_name?: string;
+  status: string;
+  exit_code?: number;
+  duration_ms?: number;
+  artifact_reference?: string;
+  error_message?: string;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+}
+
 export interface Scan {
   id: string;
   project_id: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | string;
+  analysis_run_id: string;
+  commit_sha: string;
+  status: ScanStatus | string;
+  progress_percent: number;
+  current_stage?: string;
+  error_message?: string;
   created_at: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface ScanStatusResponse extends Scan {
+  engine_statuses: Record<string, string>;
+  engine_runs: ScanEngineRun[];
 }
 
 // ─── Target Website ─────────────────────────────────────────────────────────

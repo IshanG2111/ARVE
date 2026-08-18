@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useProjects } from '../hooks/useProjects';
 import { LiveScanSimulator } from '../components/LiveScanSimulator';
 import { HalftoneBackground } from '../components/ui/HalftoneBackground';
 import { Cpu, ChevronDown } from 'lucide-react';
-import type { Project } from '@/types';
+import type { AnalysisRun, Project } from '@/types';
+import { api } from '../services/api';
 
 function projectDisplayName(p: Project): string {
   if (p.name) return p.name;
@@ -15,8 +16,26 @@ function projectDisplayName(p: Project): string {
 export const ScannerPage: React.FC = () => {
   const { data: projects = [] } = useProjects();
   const [selectedProjectId, setSelectedProjectId] = useState<string>(projects[0]?.id || '');
+  const [analysisRun, setAnalysisRun] = useState<AnalysisRun | null>(null);
 
   const activeProject = projects.find((p) => p.id === selectedProjectId) || projects[0];
+
+  useEffect(() => {
+    if (!activeProject?.id) {
+      setAnalysisRun(null);
+      return;
+    }
+    let cancelled = false;
+    api.getAnalysisRuns(activeProject.id)
+      .then((runs) => {
+        if (cancelled) return;
+        setAnalysisRun(runs.find((run) => run.status === 'COMPLETED') || null);
+      })
+      .catch(() => {
+        if (!cancelled) setAnalysisRun(null);
+      });
+    return () => { cancelled = true; };
+  }, [activeProject?.id]);
   const activeName = activeProject ? projectDisplayName(activeProject) : 'ARVE Core Engine';
 
   return (
@@ -29,15 +48,15 @@ export const ScannerPage: React.FC = () => {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
               <span className="badge badge-info" style={{ fontSize: '10.5px' }}>
-                <Cpu size={12} /> AST Analysis Engine
+                <Cpu size={12} /> Scan Orchestration
               </span>
               <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
-                OWASP Top 10 • Invariant Validation
+                Phase 2 snapshot • Celery • Docker
               </span>
             </div>
-            <h1 className="dashboard-title">Live AST Security Scanner</h1>
+            <h1 className="dashboard-title">Repository Scan Orchestrator</h1>
             <p className="dashboard-sub">
-              Execute deep abstract syntax tree analysis to trace untrusted ingress parameters and synthesize 1-click verified patches.
+              Run the selected commit-pinned Phase 2 snapshot asynchronously through the Phase 3 worker and Docker sandbox.
             </p>
           </div>
 
@@ -74,8 +93,13 @@ export const ScannerPage: React.FC = () => {
           )}
         </div>
 
-        {/* Feature Star: Live AST Scanner Component */}
-        <LiveScanSimulator projectName={activeName} />
+        {/* Real Phase 3 scan orchestration component */}
+        <LiveScanSimulator
+          projectId={activeProject?.id || ''}
+          projectName={activeName}
+          analysisRunId={analysisRun?.id}
+          analysisRun={analysisRun}
+        />
       </div>
     </div>
   );
