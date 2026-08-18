@@ -111,13 +111,82 @@ class VerificationResult(BaseModel):
     verified_at: Optional[datetime] = None
 
 
-class ScanResponse(BaseModel):
+class ScanCreate(BaseModel):
+    """Start a scan against a completed Phase-2 analysis run.
+
+    If analysis_run_id is omitted, the newest completed run for the project
+    is selected. Passing it explicitly is preferred for reproducibility.
+    """
+    analysis_run_id: Optional[str] = None
+
+
+class ScanEngineRunResponse(BaseModel):
     id: str
-    project_id: str
+    scan_id: str
+    engine_name: str
+    container_name: Optional[str] = None
     status: str
+    exit_code: Optional[int] = None
+    duration_ms: Optional[int] = None
+    artifact_reference: Optional[str] = None
+    error_message: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ScanResponse(BaseModel):
+    id: str
+    project_id: str
+    analysis_run_id: str
+    commit_sha: str
+    status: str
+    progress_percent: int = 0
+    current_stage: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ScanStatusResponse(BaseModel):
+    id: str
+    project_id: str
+    analysis_run_id: str
+    commit_sha: str
+    status: str
+    progress_percent: int
+    current_stage: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    engine_statuses: dict[str, str] = Field(default_factory=dict)
+    engine_runs: List[ScanEngineRunResponse] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @classmethod
+    def from_scan(cls, scan, engine_statuses: dict[str, str], engine_runs):
+        return cls(
+            id=scan.id,
+            project_id=scan.project_id,
+            analysis_run_id=scan.analysis_run_id,
+            commit_sha=scan.commit_sha,
+            status=scan.status,
+            progress_percent=scan.progress_percent,
+            current_stage=scan.current_stage,
+            error_message=scan.error_message,
+            created_at=scan.created_at,
+            started_at=scan.started_at,
+            completed_at=scan.completed_at,
+            engine_statuses=engine_statuses,
+            engine_runs=engine_runs,
+        )
 
 
 class ProjectCreate(BaseModel):

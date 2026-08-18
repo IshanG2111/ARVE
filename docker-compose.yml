@@ -1,0 +1,22 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: arve-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - arve_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ARVE development intentionally uses Neon PostgreSQL rather than a local
+  # postgres container. Start this compose file for Redis, then run the API
+  # and Celery worker through the existing Infisical workflow on the host.
+
+volumes:
+  arve_redis_data:

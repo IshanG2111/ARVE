@@ -108,11 +108,25 @@ export const DashboardPage: React.FC = () => {
     enabled: !!currentProject?.id,
   });
 
+  const { data: scans = [] } = useQuery({
+    queryKey: ['scans', currentProject?.id],
+    queryFn: () => (currentProject?.id ? api.getProjectScans(currentProject.id) : Promise.resolve([])),
+    enabled: !!currentProject?.id,
+    refetchInterval: (query) => {
+      const latest = query.state.data?.[0];
+      return latest && ['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(latest.status) ? 2000 : false;
+    },
+  });
+
   const latestRun = runs.length > 0 ? runs[0] : null;
-  const filesScannedCount = latestRun?.total_files || 0;
-  const astNodesCount = latestRun?.total_lines || 0;
-  const scanDurationText = latestRun?.duration_seconds ? `${latestRun.duration_seconds}s` : '—';
-  const findingsCount = latestRun?.findings_count ?? 0;
+  const latestScan = scans.length > 0 ? scans[0] : null;
+  // AnalysisRun exposes files_ingested; total_files was a stale frontend-only field.
+  const filesScannedCount = latestRun?.files_ingested ?? 0;
+  const scanDurationText = latestScan?.started_at && latestScan?.completed_at
+    ? `${Math.max(0, Math.round((new Date(latestScan.completed_at).getTime() - new Date(latestScan.started_at).getTime()) / 1000))}s`
+    : '—';
+  // Finding persistence is Phase 5, so this remains zero until the canonical finding model exists.
+  const findingsCount = 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 56px)', position: 'relative' }}>
@@ -657,7 +671,7 @@ export const DashboardPage: React.FC = () => {
                     LIVE SCAN TELEMETRY
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--secondary)', marginBottom: '16px' }}>
-                    Deterministic AST call graph for {projectDisplayName(currentProject)}
+                    Asynchronous scan lifecycle for {projectDisplayName(currentProject)}
                   </div>
 
                   {/* Telemetry Status / Graph */}
@@ -681,7 +695,10 @@ export const DashboardPage: React.FC = () => {
                           Analysis Run #{latestRun?.id?.slice(0, 8) || 'Active'}
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--success)', fontFamily: 'var(--font-code)' }}>
-                          Status: {latestRun?.status || 'COMPLETED'} • {filesScannedCount} files indexed
+                          {latestScan
+                            ? `Scan: ${latestScan.status} · ${latestScan.progress_percent}%`
+                            : `Ingestion: ${latestRun?.status || '—'} · ${filesScannedCount} files ingested`
+                          }
                         </div>
                       </div>
                     ) : (
@@ -706,7 +723,7 @@ export const DashboardPage: React.FC = () => {
                 >
                   <div>
                     <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      FILES SCANNED
+                      FILES INGESTED
                     </div>
                     <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
                       {filesScannedCount}
@@ -714,10 +731,10 @@ export const DashboardPage: React.FC = () => {
                   </div>
                   <div>
                     <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      LINES OF CODE
+CODE METRICS
                     </div>
                     <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
-                      {astNodesCount > 0 ? astNodesCount : '—'}
+                      —
                     </div>
                   </div>
                   <div>
@@ -795,7 +812,7 @@ export const DashboardPage: React.FC = () => {
                                   Analysis Run {r.status?.toLowerCase() || 'completed'}
                                 </div>
                                 <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                                  {r.total_files ? `${r.total_files} files analyzed` : 'Ingestion pipeline executed'}
+                                  {r.files_ingested ? `${r.files_ingested} files ingested` : 'Ingestion pipeline executed'}
                                 </div>
                               </div>
                             </div>

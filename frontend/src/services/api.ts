@@ -11,6 +11,8 @@ import type {
   AnalysisRun,
   AnalysisSummary,
   RepositoryFile,
+  Scan,
+  ScanStatusResponse,
 } from '@/types';
 
 export type {
@@ -25,6 +27,8 @@ export type {
   AnalysisRun,
   AnalysisSummary,
   RepositoryFile,
+  Scan,
+  ScanStatusResponse,
 };
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -215,6 +219,42 @@ export async function getAnalysisFiles(runId: string, statusFilter?: string): Pr
   return handleResponse<RepositoryFile[]>(res);
 }
 
+// ─── Phase 3: scan orchestration ───────────────────────────────────────────
+export async function createScan(projectId: string, analysisRunId?: string): Promise<Scan> {
+  const res = await fetch(`${BASE}/projects/${projectId}/scan`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(analysisRunId ? { analysis_run_id: analysisRunId } : {}),
+  });
+  return handleResponse<Scan>(res);
+}
+
+export async function getScanStatus(scanId: string): Promise<ScanStatusResponse> {
+  const res = await fetch(`${BASE}/scans/${scanId}/status`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanStatusResponse>(res);
+}
+
+export async function cancelScan(scanId: string): Promise<Scan> {
+  const res = await fetch(`${BASE}/scans/${scanId}/cancel`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<Scan>(res);
+}
+
+export async function getProjectScans(projectId: string): Promise<Scan[]> {
+  const res = await fetch(`${BASE}/projects/${projectId}/scans`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<Scan[]>(res);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -232,4 +272,8 @@ Object.assign(api, {
   getAnalysisRuns,
   getAnalysisSummary,
   getAnalysisFiles,
+  createScan,
+  getScanStatus,
+  cancelScan,
+  getProjectScans,
 });

@@ -76,15 +76,46 @@ class Project(Base):
 
 
 class Scan(Base):
-    """Placeholder for later scan orchestration."""
+    """A Phase-3 execution against one immutable Phase-2 repository snapshot."""
     __tablename__ = "scans"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    project_id = Column(String, ForeignKey("projects.id"), nullable=False, index=True)
-    status = Column(String, default="pending", nullable=False)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_run_id = Column(String, ForeignKey("analysis_runs.id", ondelete="RESTRICT"), nullable=False, index=True)
+    commit_sha = Column(String, nullable=False, index=True)
+    status = Column(String, default="QUEUED", nullable=False, index=True)
+    progress_percent = Column(Integer, default=0, nullable=False)
+    current_stage = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
 
     project = relationship("Project", back_populates="scans")
+    analysis_run = relationship("AnalysisRun", back_populates="scans")
+    engine_runs = relationship("ScanEngineRun", back_populates="scan", cascade="all, delete-orphan")
+
+
+class ScanEngineRun(Base):
+    """Execution record for one generic scanner engine within a scan."""
+    __tablename__ = "scan_engine_runs"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    engine_name = Column(String, nullable=False, index=True)
+    container_name = Column(String, nullable=True, index=True)
+    status = Column(String, default="QUEUED", nullable=False)
+    exit_code = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    artifact_reference = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    stdout = Column(Text, nullable=True)
+    stderr = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    scan = relationship("Scan", back_populates="engine_runs")
 
 
 class TargetWebsite(Base):
@@ -130,6 +161,7 @@ class AnalysisRun(Base):
 
     project = relationship("Project", back_populates="analysis_runs")
     files = relationship("RepositoryFile", back_populates="analysis_run", cascade="all, delete-orphan")
+    scans = relationship("Scan", back_populates="analysis_run")
 
 
 class RepositoryFile(Base):
