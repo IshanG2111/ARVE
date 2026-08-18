@@ -7,6 +7,7 @@ from sqlalchemy.pool import StaticPool
 
 import app.core.database as app_db
 from app.core.database import Base, get_db
+from app.core.config import settings
 from app.main import app as fastapi_app
 from app.models import models as _models  # noqa: F401
 
@@ -18,6 +19,10 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Tests do not require Redis/Celery. Real development uses Celery + Redis.
+settings.SCAN_QUEUE_BACKEND = "background"
+settings.SCANNER_ENABLE_TEST_ENGINE = False
 
 # Rebind app's database engine and SessionLocal
 app_db.engine = engine
@@ -54,3 +59,17 @@ def setup_db():
 
 
 
+
+
+@pytest.fixture
+def db():
+    session = TestingSessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def client_fixture():
+    return client
