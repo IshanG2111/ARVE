@@ -272,8 +272,12 @@ class IngestionService:
                     files_skipped_count += 1
 
             # ── PERSIST & COMPLETE ────────────────────────────────────────
-            # Purge previous file records for this repository to maintain a clean snapshot
-            self.db.query(RepositoryFile).filter(RepositoryFile.project_id == project.id).delete(synchronize_session=False)
+            # Persist files under this immutable analysis run. Do not delete
+            # previous runs: Phase 3 scans are pinned to a specific AnalysisRun
+            # and must remain reproducible after later ingestions.
+            self.db.query(RepositoryFile).filter(RepositoryFile.analysis_run_id == run.id).delete(
+                synchronize_session=False
+            )
             self.db.bulk_save_objects(file_records)
 
             # Detect package manager
