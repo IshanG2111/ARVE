@@ -16,6 +16,11 @@ This document records key architectural decisions, design trade-offs, security c
 9. [ADR-009: ARVE Normalization Layer & SHA-256 Content Fingerprinting](#adr-009-arve-normalization-layer--sha-256-content-fingerprinting)
 10. [ADR-010: Data Model — Single-Repo Project Denormalization](#adr-010-data-model--single-repo-project-denormalization)
 11. [ADR-011: Ingestion Guardrails — Hard Source Limits & Size Blacklists](#adr-011-ingestion-guardrails--hard-source-limits--size-blacklists)
+12. [ADR-012: Asynchronous Scan Execution with Celery & Redis](#adr-012-asynchronous-scan-execution-with-celery--redis)
+13. [ADR-013: Docker-Based Scanner Isolation](#adr-013-docker-based-scanner-isolation)
+14. [ADR-014: Scan the Persisted Phase 2 Repository Snapshot](#adr-014-scan-the-persisted-phase-2-repository-snapshot)
+15. [ADR-015: Persistent Scanner Artifacts in Backblaze B2](#adr-015-persistent-scanner-artifacts-in-backblaze-b2)
+16. [ADR-016: Keep Cloud Storage Credentials Outside the Scanner](#adr-016-keep-cloud-storage-credentials-outside-the-scanner)
 
 ---
 
@@ -182,3 +187,226 @@ Enforce strict pre-download and post-filter guardrails:
 ### AI Reasoning & Trade-off Analysis
 - Protects the worker runtime against Denial-of-Service or memory exhaustion while covering 99%+ of AI-generated web applications within the v1 scope.
 
+---
+
+## ADR-012: Asynchronous Scan Execution with Celery + Redis
+
+### Context
+
+Security scans are long-running operations involving workspace preparation,
+Docker execution, scanner execution, artifact generation, and cleanup.
+
+Running the complete scan inside the FastAPI request would block the API
+worker and make long-running execution difficult to manage.
+
+### Decision
+
+Use **Celery + Redis** for asynchronous scan execution.
+
+```text
+FastAPI
+   ↓
+Create Scan
+   ↓
+Celery
+   ↓
+Redis
+   ↓
+Celery Worker
+   ↓
+Scan Execution
+```
+
+PostgreSQL remains the persistent source of truth for scan state.
+
+### AI Reasoning & Trade-off Analysis
+
+- Keeps long-running scans outside the HTTP request lifecycle.
+- Allows the API to return a scan ID immediately.
+- Provides dedicated workers for scan execution.
+- Supports queuing and future worker scaling.
+- Keeps persistent scan state separate from the task queue.
+
+The additional Redis/Celery infrastructure is accepted because scan execution
+is inherently asynchronous and resource-intensive.
+
+---
+
+## ADR-013: Docker-Based Scanner Isolation
+
+### Context
+
+ARVE executes scanners against repository code originating from external
+repositories. Repository contents must therefore be treated as untrusted
+input.
+
+Running scanner processes directly on the host could expose the host
+environment to untrusted code or processes.
+
+### Decision
+
+Execute scanner workloads inside **Docker containers** with:
+
+- network disabled
+- read-only source mount
+- writable output mount
+- non-root execution
+- CPU limits
+- memory limits
+- execution timeout
+
+```text
+Celery Worker
+     ↓
+Docker Sandbox
+     ├── Read-only source
+     ├── Writable output
+     ├── No network
+     ├── CPU limit
+     ├── Memory limit
+     └── Non-root
+```
+
+### AI Reasoning & Trade-off Analysis
+
+- Provides isolation between scanner execution and the host.
+- Prevents arbitrary network access.
+- Limits filesystem access.
+- Controls resource consumption.
+- Provides a consistent scanner execution environment.
+
+Docker adds an operational dependency, but the security and isolation
+benefits are necessary for executing analysis against untrusted repositories.
+
+---
+
+## ADR-014: Scan the Persisted Phase 2 Repository Snapshot
+
+### Context
+
+Phase 2 already retrieves, filters, normalizes, and stores repository files
+for a specific commit.
+
+Downloading the repository again during Phase 3 would duplicate repository
+acquisition and could result in scanning different content.
+
+### Decision
+
+Phase 3 scans the completed Phase 2 `AnalysisRun` and its associated
+`RepositoryFile` records.
+
+```text
+AnalysisRun
+    ↓
+RepositoryFile
+    ↓
+Temporary Workspace
+    ↓
+Docker Scanner
+```
+
+Phase 3 does not independently fetch the repository from GitHub.
+
+### AI Reasoning & Trade-off Analysis
+
+- Ensures the scanner analyzes the exact Phase 2 snapshot.
+- Makes scan execution reproducible.
+- Avoids duplicate GitHub API calls.
+- Keeps repository ingestion and scan execution properly separated.
+- Allows every scan to be traced back to its `AnalysisRun` and commit.
+
+This establishes the fundamental boundary:
+
+```text
+Phase 2 → What code are we scanning?
+Phase 3 → How do we safely execute the scan?
+```
+
+---
+
+## ADR-015: Persistent Scanner Artifacts in Backblaze B2
+
+### Context
+
+Scanner artifacts need to remain available after the worker and temporary
+scan workspace are gone.
+
+Local storage would make artifacts dependent on the machine that executed
+the scan, while storing large raw artifacts directly in PostgreSQL would
+unnecessarily increase database storage.
+
+### Decision
+
+Store persistent raw scanner artifacts in **private Backblaze B2** using its
+S3-compatible API.
+
+```text
+Scanner
+   ↓
+Temporary Output
+   ↓
+Backblaze B2
+   ↓
+Artifact Reference
+   ↓
+PostgreSQL
+```
+
+Only artifact metadata/reference is stored in PostgreSQL.
+
+The local filesystem is used only for temporary scan execution and is cleaned
+up afterwards.
+
+### AI Reasoning & Trade-off Analysis
+
+- Makes artifacts accessible to all authorized team members/workers.
+- Removes dependency on a particular developer machine.
+- Keeps large raw files out of PostgreSQL.
+- Provides suitable object storage for scanner outputs.
+- Allows persistent artifacts to survive worker restarts and machine changes.
+
+The private B2 bucket also ensures scanner results are not publicly exposed.
+
+---
+
+## ADR-016: Keep Cloud Storage Credentials Outside the Scanner
+
+### Context
+
+Scanner containers process untrusted repository content.
+
+Giving scanners direct access to Backblaze credentials would allow a
+compromised scanner process to access or modify persistent application
+storage.
+
+### Decision
+
+Backblaze credentials are available only to the trusted backend/Celery
+worker.
+
+The scanner container receives no B2 credentials.
+
+```text
+Docker Scanner
+      ↓
+Temporary Output
+      ↓
+Trusted Celery Worker
+      ↓
+Backblaze B2
+```
+
+B2 credentials are stored in Infisical and injected only into the trusted
+application process.
+
+### AI Reasoning & Trade-off Analysis
+
+- Applies least-privilege principles.
+- Prevents scanners from directly accessing persistent storage.
+- Keeps cloud credentials outside the untrusted execution environment.
+- Centralizes artifact persistence in the trusted application layer.
+
+This creates a clear security boundary between **untrusted scanner
+execution** and **trusted artifact storage**.
+
+---

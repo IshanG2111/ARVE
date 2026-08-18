@@ -1,9 +1,9 @@
+import os
+import shutil
 import subprocess
 import sys
-import os
-import signal
 import time
-import shutil
+
 
 def main():
     if hasattr(sys.stdout, 'reconfigure'):
@@ -18,7 +18,7 @@ def main():
 
     print("=" * 60)
     print(" [ARVE] Unified Dev Runner (Infisical Integrated)")
-    print(" Starting FastAPI Backend (Port 8000) & Vite Frontend (Port 5173)...")
+    print(" Starting FastAPI Backend (Port 8000), Celery Worker, and Vite Frontend (Port 5173)...")
     print("=" * 60)
 
     if not shutil.which("infisical"):
@@ -44,15 +44,29 @@ def main():
         p_backend = subprocess.Popen(backend_cmd, cwd=backend_dir)
         processes.append(p_backend)
 
+        # Launch Celery worker. Windows uses the solo pool because Celery's
+        # prefork model is not reliable on native Windows. Linux/macOS use
+        # the default worker pool.
+        celery_pool = "solo" if os.name == "nt" else "prefork"
+        celery_cmd = [
+            infisical_bin, "run", "--env=dev", "--path=/backend", "--",
+            sys.executable, "-m", "celery", "-A", "app.celery_app:celery_app",
+            "worker", "--loglevel=INFO", "--pool", celery_pool,
+        ]
+        print(f"[RUNNER] Launching Celery worker ({celery_pool}) with Infisical...")
+        p_worker = subprocess.Popen(celery_cmd, cwd=backend_dir)
+        processes.append(p_worker)
+
         # Launch frontend
         print("[RUNNER] Launching Frontend with Infisical (--path=/frontend)...")
         p_frontend = subprocess.Popen(frontend_cmd, cwd=frontend_dir)
         processes.append(p_frontend)
 
-        print("\n✅ Both services are starting up via Infisical:")
+        print("\n✅ Backend, Celery worker, and frontend are starting via Infisical:")
         print("   - API Backend : http://localhost:8000")
         print("   - API Docs    : http://localhost:8000/docs")
         print("   - Web UI      : http://localhost:5173")
+        print("   - Redis       : redis://localhost:6379/0")
         print("\nPress Ctrl+C to stop both servers.\n")
 
         while True:
