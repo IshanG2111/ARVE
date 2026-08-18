@@ -12,7 +12,7 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     description="Adaptive Remediation & Verification Engine (ARVE) API",
-    version="0.2.0 - Foundation + Repository Ingestion",
+    version="0.3.0 - Scan Orchestration",
 )
 
 allowed_origins = list(dict.fromkeys([
@@ -37,7 +37,7 @@ def root():
         "status": "online",
         "app": settings.PROJECT_NAME,
         "docs": "/docs",
-        "version": "0.2.0 - Foundation + Repository Ingestion",
+        "version": "0.3.0 - Scan Orchestration",
     }
 
 
