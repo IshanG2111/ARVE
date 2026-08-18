@@ -203,9 +203,9 @@ ARVE/
 └── run.py
 ```
 
-Check that `.infisical.json` exists.
+Check that `../.infisical.json` exists.
 
-Do not manually put secret values into `.infisical.json`.
+Do not manually put secret values into `../.infisical.json`.
 
 ------------------------------------------------------------------------
 
