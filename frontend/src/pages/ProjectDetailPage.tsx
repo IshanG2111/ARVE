@@ -639,7 +639,12 @@ export const ProjectDetailPage: React.FC = () => {
 
       {activeTab === 'scanner' && (
         <div>
-          <LiveScanSimulator projectName={name} />
+          <LiveScanSimulator
+            projectId={project.id}
+            projectName={name}
+            analysisRunId={selectedRun?.id}
+            analysisRun={selectedRun}
+          />
         </div>
       )}
 
