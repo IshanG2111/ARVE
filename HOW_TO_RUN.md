@@ -2,7 +2,30 @@
 
 ---
 
-# 1. Start Docker Desktop
+## ⚡ Quick Start (Single Command / One-Click)
+
+To automatically start all services (Docker check, Redis container, Scanner build, Alembic migrations, Celery worker, FastAPI backend, and Vite frontend) in a single step:
+
+### Windows Batch / Double-Click:
+```cmd
+run.bat
+```
+*(or run `start.bat`)*
+
+### Python (Cross-Platform):
+```bash
+python run.py
+```
+
+### NPM:
+```bash
+npm start
+```
+
+---
+
+# Manual Step-by-Step Guide
+
 
 ### Option A — Start from Start Menu
 

@@ -1,7 +1,7 @@
 @echo off
+setlocal
 echo ============================================================
-echo  🚀 ARVE Unified Dev Runner (Batch)
-echo  Starting FastAPI Backend (Port 8000) ^& Vite Frontend (Port 5173)...
+echo  ARVE — Unified All-in-One Dev Runner
 echo ============================================================
-python run.py
+python "%~dp0run.py"
 pause
