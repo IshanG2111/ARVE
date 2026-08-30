@@ -733,27 +733,27 @@ Confirm:
 Database coordination is complete when:
 
 ```text
-[ ] Canonical models agreed
-[ ] Existing Phase 3 models reused where applicable
-[ ] No duplicate conceptual models
-[ ] No duplicate finding tables
-[ ] DB owner identified
-[ ] Migration ownership established
-[ ] Canonical engine identifiers agreed
-[ ] Canonical finding types agreed
-[ ] Migration successfully applied
-[ ] Existing Phase 3 data remains valid
-[ ] OSV uses canonical Finding
-[ ] Gitleaks uses canonical Finding
-[ ] Engine-specific data has an approved representation
-[ ] Gitleaks secrets are never persisted
-[ ] Foreign keys verified
-[ ] Indexes verified
-[ ] Deduplication rules agreed
-[ ] CI migration tests pass
-[ ] Mixed scan writes correctly
-[ ] Existing scans still work
-[ ] Integration branch passes
+[x] Canonical models agreed (NormalizedFinding and SecurityFinding)
+[x] Existing Phase 3 models reused where applicable (Scan, Project, ScanEngineRun)
+[x] No duplicate conceptual models
+[x] No duplicate finding tables
+[x] DB owner identified
+[x] Migration ownership established
+[x] Canonical engine identifiers agreed ('osv', 'gitleaks', 'semgrep')
+[x] Canonical finding types agreed ('dependency', 'secret', 'sast', etc.)
+[x] Migration successfully applied (20260830_0005_phase4a_security_findings.py)
+[x] Existing Phase 3 data remains valid
+[ ] OSV uses canonical Finding (Next Phase 4A.1)
+[ ] Gitleaks uses canonical Finding (Next Phase 4A.2)
+[x] Engine-specific data has an approved representation (raw_json / secret_hash)
+[x] Gitleaks secrets are never persisted (finding contract stores signature/redacted metadata)
+[x] Foreign keys verified (scan_id CASCADE, project_id CASCADE)
+[x] Indexes verified (non-unique composite indexes for finding history)
+[x] Deduplication rules agreed (line-independent finding identity)
+[x] CI migration tests pass (64 security tests, upgrade/downgrade/upgrade verified)
+[ ] Mixed scan writes correctly (Post-integration)
+[x] Existing scans still work (Phase 2 & Phase 3 regressions pass)
+[ ] Integration branch passes (Phase 4A Integration)
 ```
 
 ## 32. Final Architecture Rule

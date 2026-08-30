@@ -111,38 +111,43 @@ Fetch Source Code Tree & File Contents
 
 ---
 
-## 🛡 Flow 3: Security Detection & Pattern Extraction Pipeline (Phase 3 & Phase 5)
+## 🛡 Flow 3: Security Detection & Shared Normalization Pipeline (Phase 4A)
 
 ```text
-                  Structured Application Model
-                               |
-                               v
-               Execute Security Scanner Suite
-         +---------------------+---------------------+
-         |                     |                     |
-         v                     v                     v
-      Semgrep              Gitleaks                Trivy
-  (AST Patterns)      (Hardcoded Secrets)     (Dependencies)
-         |                     |                     |
-         +---------------------+---------------------+
-                               |
-                               v
-                 Normalize into Finding Format
-         {
-           "id": "ARVE-0017",
-           "cwe": "CWE-639",
-           "file": "src/api/users/[id].ts",
-           "line": 42,
-           "vulnerability": "Broken Access Control"
-         }
-                               |
-                               v
-                ML Security Pattern Engine
-         (Code Embeddings -> Vector Space -> HDBSCAN Clustering)
-                               |
-                               v
-                LLM Pattern Interpretation
-        "Discovered Pattern: Missing Ownership Check on User ID"
+                  Phase 2 Ingested Snapshot (source workspace)
+                                       |
+                                       v
+                     Scan Orchestration (Phase 3 Celery Worker)
+                                       |
+                +----------------------+----------------------+
+                |                                             |
+                v                                             v
+        OSV-Scanner Runner                            Gitleaks Runner
+     (Dependency Vulnerabilities)                   (Hardcoded Secrets)
+                |                                             |
+                | raw JSON artifact                           | raw JSON artifact
+                v                                             v
+         OsvFindingMapper                             GitleaksFindingMapper
+         (FindingMapper)                                (FindingMapper)
+                |                                             |
+                +----------------------+----------------------+
+                                       |
+                                       v
+                               FindingNormalizer
+         +-----------------------------------------------------------+
+         | 1. Validate canonical NormalizedFinding contract          |
+         | 2. Map severities to CRITICAL, HIGH, MEDIUM, LOW, INFO     |
+         | 3. Compute deterministic SHA-256 finding identity         |
+         | 4. Map to SQLAlchemy SecurityFinding models               |
+         +-----------------------------+-----------------------------+
+                                       |
+                                       v
+                       PostgreSQL / SQLite Database
+                          (security_findings)
+                                       |
+                                       v
+                        Pattern Extraction & Attack Graphs
+                                (Phase 5 & Phase 7)
 ```
 
 ---
@@ -176,30 +181,46 @@ Fetch Source Code Tree & File Contents
  +-------------------+         1:N         +-------------------+
  |       User        |-------------------->|      Project      |
  |-------------------|                     |-------------------|
- | id (PK)           |                     | id (PK)           |
+ | id (PK UUID)      |                     | id (PK UUID)      |
  | firebase_uid (UNQ)|                     | user_id (FK)      |
- | github_id         |                     | repository_id(FK) |
- | email             |                     | branch            |
- | username          |                     | deployment_url    |
- | github_access_token                     +---------+---------+
+ | github_id         |                     | name, description |
+ | email             |                     | repo_id, repo_url |
+ | username          |                     +---------+---------+
  +-------------------+                               |
                                                      | 1:N
                                                      v
  +-------------------+         1:N         +-------------------+
- |    Repository     |<--------------------|       Scan        |
+ |   AnalysisRun     |<--------------------|       Scan        |
  |-------------------|                     |-------------------|
- | id (PK)           |                     | id (PK)           |
- | github_repo_id    |                     | project_id (FK)   |
- | owner / name      |                     | status            |
- +-------------------+                     +-------------------+
-                                                     | 1:N
-                                                     v
-                                           +-------------------+
-                                           |   TargetWebsite   |
-                                           |-------------------|
-                                           | id (PK)           |
-                                           | project_id (FK)   |
-                                           | domain            |
-                                           | verification_token|
-                                           +-------------------+
+ | id (PK UUID)      |                     | id (PK UUID)      |
+ | project_id (FK)   |                     | project_id (FK)   |
+ | commit_sha        |                     | analysis_run_id(FK|
+ | status            |                     | commit_sha        |
+ +---------+---------+                     | status            |
+           |                               +----+---------+----+
+           | 1:N                                |         |
+           v                                    |         | 1:N
+ +-------------------+             1:N          |         v
+ |  RepositoryFile   |             +------------+  +-------------------+
+ |-------------------|             |               |  ScanEngineRun    |
+ | id (PK UUID)      |             |               |-------------------|
+ | analysis_run_id(FK|             |               | id (PK UUID)      |
+ | path, sha256      |             |               | scan_id (FK)      |
+ | content           |             |               | engine_name       |
+ +-------------------+             v               | status, artifact  |
+                         +-------------------+     +-------------------+
+                         |  SecurityFinding  |
+                         |-------------------|
+                         | id (PK UUID)      |
+                         | scan_id (FK)      |
+                         | project_id (FK)   |
+                         | engine            |
+                         | finding_type      |
+                         | title, description|
+                         | severity, status  |
+                         | file_path, lines  |
+                         | package, cve, ghsa|
+                         | fingerprint (IDX) |
+                         | raw_json          |
+                         +-------------------+
 ```

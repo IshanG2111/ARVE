@@ -21,6 +21,9 @@ This document records key architectural decisions, design trade-offs, security c
 14. [ADR-014: Scan the Persisted Phase 2 Repository Snapshot](#adr-014-scan-the-persisted-phase-2-repository-snapshot)
 15. [ADR-015: Persistent Scanner Artifacts in Backblaze B2](#adr-015-persistent-scanner-artifacts-in-backblaze-b2)
 16. [ADR-016: Keep Cloud Storage Credentials Outside the Scanner](#adr-016-keep-cloud-storage-credentials-outside-the-scanner)
+17. [ADR-017: Shared Security Foundation & Canonical NormalizedFinding Contract](#adr-017-shared-security-foundation--canonical-normalizedfinding-contract)
+18. [ADR-018: Line-Independent Deterministic Finding Fingerprinting](#adr-018-line-independent-deterministic-finding-fingerprinting)
+19. [ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking](#adr-019-non-unique-fingerprint-indexes-for-multi-scan-finding-lifecycle-tracking)
 
 ---
 
@@ -410,3 +413,55 @@ This creates a clear security boundary between **untrusted scanner
 execution** and **trusted artifact storage**.
 
 ---
+
+## ADR-017: Shared Security Foundation & Canonical NormalizedFinding Contract
+
+### Context
+Phase 4 introduces multiple heterogeneous security scanning engines: OSV-Scanner (SCA dependency vulnerability scanning) and Gitleaks (hardcoded secret detection). Developing each engine independently without a shared foundation would lead to database migration collisions, fragmented ORM finding schemas, inconsistent severities, and Git merge conflicts.
+
+### Decision
+Establish a centrally frozen, engine-agnostic shared security foundation:
+- Single canonical database persistence table: `security_findings`.
+- Shared Pydantic data contract: `NormalizedFinding`.
+- Universal severity taxonomy (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`) with automated CVSS score normalization.
+- Abstract mapper contract: `FindingMapper` protocol implemented by each engine.
+
+### AI Reasoning & Trade-off Analysis
+- **Decoupling**: Engine developers build only engine-specific CLI runners and mappers (`map_artifact`), outputting identical canonical `NormalizedFinding` objects.
+- **Single Source of Truth**: Eliminates duplicate finding tables (e.g. `osv_findings`, `gitleaks_findings`) and unifies reporting, graph creation, and remediation pipelines.
+
+---
+
+## ADR-018: Line-Independent Deterministic Finding Fingerprinting
+
+### Context
+When code is refactored, new lines are added, or whitespace is adjusted, the physical line numbers of existing vulnerabilities and leaked secrets change. If the finding fingerprint incorporated dynamic line numbers, a minor code shift would cause ARVE to treat an existing finding as a newly introduced vulnerability, corrupting historical lifecycle tracking.
+
+### Decision
+Fingerprint generation strictly distinguishes **Finding Identity** (what the defect is) from **Occurrence Location** (where it currently sits):
+- **Secret Identity**: `SHA256(engine | secret | rule_id | file_path | secret_signature)` — independent of `line_start`.
+- **SCA Identity**: `SHA256(engine | dependency | package_name | ecosystem | vulnerability_id | file_path)`.
+- **Scan Invariance**: `scan_id` is strictly excluded from fingerprint generation.
+- Dynamic line ranges (`line_start`, `line_end`) and `scan_id` are stored in table columns for reporting without altering the identity hash.
+
+### AI Reasoning & Trade-off Analysis
+- **Stability**: Prevents finding churn across git commits and pull request iterations.
+- **Auditability**: Enables reliable status progression (`OPEN` → `RESOLVED` → `REOPENED`) over time.
+
+---
+
+## ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking
+
+### Context
+A security finding often exists across dozens of successive repository scans over time. If `(project_id, fingerprint)` had a database-level `UNIQUE` constraint, subsequent scans of the same project would crash or overwrite historical scan execution records.
+
+### Decision
+Maintain `(project_id, fingerprint)` and `(scan_id, engine)` as **non-unique composite indexes** rather than unique constraints:
+- Each scan execution records its exact finding instances linked via `scan_id`.
+- The non-unique index `ix_security_findings_project_fingerprint` allows fast queries to trace the lifecycle and reappearance history of a finding across multiple scan timestamps.
+
+### AI Reasoning & Trade-off Analysis
+- Preserves complete immutable scan audit history.
+- Enables the UI and analytics engine to calculate mean-time-to-remediate (MTTR) and detect regressed vulnerabilities without compromising historical records.
+
+---
