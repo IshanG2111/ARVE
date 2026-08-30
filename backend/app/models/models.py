@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -73,6 +73,7 @@ class Project(Base):
     targets = relationship("TargetWebsite", back_populates="project", cascade="all, delete-orphan")
     analysis_runs = relationship("AnalysisRun", back_populates="project", cascade="all, delete-orphan")
     repository_files = relationship("RepositoryFile", back_populates="project", cascade="all, delete-orphan")
+    findings = relationship("SecurityFinding", back_populates="project", cascade="all, delete-orphan")
 
 
 class Scan(Base):
@@ -94,6 +95,7 @@ class Scan(Base):
     project = relationship("Project", back_populates="scans")
     analysis_run = relationship("AnalysisRun", back_populates="scans")
     engine_runs = relationship("ScanEngineRun", back_populates="scan", cascade="all, delete-orphan")
+    findings = relationship("SecurityFinding", back_populates="scan", cascade="all, delete-orphan")
 
 
 class ScanEngineRun(Base):
@@ -184,3 +186,48 @@ class RepositoryFile(Base):
 
     project = relationship("Project", back_populates="repository_files")
     analysis_run = relationship("AnalysisRun", back_populates="files")
+
+
+class SecurityFinding(Base):
+    """Canonical security finding model shared across all ARVE scanner engines."""
+    __tablename__ = "security_findings"
+    __table_args__ = (
+        CheckConstraint(
+            "line_end >= line_start OR line_end IS NULL OR line_start IS NULL",
+            name="ck_security_findings_line_order",
+        ),
+        CheckConstraint(
+            "line_start > 0 OR line_start IS NULL",
+            name="ck_security_findings_line_start_positive",
+        ),
+        Index("ix_security_findings_scan_engine", "scan_id", "engine"),
+        Index("ix_security_findings_project_fingerprint", "project_id", "fingerprint"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    engine = Column(String, nullable=False, index=True)
+    finding_type = Column(String, nullable=False, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(String, nullable=False, index=True)
+    confidence = Column(String, nullable=True, index=True)
+    status = Column(String, default="OPEN", nullable=False, index=True)
+    file_path = Column(String, nullable=True, index=True)
+    line_start = Column(Integer, nullable=True)
+    line_end = Column(Integer, nullable=True)
+    package_name = Column(String, nullable=True, index=True)
+    package_version = Column(String, nullable=True)
+    ecosystem = Column(String, nullable=True, index=True)
+    cve = Column(String, nullable=True, index=True)
+    ghsa = Column(String, nullable=True, index=True)
+    cwe = Column(String, nullable=True, index=True)
+    rule_id = Column(String, nullable=True, index=True)
+    fingerprint = Column(String, nullable=False, index=True)
+    raw_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    scan = relationship("Scan", back_populates="findings")
+    project = relationship("Project", back_populates="findings")
