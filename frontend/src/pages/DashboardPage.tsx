@@ -1,994 +1,589 @@
-import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useProjects, useDeleteProject } from '../hooks/useProjects';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
-import { ProjectWizardModal } from '../components/ProjectWizardModal';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { AddTargetModal } from '../components/AddTargetModal';
-import { VerificationModal } from '../components/VerificationModal';
-import { IngestionOverlay } from '../components/ui/IngestionOverlay';
-import { HalftoneBackground } from '../components/ui/HalftoneBackground';
-import { LoadingAnimation } from '../components/ui/LoadingAnimation';
-import { AppleStyleDock } from '../components/core/AppleStyleDock';
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useRepository } from '../context/RepositoryContext';
 import { useToast } from '../components/ui/ToastProvider';
-import { api, type TargetWebsite } from '../services/api';
+import { api } from '../services/api';
+import { SeverityBadge } from '../components/common/SeverityBadge';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { EmptyState } from '../components/common/EmptyState';
+import { ProjectWizardModal } from '../components/ProjectWizardModal';
+import { IngestionOverlay } from '../components/ui/IngestionOverlay';
+import { Wave } from '../components/ui/wave';
 import {
-  Plus,
-  GitBranch,
-  ArrowUpRight,
-  Globe,
-  ShieldCheck,
-  X,
-  Activity,
-  Crosshair,
+  Play,
   CheckCircle2,
-  Trash2,
+  ArrowRight,
+  Layers,
+  Activity,
+  ChevronRight,
+  ChevronDown,
+  FolderGit2,
 } from 'lucide-react';
-import type { Project } from '@/types';
-
-function projectDisplayName(p?: Project | null): string {
-  if (!p) return 'Repository Workspace';
-  if (p.name) return p.name;
-  if (p.repository?.name) return p.repository.name;
-  if (p.repo_name) return p.repo_name.split('/').pop() || p.repo_name;
-  return 'Untitled repository';
-}
-
-function projectRepoLabel(p?: Project | null): string {
-  if (!p) return '';
-  if (p.repository?.full_name) return p.repository.full_name;
-  if (p.repo_name) return p.repo_name;
-  return '';
-}
+import type { SecurityFinding } from '@/types';
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const queryClient = useQueryClient();
   const toast = useToast();
-
-  const { data: projects = [], isLoading } = useProjects();
-  const deleteProject = useDeleteProject();
-
-  const currentRepoParam = searchParams.get('repo');
-  const currentProject = projects.find((p) => p.id === currentRepoParam) || projects[0] || null;
+  const {
+    currentProject,
+    currentProjectId,
+    isLoading,
+    displayName,
+    repoLabel,
+    defaultBranch,
+    runs,
+    latestRun,
+    latestScan,
+    isScanActive,
+    refreshRuns,
+    refreshScans,
+    refreshProjects,
+    targets,
+  } = useRepository();
 
   const [showWizard, setShowWizard] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [ingestingProjectName, setIngestingProjectName] = useState<string | null>(null);
+  const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
+  const [triggeringScan, setTriggeringScan] = useState(false);
+  const [triggeringIngest, setTriggeringIngest] = useState(false);
+  const [showEngineDetails, setShowEngineDetails] = useState(false);
 
-  const [selectedTarget, setSelectedTarget] = useState<TargetWebsite | null>(null);
-  const [addTargetProjectId, setAddTargetProjectId] = useState<{ id: string; name: string } | null>(null);
-  const [deleteProjectRequest, setDeleteProjectRequest] = useState<{ id: string; name: string } | null>(null);
-  const [deleteTargetRequest, setDeleteTargetRequest] = useState<{ id: string; domain: string } | null>(null);
+  const verifiedTargets = targets.filter((t) => t.is_verified);
+  const targetCount = targets.length;
+  const repoQuery = currentProjectId ? `?repo=${currentProjectId}` : '';
 
-  const refreshProjects = () => {
-    queryClient.invalidateQueries({ queryKey: ['projects'] });
-  };
+  // Findings computation
+  const findings: SecurityFinding[] = useMemo(() => {
+    if (!latestRun && !latestScan) return [];
+    return [];
+  }, [latestRun, latestScan]);
 
-  const handleDeleteProject = async () => {
-    if (!deleteProjectRequest) return;
-    const { id, name } = deleteProjectRequest;
-    setDeletingId(id);
-    deleteProject.mutate(id, {
-      onSuccess: () => {
-        toast.success(`Project "${name}" removed successfully.`);
-        setDeleteProjectRequest(null);
-        navigate('/dashboard');
-      },
-      onError: (err) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to delete project');
-      },
-      onSettled: () => setDeletingId(null),
-    });
-  };
+  const criticalFindings = findings.filter((f) => f.severity === 'CRITICAL');
+  const highFindings = findings.filter((f) => f.severity === 'HIGH');
+  const attentionCount = criticalFindings.length + highFindings.length;
 
-  const handleDeleteTarget = async () => {
-    if (!deleteTargetRequest) return;
-    const { id: targetId, domain } = deleteTargetRequest;
+  const handleRunAnalysis = async () => {
+    if (!currentProjectId) return;
+
+    if (!latestRun || latestRun.status !== 'COMPLETED') {
+      setTriggeringIngest(true);
+      setShowIngestionOverlay(true);
+      try {
+        await api.triggerIngestion(currentProjectId);
+        toast.success('Codebase ingestion initiated.');
+        refreshRuns();
+      } catch (err: unknown) {
+        toast.error(err instanceof Error ? err.message : 'Failed to trigger ingestion');
+      } finally {
+        setTriggeringIngest(false);
+      }
+      return;
+    }
+
+    setTriggeringScan(true);
     try {
-      await api.deleteTarget(targetId);
-      refreshProjects();
-      toast.success(`Target domain ${domain} removed.`);
-      setDeleteTargetRequest(null);
+      await api.createScan(currentProjectId, latestRun.id);
+      toast.success('Security analysis run queued.');
+      refreshScans();
+      navigate(`/analysis${repoQuery}`);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove target');
+      toast.error(err instanceof Error ? err.message : 'Failed to start analysis');
+    } finally {
+      setTriggeringScan(false);
     }
   };
 
-  const targets = currentProject?.targets || [];
-  const verifiedTargets = targets.filter((t) => t.is_verified);
-  const targetCount = targets.length;
-  const verificationHealthRate = targetCount > 0 ? Math.round((verifiedTargets.length / targetCount) * 100) : 0;
+  const lastAnalyzedDate = latestScan?.completed_at || latestRun?.completed_at;
+  const lastAnalyzedText = lastAnalyzedDate
+    ? new Date(lastAnalyzedDate).toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'Never';
 
-  // Fetch real analysis runs for active project
-  const { data: runs = [] } = useQuery({
-    queryKey: ['analysis-runs', currentProject?.id],
-    queryFn: () => (currentProject?.id ? api.getAnalysisRuns(currentProject.id) : Promise.resolve([])),
-    enabled: !!currentProject?.id,
-  });
+  if (isLoading) {
+    return (
+      <div className="dashboard-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
+        <div className="page-container" style={{ padding: '0 24px' }}>
+          {/* Header Skeleton */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '28px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div className="skeleton-shimmer" style={{ width: '120px', height: '14px', borderRadius: '4px' }} />
+              <div className="skeleton-shimmer" style={{ width: '260px', height: '32px', borderRadius: '6px' }} />
+            </div>
+            <div className="skeleton-shimmer" style={{ width: '180px', height: '38px', borderRadius: '6px' }} />
+          </div>
 
-  const { data: scans = [] } = useQuery({
-    queryKey: ['scans', currentProject?.id],
-    queryFn: () => (currentProject?.id ? api.getProjectScans(currentProject.id) : Promise.resolve([])),
-    enabled: !!currentProject?.id,
-    refetchInterval: (query) => {
-      const latest = query.state.data?.[0];
-      return latest && ['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(latest.status) ? 2000 : false;
-    },
-  });
+          {/* Banner Skeleton */}
+          <div
+            className="skeleton-shimmer"
+            style={{
+              width: '100%',
+              height: '90px',
+              borderRadius: 'var(--radius-lg)',
+              marginBottom: '24px',
+            }}
+          />
 
-  const latestRun = runs.length > 0 ? runs[0] : null;
-  const latestScan = scans.length > 0 ? scans[0] : null;
-  // AnalysisRun exposes files_ingested; total_files was a stale frontend-only field.
-  const filesScannedCount = latestRun?.files_ingested ?? 0;
-  const scanDurationText = latestScan?.started_at && latestScan?.completed_at
-    ? `${Math.max(0, Math.round((new Date(latestScan.completed_at).getTime() - new Date(latestScan.started_at).getTime()) / 1000))}s`
-    : '—';
-  // Finding persistence is Phase 5, so this remains zero until the canonical finding model exists.
-  const findingsCount = 0;
+          {/* Metric Cards Skeleton Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+              gap: '16px',
+              marginBottom: '24px',
+            }}
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="card"
+                style={{
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  background: 'var(--surface)',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div className="skeleton-shimmer" style={{ width: '80px', height: '12px', borderRadius: '3px' }} />
+                  <div className="skeleton-shimmer" style={{ width: '28px', height: '28px', borderRadius: '6px' }} />
+                </div>
+                <div className="skeleton-shimmer" style={{ width: '60px', height: '28px', borderRadius: '4px' }} />
+                <div className="skeleton-shimmer" style={{ width: '140px', height: '12px', borderRadius: '3px' }} />
+              </div>
+            ))}
+          </div>
+
+          {/* Activity Table Skeleton */}
+          <div className="card" style={{ padding: '24px', background: 'var(--surface)' }}>
+            <div className="skeleton-shimmer" style={{ width: '160px', height: '18px', borderRadius: '4px', marginBottom: '16px' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="skeleton-shimmer"
+                  style={{ width: '100%', height: '48px', borderRadius: '6px' }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentProject) {
+    return (
+      <div className="page-container" style={{ padding: '40px 24px' }}>
+        <EmptyState
+          icon={FolderGit2}
+          title="No repository connected"
+          description="Connect a GitHub repository to start scanning code, mapping dependencies, and analyzing vulnerabilities."
+          action={
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowWizard(true)}
+              style={{ gap: '6px' }}
+              id="empty-connect-repo-btn"
+            >
+              Connect Repository
+            </button>
+          }
+        />
+        {showWizard && (
+          <ProjectWizardModal
+            onClose={() => setShowWizard(false)}
+            onCreated={() => {
+              setShowWizard(false);
+              refreshProjects();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 56px)', position: 'relative' }}>
-      <HalftoneBackground interactive={true} showHero={true} />
-
-      <div className="dashboard anim-fade-up" style={{ paddingBottom: '160px' }}>
-        {/* Workspace Command Header (Repo-Specific) */}
-        <div className="dashboard-header" style={{ marginBottom: '30px' }}>
+    <div className="overview-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
+      <div className="page-container" style={{ padding: '0 24px' }}>
+        {/* ── Section 1: Minimal Repository Header ───────────────────────────── */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '16px',
+            marginBottom: '20px',
+            paddingBottom: '18px',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-              <div
-                style={{
-                  width: '26px',
-                  height: '26px',
-                  borderRadius: '6px',
-                  background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                  color: 'var(--accent)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <GitBranch size={15} />
-              </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <h1
-                className="dashboard-title"
                 style={{
-                  fontSize: '28px',
-                  fontWeight: 700,
+                  fontSize: '22px',
+                  fontWeight: 750,
                   letterSpacing: '-0.03em',
                   color: 'var(--primary)',
-                  fontFamily: 'var(--font-ui)',
                   margin: 0,
+                  fontFamily: 'var(--font-display)',
                 }}
               >
-                {projectDisplayName(currentProject)}
+                {displayName}
               </h1>
-              {currentProject?.default_branch && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontFamily: 'var(--font-code)',
-                    padding: '2px 8px',
-                    borderRadius: '4px',
-                    background: 'var(--elevated)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {currentProject.default_branch}
-                </span>
-              )}
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-code)',
+                  padding: '1px 6px',
+                  borderRadius: '3px',
+                  background: 'var(--elevated)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--muted)',
+                }}
+              >
+                {defaultBranch}
+              </span>
             </div>
-            <p
-              className="dashboard-sub"
+
+            <div
               style={{
-                fontSize: '13px',
+                fontSize: '12px',
                 color: 'var(--muted)',
-                fontFamily: 'var(--font-ui)',
-                margin: 0,
+                fontFamily: 'var(--font-code)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
+                marginTop: '4px',
               }}
             >
-              <span>{projectRepoLabel(currentProject) || 'Deterministic AST security workspace'}</span>
+              <span>{repoLabel || 'Workspace'}</span>
               <span>•</span>
-              <span>AST Invariant Verified</span>
-            </p>
+              <span>Last analyzed: {lastAnalyzedText}</span>
+            </div>
           </div>
 
-          {/* Quick Actions for this repository */}
-          {currentProject && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setDeleteProjectRequest({ id: currentProject.id, name: projectDisplayName(currentProject) })}
-                style={{
-                  padding: '7px 12px',
-                  fontSize: '12px',
-                  gap: '6px',
-                  color: 'var(--critical)',
-                  borderColor: 'var(--critical-border)',
-                }}
-                id="dashboard-delete-repo-btn"
-                title="Delete this repository workspace"
-              >
-                <Trash2 size={13} />
-                Delete Repo
-              </button>
+          {/* Single Primary Action Button */}
+          <div>
+            <button
+              className="btn btn-primary"
+              onClick={handleRunAnalysis}
+              disabled={triggeringScan || triggeringIngest || isScanActive}
+              style={{ padding: '7px 16px', fontSize: '12.5px', gap: '8px' }}
+              id="overview-run-analysis-btn"
+            >
+              {isScanActive ? (
+                <>
+                  <Wave size="xs" color="currentColor" /> Scanning ({latestScan?.progress_percent ?? 0}%)
+                </>
+              ) : triggeringIngest ? (
+                <>
+                  <Wave size="xs" color="currentColor" /> Ingesting…
+                </>
+              ) : triggeringScan ? (
+                <>
+                  <Wave size="xs" color="currentColor" /> Starting Scan…
+                </>
+              ) : latestRun?.status === 'COMPLETED' ? (
+                <>
+                  <Play size={13} fill="currentColor" /> Run Analysis
+                </>
+              ) : (
+                <>
+                  <Layers size={13} /> Ingest Codebase
+                </>
+              )}
+            </button>
+          </div>
+        </div>
 
-              <button
-                className="btn btn-secondary"
-                onClick={() => setAddTargetProjectId({ id: currentProject.id, name: projectDisplayName(currentProject) })}
-                style={{ padding: '7px 14px', fontSize: '12px', gap: '6px' }}
-              >
-                <Plus size={13} />
-                Add Target Domain
-              </button>
+        {/* ── Section 2: Unified Summary Bar (Single unified surface, no separate boxes) ──── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            marginBottom: '22px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Item 1: Posture */}
+          <div style={{ padding: '16px 20px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Security Status
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+              {attentionCount > 0 ? (
+                <>
+                  <span className="dot dot-red" />
+                  <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--critical)' }}>
+                    Attention Required
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="dot dot-green" />
+                  <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--success)' }}>
+                    Healthy
+                  </span>
+                </>
+              )}
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
+              {attentionCount > 0 ? `${attentionCount} items require review` : 'Zero critical findings'}
+            </div>
+          </div>
 
+          {/* Item 2: Findings */}
+          <div style={{ padding: '16px 20px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Findings
+              </span>
               <button
-                className="btn btn-primary"
-                onClick={() => navigate(`/projects/${currentProject.id}`)}
-                style={{ padding: '7px 16px', fontSize: '12px', gap: '6px' }}
+                onClick={() => navigate(`/findings${repoQuery}`)}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 500 }}
               >
-                Open Code Inspector
-                <ArrowUpRight size={13} />
+                View →
+              </button>
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 750, color: 'var(--primary)', marginTop: '4px', fontFamily: 'var(--font-code)' }}>
+              {findings.length}
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
+              {criticalFindings.length} Critical • {highFindings.length} High
+            </div>
+          </div>
+
+          {/* Item 3: Target Endpoints */}
+          <div style={{ padding: '16px 20px', borderRight: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Targets
+              </span>
+              <button
+                onClick={() => navigate(`/targets${repoQuery}`)}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+              >
+                Manage →
+              </button>
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 750, color: 'var(--primary)', marginTop: '4px', fontFamily: 'var(--font-code)' }}>
+              {targetCount}
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
+              {targetCount === 0 ? 'None configured' : `${verifiedTargets.length} / ${targetCount} verified`}
+            </div>
+          </div>
+
+          {/* Item 4: Analysis Engine Snapshot */}
+          <div style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Latest Analysis
+              </span>
+              <button
+                onClick={() => navigate(`/analysis${repoQuery}`)}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '11px', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+              >
+                Runs →
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px' }}>
+              <StatusBadge status={latestScan?.status || latestRun?.status || 'PENDING'} size="sm" />
+            </div>
+            <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px', fontFamily: 'var(--font-code)' }}>
+              {latestRun?.files_ingested ?? 0} files indexed
+            </div>
+          </div>
+        </div>
+
+        {/* ── Section 3: Core Workspace Status Banner (Minimal signal-first) ──── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '20px 24px',
+            marginBottom: '20px',
+          }}
+        >
+          {attentionCount > 0 ? (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <div style={{ fontSize: '13.5px', fontWeight: 650, color: 'var(--primary)' }}>
+                  Attention Required ({attentionCount} items)
+                </div>
+                <button
+                  className="btn btn-ghost"
+                  style={{ fontSize: '11.5px', padding: '2px 8px', color: 'var(--accent)' }}
+                  onClick={() => navigate(`/findings${repoQuery}`)}
+                >
+                  View all findings →
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {findings.slice(0, 3).map((f) => (
+                  <div
+                    key={f.id}
+                    style={{
+                      padding: '8px 12px',
+                      background: 'var(--elevated)',
+                      borderRadius: 'var(--radius-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <SeverityBadge severity={f.severity} size="sm" />
+                      <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>{f.title}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>{f.file_path || f.engine}</span>
+                    </div>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: '11px', padding: '2px 6px', color: 'var(--accent)' }}
+                      onClick={() => navigate(`/findings${repoQuery}`)}
+                    >
+                      Inspect →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <CheckCircle2 size={16} color="var(--success)" />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--primary)' }}>
+                    Repository snapshot is clean
+                  </div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>
+                    No critical or high vulnerabilities detected across AST invariants and scanner engines.
+                  </div>
+                </div>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: '11.5px', padding: '4px 10px', color: 'var(--accent)', gap: '4px' }}
+                onClick={() => navigate(`/findings${repoQuery}`)}
+              >
+                Inspect Findings <ArrowRight size={11} />
               </button>
             </div>
           )}
         </div>
 
-        {/* Empty State when no repository connected */}
-        {isLoading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '64px 0' }}>
-            <LoadingAnimation fullScreen={false} />
-          </div>
-        ) : !currentProject ? (
-          <div
-            className="duotone-card"
+        {/* ── Section 4: Progressive Disclosure (Expandable Engine Status & Activity) ──── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Clickable Header Accordion */}
+          <button
+            onClick={() => setShowEngineDetails(!showEngineDetails)}
             style={{
-              padding: '64px 32px',
-              textAlign: 'center',
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)',
-              maxWidth: '560px',
-              margin: '40px auto',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '14px 20px',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--primary)',
+              textAlign: 'left',
             }}
           >
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
-                color: 'var(--accent)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px',
-              }}
-            >
-              <ShieldCheck size={26} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 650, color: 'var(--primary)' }}>
+                Security Engine Pipeline &amp; Activity
+              </span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+                (OSV, GitLeaks, Semgrep)
+              </span>
             </div>
-            <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--primary)', marginBottom: '8px' }}>
-              No connected repository selected
-            </h2>
-            <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '20px', lineHeight: 1.5 }}>
-              Connect a GitHub repository to build deterministic AST models, detect vulnerabilities, and map verified attack paths.
-            </p>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowWizard(true)}
-              style={{ padding: '8px 18px', gap: '8px' }}
-            >
-              <Plus size={14} /> Connect Repository
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* 4 Focused Repo-Specific Stat Cards */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-                gap: '16px',
-                marginBottom: '24px',
-              }}
-            >
-              {/* Card 1: Security Posture */}
-              <div
-                className="duotone-card"
-                style={{
-                  padding: '20px 22px',
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                  <div
-                    style={{
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '6px',
-                      background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--accent)',
-                    }}
-                  >
-                    <ShieldCheck size={15} />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    SECURITY POSTURE
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                    {verifiedTargets.length > 0 ? 'Verified' : 'Active'}
-                  </span>
-                  <span
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: 'var(--success, #10B981)',
-                      boxShadow: '0 0 10px rgba(16, 185, 129, 0.6)',
-                    }}
-                  />
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
-                  AST graph live & monitoring
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--muted)', fontSize: '11.5px', fontFamily: 'var(--font-code)' }}>
+              <span>{showEngineDetails ? 'Hide' : 'Details'}</span>
+              {showEngineDetails ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </div>
+          </button>
+
+          {/* Expanded Content on Demand */}
+          {showEngineDetails && (
+            <div style={{ borderTop: '1px solid var(--border)', padding: '16px 20px' }}>
+              <div className="data-table-container" style={{ marginBottom: '16px' }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Engine</th>
+                      <th>Category</th>
+                      <th>Status</th>
+                      <th>Findings</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td style={{ fontWeight: 600, fontFamily: 'var(--font-code)' }}>OSV Scanner</td>
+                      <td style={{ color: 'var(--muted)' }}>Dependency Vulnerabilities (SCA)</td>
+                      <td><StatusBadge status={latestRun ? 'COMPLETED' : 'PENDING'} size="sm" /></td>
+                      <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 600, fontFamily: 'var(--font-code)' }}>GitLeaks</td>
+                      <td style={{ color: 'var(--muted)' }}>Secret &amp; Credential Leaks</td>
+                      <td><StatusBadge status={latestRun ? 'COMPLETED' : 'PENDING'} size="sm" /></td>
+                      <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
+                    </tr>
+                    <tr>
+                      <td style={{ fontWeight: 600, fontFamily: 'var(--font-code)' }}>Semgrep</td>
+                      <td style={{ color: 'var(--muted)' }}>Static AST Security Testing (SAST)</td>
+                      <td><StatusBadge status={latestRun ? 'COMPLETED' : 'PENDING'} size="sm" /></td>
+                      <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
-              {/* Card 2: Target Endpoints */}
-              <div
-                className="duotone-card"
-                style={{
-                  padding: '20px 22px',
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                  <div
-                    style={{
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '6px',
-                      background: 'color-mix(in srgb, var(--info, #0EA5E9) 10%, transparent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--info, #0EA5E9)',
-                    }}
-                  >
-                    <Globe size={15} />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    TARGET DOMAINS
-                  </span>
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                  {targetCount}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
-                  {targetCount === 0 ? 'No target domain linked' : `${verifiedTargets.length} authorized`}
-                </div>
-              </div>
-
-              {/* Card 3: AST Findings */}
-              <div
-                className="duotone-card"
-                style={{
-                  padding: '20px 22px',
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                  <div
-                    style={{
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '6px',
-                      background: 'color-mix(in srgb, var(--warning, #F59E0B) 10%, transparent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--warning, #D97706)',
-                    }}
-                  >
-                    <Crosshair size={15} />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    AST FINDINGS
-                  </span>
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                  {findingsCount}
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
-                  Total vulnerabilities tracked
-                </div>
-              </div>
-
-              {/* Card 4: Verification Health */}
-              <div
-                className="duotone-card"
-                style={{
-                  padding: '20px 22px',
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-                  <div
-                    style={{
-                      width: '26px',
-                      height: '26px',
-                      borderRadius: '6px',
-                      background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--accent)',
-                    }}
-                  >
-                    <Activity size={15} />
-                  </div>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                    }}
-                  >
-                    VERIFICATION HEALTH
-                  </span>
-                </div>
-                <div style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '-0.02em' }}>
-                  {verificationHealthRate}%
-                </div>
-                <div style={{ fontSize: '12px', color: 'var(--secondary)', marginTop: '4px' }}>
-                  Deterministic verification rate
-                </div>
+              {/* Recent Activity */}
+              <div style={{ fontSize: '11.5px', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Activity size={13} color="var(--accent)" />
+                <span>
+                  {runs.length > 0
+                    ? `Latest Analysis Run #${runs[0].id.slice(0, 8)} recorded with ${runs[0].files_ingested} files indexed.`
+                    : 'No previous activity runs recorded.'}
+                </span>
               </div>
             </div>
-
-            {/* 3-Column Content Grid: Target Endpoints, Live Scan Telemetry, Workspace Activity */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                gap: '16px',
-                marginBottom: '32px',
-              }}
-            >
-              {/* Column 1: Associated Web Target Endpoints */}
-              <div
-                className="duotone-card"
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  padding: '22px 24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                    <div
-                      style={{
-                        fontSize: '11px',
-                        fontFamily: 'var(--font-code)',
-                        letterSpacing: '0.06em',
-                        textTransform: 'uppercase',
-                        color: 'var(--muted)',
-                        fontWeight: 600,
-                      }}
-                    >
-                      TARGET ENDPOINTS
-                    </div>
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => setAddTargetProjectId({ id: currentProject.id, name: projectDisplayName(currentProject) })}
-                      style={{ padding: '3px 8px', fontSize: '11px', gap: '4px' }}
-                    >
-                      <Plus size={11} /> Add
-                    </button>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {targets.length > 0 ? (
-                      targets.map((t) => (
-                        <div
-                          key={t.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '12px 14px',
-                            borderRadius: 'var(--radius-md)',
-                            background: 'var(--elevated)',
-                            border: '1px solid var(--border)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Globe size={15} color="var(--info)" />
-                            <div>
-                              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
-                                {t.domain}
-                              </div>
-                              <div style={{ fontSize: '10.5px', color: 'var(--muted)', marginTop: '2px' }}>
-                                {t.is_verified ? 'Authorized Production Target' : 'Pending Authorization'}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            {t.is_verified ? (
-                              <span
-                                style={{
-                                  fontSize: '10.5px',
-                                  fontWeight: 600,
-                                  padding: '2px 8px',
-                                  borderRadius: '999px',
-                                  background: 'var(--success-bg)',
-                                  color: 'var(--success)',
-                                }}
-                              >
-                                Verified
-                              </span>
-                            ) : (
-                              <button
-                                className="btn btn-secondary"
-                                style={{ padding: '3px 8px', fontSize: '11px' }}
-                                onClick={() => setSelectedTarget(t)}
-                              >
-                                Verify
-                              </button>
-                            )}
-
-                            <button
-                              onClick={() => setDeleteTargetRequest({ id: t.id, domain: t.domain })}
-                              style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', padding: '3px' }}
-                              title="Remove target"
-                            >
-                              <X size={13} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div
-                        style={{
-                          padding: '24px 16px',
-                          textAlign: 'center',
-                          background: 'var(--elevated)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px dashed var(--border-strong)',
-                        }}
-                      >
-                        <div style={{ color: 'var(--muted)', fontSize: '12.5px', marginBottom: '8px' }}>
-                          No target website linked to this repository yet.
-                        </div>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={() => setAddTargetProjectId({ id: currentProject.id, name: projectDisplayName(currentProject) })}
-                          style={{ padding: '4px 12px', fontSize: '11.5px', gap: '4px' }}
-                        >
-                          <Plus size={12} /> Link Target Domain
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ paddingTop: '16px', borderTop: '1px solid var(--border)', marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                    {targets.length} connected target endpoint{targets.length !== 1 ? 's' : ''}
-                  </span>
-                  <button
-                    onClick={() => setDeleteProjectRequest({ id: currentProject.id, name: projectDisplayName(currentProject) })}
-                    style={{ background: 'none', border: 'none', color: 'var(--critical)', fontSize: '11.5px', cursor: 'pointer', fontWeight: 500 }}
-                  >
-                    Disconnect Repository
-                  </button>
-                </div>
-              </div>
-
-              {/* Column 2: Live AST Scan Telemetry & Sparkline */}
-              <div
-                className="duotone-card"
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  padding: '22px 24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                      marginBottom: '2px',
-                    }}
-                  >
-                    LIVE SCAN TELEMETRY
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--secondary)', marginBottom: '16px' }}>
-                    Asynchronous scan lifecycle for {projectDisplayName(currentProject)}
-                  </div>
-
-                  {/* Telemetry Status / Graph */}
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '105px',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'color-mix(in srgb, var(--elevated) 40%, transparent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '12px',
-                    }}
-                  >
-                    {runs.length > 0 ? (
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--primary)', marginBottom: '4px' }}>
-                          Analysis Run #{latestRun?.id?.slice(0, 8) || 'Active'}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--success)', fontFamily: 'var(--font-code)' }}>
-                          {latestScan
-                            ? `Scan: ${latestScan.status} · ${latestScan.progress_percent}%`
-                            : `Ingestion: ${latestRun?.status || '—'} · ${filesScannedCount} files ingested`
-                          }
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '11.5px' }}>
-                        No analysis runs recorded yet.<br />
-                        Run a security scan to view telemetry.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 4 Bottom Telemetry Metrics */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: '8px',
-                    paddingTop: '16px',
-                    borderTop: '1px solid var(--border)',
-                    marginTop: '16px',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      FILES INGESTED
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
-                      {filesScannedCount}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-CODE METRICS
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
-                      —
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      SCAN TIME
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
-                      {scanDurationText}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '9.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
-                      ISSUES FOUND
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', marginTop: '2px' }}>
-                      {findingsCount}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Column 3: Workspace Activity & Remediation */}
-              <div
-                id="workspace-activity-card"
-                className="duotone-card"
-                style={{
-                  background: 'var(--surface)',
-                  borderRadius: 'var(--radius-lg)',
-                  border: '1px solid var(--border)',
-                  padding: '22px 24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  boxShadow: 'var(--shadow-subtle)',
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: 'var(--font-code)',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                      color: 'var(--muted)',
-                      fontWeight: 600,
-                      marginBottom: '16px',
-                    }}
-                  >
-                    WORKSPACE ACTIVITY
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {runs.length > 0 || targets.length > 0 ? (
-                      <>
-                        {runs.slice(0, 2).map((r: any) => (
-                          <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '8px',
-                                  background: r.status === 'COMPLETED' ? 'var(--success-bg)' : 'var(--elevated)',
-                                  color: r.status === 'COMPLETED' ? 'var(--success)' : 'var(--primary)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {r.status === 'COMPLETED' ? <CheckCircle2 size={16} /> : <Crosshair size={15} />}
-                              </div>
-                              <div>
-                                <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>
-                                  Analysis Run {r.status?.toLowerCase() || 'completed'}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                                  {r.files_ingested ? `${r.files_ingested} files ingested` : 'Ingestion pipeline executed'}
-                                </div>
-                              </div>
-                            </div>
-                            <span style={{ fontSize: '11px', color: 'var(--dim)', whiteSpace: 'nowrap' }}>
-                              {r.created_at ? new Date(r.created_at).toLocaleDateString() : 'Recent'}
-                            </span>
-                          </div>
-                        ))}
-
-                        {targets.slice(0, 2).map((t: any) => (
-                          <div key={t.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div
-                                style={{
-                                  width: '32px',
-                                  height: '32px',
-                                  borderRadius: '8px',
-                                  background: t.is_verified ? 'var(--success-bg)' : 'var(--elevated)',
-                                  color: t.is_verified ? 'var(--success)' : 'var(--info)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <Globe size={15} />
-                              </div>
-                              <div>
-                                <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>
-                                  Target {t.domain} {t.is_verified ? 'verified' : 'linked'}
-                                </div>
-                                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                                  {t.is_verified ? 'Authorized Production Target' : 'Pending verification token'}
-                                </div>
-                              </div>
-                            </div>
-                            <span style={{ fontSize: '11px', color: 'var(--dim)', whiteSpace: 'nowrap' }}>
-                              {t.created_at ? new Date(t.created_at).toLocaleDateString() : 'Recent'}
-                            </span>
-                          </div>
-                        ))}
-                      </>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '24px 16px',
-                          textAlign: 'center',
-                          background: 'var(--elevated)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px dashed var(--border-strong)',
-                        }}
-                      >
-                        <div style={{ color: 'var(--muted)', fontSize: '12px' }}>
-                          No activity recorded yet for this workspace.
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => navigate('/workbench')}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--accent)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '14px 0 0',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  <span>Open Remediation Workbench</span>
-                  <span>→</span>
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Floating AppleStyleDock */}
-      <AppleStyleDock />
-
-      {/* Minimalist Sub-Footer */}
-      <footer
-        style={{
-          position: 'relative',
-          zIndex: 10,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '16px 28px',
-          borderTop: '1px solid var(--border)',
-          background: 'transparent',
-          fontSize: '11px',
-          fontFamily: 'var(--font-code)',
-          color: 'var(--dim)',
-          letterSpacing: '0.06em',
-        }}
-      >
-        <div>ARVE v1.0</div>
-        <div>DETERMINISTIC SECURITY ENGINE</div>
-      </footer>
-
-      {/* Modals & Overlays */}
-      {showWizard && (
-        <ProjectWizardModal
-          onClose={() => setShowWizard(false)}
-          onCreated={() => {
-            setShowWizard(false);
-            refreshProjects();
-          }}
-        />
-      )}
-
-      {selectedTarget && (
-        <VerificationModal
-          target={selectedTarget}
-          onClose={() => setSelectedTarget(null)}
-          onTargetUpdated={() => {
-            setSelectedTarget(null);
-            refreshProjects();
-          }}
-        />
-      )}
-
-      {addTargetProjectId && (
-        <AddTargetModal
-          projectId={addTargetProjectId.id}
-          projectName={addTargetProjectId.name}
-          onClose={() => setAddTargetProjectId(null)}
-          onTargetAdded={(newTarget: TargetWebsite) => {
-            setAddTargetProjectId(null);
-            refreshProjects();
-            setSelectedTarget(newTarget);
-          }}
-        />
-      )}
-
-      {deleteProjectRequest && (
-        <ConfirmModal
-          onCancel={() => setDeleteProjectRequest(null)}
-          onConfirm={handleDeleteProject}
-          title="Disconnect repository workspace?"
-          message={`Are you sure you want to disconnect "${deleteProjectRequest.name}"? Its target domain mappings and AST index history will also be removed.`}
-          confirmText="Disconnect"
-          danger={true}
-          busy={deletingId === deleteProjectRequest.id}
-        />
-      )}
-
-      {deleteTargetRequest && (
-        <ConfirmModal
-          onCancel={() => setDeleteTargetRequest(null)}
-          onConfirm={handleDeleteTarget}
-          title="Remove target domain?"
-          message={`Are you sure you want to remove "${deleteTargetRequest.domain}" from this repository?`}
-          confirmText="Remove Target"
-          danger={true}
-        />
-      )}
-
-      {ingestingProjectName && (
+      {/* Ingestion Overlay */}
+      {showIngestionOverlay && (
         <IngestionOverlay
           isOpen={true}
-          projectName={ingestingProjectName}
-          onComplete={() => {
-            setIngestingProjectName(null);
-            refreshProjects();
+          projectName={displayName}
+          onClose={() => {
+            setShowIngestionOverlay(false);
+            refreshRuns();
           }}
-          onClose={() => setIngestingProjectName(null)}
+          onComplete={() => {
+            refreshRuns();
+          }}
         />
       )}
     </div>

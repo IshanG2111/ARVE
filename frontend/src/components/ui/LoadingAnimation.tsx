@@ -1,5 +1,6 @@
 import React from 'react';
 import { Loader } from './Loader';
+import { cn } from '@/lib/utils';
 
 export interface LoadingAnimationProps {
   size?: number;
@@ -9,33 +10,37 @@ export interface LoadingAnimationProps {
 }
 
 export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
-  size = 64,
+  size = 56,
   fullScreen = false,
   text,
   className = '',
 }) => {
   return (
     <div
-      className={`universal-loading-animation ${className}`}
+      className={cn('global-glyph-loader', className)}
       style={{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: text ? '16px' : '0',
-        padding: fullScreen ? '0' : '40px 16px',
-        minHeight: fullScreen ? '75vh' : 'auto',
+        gap: text ? '20px' : '0',
+        padding: fullScreen ? '0' : '40px 24px',
+        minHeight: fullScreen ? '85vh' : '60vh',
+        width: '100%',
+        margin: '0 auto',
         userSelect: 'none',
+        textAlign: 'center',
       }}
     >
       <Loader size={size} />
       {text && (
         <p
           style={{
-            fontSize: '13px',
+            fontSize: '12.5px',
             fontFamily: 'var(--font-code, monospace)',
-            color: 'var(--text-muted, #888)',
-            letterSpacing: '0.05em',
+            color: 'var(--muted, #64748B)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
             margin: 0,
           }}
         >
