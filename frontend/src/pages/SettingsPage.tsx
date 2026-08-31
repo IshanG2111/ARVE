@@ -14,6 +14,11 @@ import {
   Globe,
   Save,
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Shield,
+  Cloud,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -27,6 +32,11 @@ export const SettingsPage: React.FC = () => {
   const [deploymentUrl, setDeploymentUrl] = useState(currentProject?.deployment_url || '');
   const [saving, setSaving] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Progressive disclosure accordion state (collapsed by default for advanced technical items)
+  const [enginesOpen, setEnginesOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
+  const [dangerOpen, setDangerOpen] = useState(false);
 
   // Sync with project on load
   React.useEffect(() => {
@@ -90,25 +100,25 @@ export const SettingsPage: React.FC = () => {
         <PageHeader
           category="Workspace Configuration"
           title="Repository Settings"
-          description="Manage workspace parameters, default branch target, and scan pipeline options."
+          description="Configure repository workspace parameters, scanning branch, and security engine preferences."
         />
 
-        {/* Unified Settings Surface (Single surface with dividers) */}
+        {/* ── Section 1: Visible by Default — Essential Workspace Parameters ── */}
         <div
           style={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
             overflow: 'hidden',
+            marginBottom: '16px',
           }}
         >
-          {/* Section 1: General Parameters */}
           <div style={{ padding: '24px 28px' }}>
             <h3 style={{ fontSize: '14.5px', fontWeight: 650, color: 'var(--primary)', marginBottom: '4px' }}>
               General Parameters
             </h3>
             <p style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '18px' }}>
-              Update display aliases and branch synchronization targets.
+              Primary settings for repository identification, default branch, and target URL.
             </p>
 
             <form onSubmit={handleSaveSettings}>
@@ -152,7 +162,7 @@ export const SettingsPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
                   <button
                     type="submit"
                     className="btn btn-primary"
@@ -167,67 +177,179 @@ export const SettingsPage: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
 
-          {/* Section 2: Security Scanner Engines */}
-          <div style={{ padding: '24px 28px', borderTop: '1px solid var(--border)' }}>
-            <h3 style={{ fontSize: '14.5px', fontWeight: 650, color: 'var(--primary)', marginBottom: '4px' }}>
-              Security Scanner Engines
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px' }}>
-              Active scanning components for repository snapshot evaluations.
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>OSV Scanner Engine</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Analyzes lockfiles and manifests against open source vulnerability databases.</div>
-                </div>
-                <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>GitLeaks Secret Scanner</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Identifies hardcoded API keys, tokens, credentials, and cryptographic certificates.</div>
-                </div>
-                <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-sm)' }}>
-                <div>
-                  <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>Semgrep SAST Engine</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Performs syntax and semantic AST rule evaluation for OWASP Top 10 vulnerabilities.</div>
-                </div>
-                <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
+        {/* ── Section 2: Progressive Disclosure — Advanced Scan Engines ── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            marginBottom: '16px',
+          }}
+        >
+          <button
+            onClick={() => setEnginesOpen(!enginesOpen)}
+            style={{
+              width: '100%',
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--primary)',
+              textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Shield size={16} style={{ color: 'var(--accent)' }} />
+              <div>
+                <div style={{ fontSize: '13.5px', fontWeight: 650 }}>Security Scanner Engines</div>
+                <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Configured vulnerability detection, secret scanning, and AST engines</div>
               </div>
             </div>
-          </div>
+            {enginesOpen ? <ChevronDown size={16} color="var(--muted)" /> : <ChevronRight size={16} color="var(--muted)" />}
+          </button>
 
-          {/* Section 3: Danger Zone */}
-          <div style={{ padding: '24px 28px', borderTop: '1px solid var(--border)', background: 'rgba(239, 68, 68, 0.02)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-              <AlertTriangle size={15} color="var(--critical)" />
-              <h3 style={{ fontSize: '14.5px', fontWeight: 650, color: 'var(--critical)', margin: 0 }}>
-                Danger Zone
-              </h3>
-            </div>
-            <p style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px' }}>
-              Disconnecting this repository will remove its AST snapshot history, target endpoints, and analysis runs permanently.
-            </p>
+          {enginesOpen && (
+            <div style={{ padding: '0 24px 22px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>OSV Scanner (Open Source Vulnerabilities)</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Automated dependency CVE &amp; GHSA evaluation with fixed-version matrix calculation.</div>
+                  </div>
+                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
+                </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                className="btn btn-danger"
-                onClick={() => setShowDeleteModal(true)}
-                style={{ gap: '6px' }}
-                id="disconnect-workspace-btn"
-              >
-                <Trash2 size={13} />
-                Disconnect Repository Workspace
-              </button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>GitLeaks Secret Scanner</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Identifies hardcoded API tokens, private keys, and environment credentials.</div>
+                  </div>
+                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>Semgrep SAST Engine</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>AST syntax and semantic pattern matching for OWASP Top 10 web vulnerabilities.</div>
+                  </div>
+                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* ── Section 3: Progressive Disclosure — Cloud Artifact Storage (Backblaze B2) ── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+            marginBottom: '16px',
+          }}
+        >
+          <button
+            onClick={() => setStorageOpen(!storageOpen)}
+            style={{
+              width: '100%',
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--primary)',
+              textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Cloud size={16} style={{ color: '#38BDF8' }} />
+              <div>
+                <div style={{ fontSize: '13.5px', fontWeight: 650 }}>Artifact Storage &amp; Backblaze B2</div>
+                <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Raw scanner JSON payloads and snapshot audit trail destination</div>
+              </div>
+            </div>
+            {storageOpen ? <ChevronDown size={16} color="var(--muted)" /> : <ChevronRight size={16} color="var(--muted)" />}
+          </button>
+
+          {storageOpen && (
+            <div style={{ padding: '0 24px 22px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px', color: 'var(--secondary)' }}>
+                <div style={{ padding: '12px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                    <CheckCircle2 size={13} style={{ color: 'var(--success)' }} />
+                    <span style={{ fontWeight: 650, color: 'var(--primary)' }}>Backblaze B2 S3-Compatible Target Active</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.5 }}>
+                    Scanner outputs are securely uploaded to <code style={{ color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>b2://arve-scan-artifacts/scans/&#123;scan_id&#125;/</code> immediately upon engine completion. Temporary execution disk space is safely wiped after upload.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Section 4: Progressive Disclosure — Danger Zone ── */}
+        <div
+          style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)',
+            overflow: 'hidden',
+          }}
+        >
+          <button
+            onClick={() => setDangerOpen(!dangerOpen)}
+            style={{
+              width: '100%',
+              padding: '18px 24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--primary)',
+              textAlign: 'left',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <AlertTriangle size={16} style={{ color: 'var(--critical)' }} />
+              <div>
+                <div style={{ fontSize: '13.5px', fontWeight: 650, color: 'var(--critical)' }}>Danger Zone</div>
+                <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Disconnect repository workspace and permanently erase AST index snapshots</div>
+              </div>
+            </div>
+            {dangerOpen ? <ChevronDown size={16} color="var(--muted)" /> : <ChevronRight size={16} color="var(--muted)" />}
+          </button>
+
+          {dangerOpen && (
+            <div style={{ padding: '0 24px 22px', borderTop: '1px solid var(--border)', paddingTop: '16px', background: 'rgba(239, 68, 68, 0.02)' }}>
+              <p style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px', lineHeight: 1.5 }}>
+                Disconnecting this repository will permanently delete its AST snapshot history, target endpoints, and all associated security scan run records from ARVE.
+              </p>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  className="btn btn-danger"
+                  onClick={() => setShowDeleteModal(true)}
+                  style={{ gap: '6px' }}
+                  id="disconnect-workspace-btn"
+                >
+                  <Trash2 size={13} />
+                  Disconnect Repository Workspace
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

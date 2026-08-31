@@ -1,0 +1,49 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "/code/package-lock.json",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "lodash",
+            "version": "4.17.20",
+            "ecosystem": "npm"
+          },
+          "vulnerabilities": [
+            {
+              "id": "GHSA-35jh-r3h4-6jhm",
+              "summary": "Regular Expression Denial of Service (ReDoS) in lodash",
+              "details": "The vulnerable function is ...",
+              "aliases": [
+                "CVE-2020-28500"
+              ],
+              "severity": [
+                {
+                  "type": "CVSS_V3",
+                  "score": 5.3
+                }
+              ]
+            },
+            {
+              "id": "CVE-2020-28500",
+              "summary": "Regular Expression Denial of Service (ReDoS) in lodash",
+              "details": "The vulnerable function is ...",
+              "aliases": [
+                "GHSA-35jh-r3h4-6jhm"
+              ],
+              "severity": [
+                {
+                  "type": "CVSS_V3",
+                  "score": 5.3
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

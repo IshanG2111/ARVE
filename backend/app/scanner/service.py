@@ -29,14 +29,18 @@ logger = logging.getLogger(__name__)
 def build_default_registry() -> "ScanEngineRegistry":
     """Build the engine registry for the current runtime.
 
-    Phase 3 only exposes the disabled-by-default smoke-test engine. Phase 4
-    will replace/extend this registry with Semgrep, OSV-Scanner and Gitleaks.
+    Phase 3 exposes the test engine if enabled. Phase 4A registers
+    OSV-Scanner if SCANNER_ENABLE_OSV is enabled.
     """
     registry = ScanEngineRegistry()
     if settings.SCANNER_ENABLE_TEST_ENGINE:
         from app.scanner.test_engine import Phase3TestEngine
 
         registry.register(Phase3TestEngine())
+    if getattr(settings, "SCANNER_ENABLE_OSV", False):
+        from app.scanner.engines.osv import OsvEngine
+
+        registry.register(OsvEngine())
     return registry
 
 
@@ -67,7 +71,7 @@ class ScanExecutionService:
         artifact_store: ScanArtifactStore | None = None,
     ):
         self.db = db
-        self.registry = registry or ScanEngineRegistry()
+        self.registry = registry if registry is not None else build_default_registry()
         self.workspace_manager = workspace_manager or ScanWorkspaceManager(db)
         self.docker_runner = docker_runner or DockerRunner()
         self.artifact_store = artifact_store or ScanArtifactStore()
@@ -224,15 +228,25 @@ class ScanExecutionService:
         if artifact_path and not artifact_path.exists():
             artifact_path = None
 
+        status = docker_result.status
+        error_message = docker_result.error_message
+
+        # Security scanner engines (e.g. OSV) return exit code 1 when findings/vulnerabilities
+        # are detected. When a valid output artifact is produced and no timeout occurred,
+        # treat this as successful engine completion.
+        if docker_result.exit_code == 1 and artifact_path is not None and status != EngineExecutionStatus.TIMEOUT:
+            status = EngineExecutionStatus.SUCCESS
+            error_message = None
+
         return ScannerExecutionResult(
             engine_name=engine.name,
-            status=docker_result.status,
+            status=status,
             exit_code=docker_result.exit_code,
             duration_ms=docker_result.duration_ms,
             artifact_path=artifact_path,
             stdout=docker_result.stdout,
             stderr=docker_result.stderr,
-            error_message=docker_result.error_message,
+            error_message=error_message,
         )
 
     def execute_scan(self, scan_id: str) -> Scan:
@@ -278,6 +292,7 @@ class ScanExecutionService:
             deadline = time.monotonic() + settings.SCANNER_GLOBAL_TIMEOUT_SECONDS
             global_timeout_reached = False
 
+            all_db_findings = []
             for index, engine in enumerate(engines, start=1):
                 current = self.db.query(Scan).filter(Scan.id == scan.id).first()
                 if not current:
@@ -302,8 +317,35 @@ class ScanExecutionService:
                         engine,
                         timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
                     )
+
+                    # Extract findings before artifact_store.persist_output removes the local directory
+                    engine_dir = workspace.output / self._safe_engine_name(engine.name)
+                    if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
+                        try:
+                            from app.security.normalizer import FindingNormalizer
+                            from app.security.mappers import OsvFindingMapper
+
+                            normalizer = FindingNormalizer([OsvFindingMapper()])
+                            artifact_candidates = [
+                                engine_dir / "osv.json",
+                                engine_dir / f"{engine.name}.json",
+                            ]
+                            for cand in artifact_candidates:
+                                if cand.exists() and cand.stat().st_size > 0:
+                                    raw_text = cand.read_text(encoding="utf-8")
+                                    norm_findings = normalizer.normalize_artifact(engine.name, raw_text)
+                                    db_findings = FindingNormalizer.to_db_models(
+                                        norm_findings,
+                                        scan_id=scan.id,
+                                        project_id=scan.project_id,
+                                    )
+                                    all_db_findings.extend(db_findings)
+                                    break
+                        except Exception as exc:
+                            logger.warning("scan=%s error normalizing artifact for engine %s: %s", scan.id, engine.name, exc)
+
                     persisted_artifact = self.artifact_store.persist_output(
-                        scan.id, engine.name, workspace.output / self._safe_engine_name(engine.name)
+                        scan.id, engine.name, engine_dir
                     )
                     if persisted_artifact:
                         result = ScannerExecutionResult(
@@ -346,8 +388,17 @@ class ScanExecutionService:
                 scan,
                 ScanStatus.NORMALIZING,
                 progress=90,
-                stage="Scanner execution finished; awaiting finding normalization",
+                stage="Normalizing security findings",
             )
+
+            # Persist normalized security findings to PostgreSQL
+            if all_db_findings:
+                try:
+                    self.db.add_all(all_db_findings)
+                    self.db.commit()
+                    logger.info("scan=%s persisted %d security findings", scan.id, len(all_db_findings))
+                except Exception as exc:
+                    logger.exception("scan=%s failed to persist findings to database: %s", scan.id, exc)
             if global_timeout_reached:
                 message = "Global scan timeout reached before all engines completed"
                 if failures:

@@ -329,3 +329,43 @@ class IngestionSummaryResponse(BaseModel):
     package_manager: Optional[str] = None
     status: str
     run_id: str
+
+
+class SecurityFindingResponse(BaseModel):
+    id: str
+    scan_id: str
+    project_id: str
+    engine: str
+    finding_type: str
+    title: str
+    description: Optional[str] = None
+    severity: str
+    confidence: Optional[str] = None
+    status: str
+    file_path: Optional[str] = None
+    line_start: Optional[int] = None
+    line_end: Optional[int] = None
+    package_name: Optional[str] = None
+    package_version: Optional[str] = None
+    fixed_version: Optional[str] = None
+    ecosystem: Optional[str] = None
+    cve: Optional[str] = None
+    ghsa: Optional[str] = None
+    cwe: Optional[str] = None
+    rule_id: Optional[str] = None
+    suppression_reason: Optional[str] = None
+    suppression_justification: Optional[str] = None
+    suppression_expires_at: Optional[datetime] = None
+    fingerprint: str
+    raw_json: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SecurityFindingStatusUpdate(BaseModel):
+    status: str
+    suppression_reason: Optional[str] = None
+    suppression_justification: Optional[str] = None
+    suppression_expires_at: Optional[datetime] = None

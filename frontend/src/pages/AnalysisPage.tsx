@@ -7,14 +7,15 @@ import { StatusBadge } from '../components/common/StatusBadge';
 import { EmptyState } from '../components/common/EmptyState';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { Wave } from '../components/ui/wave';
+import { JsonViewer } from '../components/ui/JsonViewer';
 import {
   Play,
   Layers,
   Activity,
-  CheckCircle2,
-  AlertCircle,
   Shield,
   RefreshCw,
+  FileJson,
+  X,
 } from 'lucide-react';
 import type { ScanStatusResponse } from '@/types';
 
@@ -40,6 +41,20 @@ export const AnalysisPage: React.FC = () => {
   const [triggeringScan, setTriggeringScan] = useState(false);
   const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
   const [activeInspectorTab, setActiveInspectorTab] = useState<'overview' | 'engines' | 'logs'>('overview');
+  const [viewingArtifact, setViewingArtifact] = useState<{ name: string; content: any } | null>(null);
+  const [loadingArtifact, setLoadingArtifact] = useState(false);
+
+  const handleInspectArtifact = async (scanId: string, engineName: string) => {
+    setLoadingArtifact(true);
+    try {
+      const data = await api.getEngineArtifact(scanId, engineName);
+      setViewingArtifact({ name: `${engineName}.json`, content: data });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to fetch engine artifact');
+    } finally {
+      setLoadingArtifact(false);
+    }
+  };
 
   // Auto-select latest scan or run
   useEffect(() => {
@@ -145,7 +160,6 @@ export const AnalysisPage: React.FC = () => {
   // Pipeline Stage Calculations
   const isIngestionDone = Boolean(latestRun && latestRun.status === 'COMPLETED');
   const isScanDone = Boolean(latestScan && latestScan.status === 'COMPLETED');
-  const currentStage = latestScan?.current_stage || (isScanActive ? 'Executing Security Engines' : isScanDone ? 'Scan Completed' : isIngestionDone ? 'Ready for Security Scan' : 'Awaiting Ingestion');
 
   return (
     <div className="analysis-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
@@ -193,30 +207,29 @@ export const AnalysisPage: React.FC = () => {
               </button>
             </div>
           }
-        />
-
-        {/* ── Deterministic 5-Stage Security Pipeline Visualizer ── */}
+        />        {/* ── Active Scan & Engine Execution Status ── */}
         <div
           style={{
             background: 'var(--surface)',
             border: '1px solid var(--border)',
             borderRadius: 'var(--radius-lg)',
-            padding: '20px',
+            padding: '18px 20px',
             marginBottom: '24px',
             boxShadow: 'var(--shadow-subtle)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <Layers size={16} color="var(--accent)" />
               <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--primary)', margin: 0 }}>
-                Deterministic Pipeline Stages
+                Scan Execution Status
               </h3>
+              {latestScan && <StatusBadge status={latestScan.status} size="sm" />}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
-              <span>Current Status:</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+              <span>Stage:</span>
               <span style={{ color: isScanActive ? 'var(--accent)' : 'var(--primary)', fontWeight: 650 }}>
-                {currentStage}
+                {latestScan?.current_stage || (isScanDone ? 'Scan Completed' : isIngestionDone ? 'Ready to Scan' : 'Awaiting Ingestion')}
               </span>
             </div>
           </div>
@@ -224,167 +237,82 @@ export const AnalysisPage: React.FC = () => {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '12px',
             }}
           >
-            {/* Step 1: Codebase Ingestion */}
+            {/* Repository Snapshot */}
             <div
               style={{
-                padding: '14px',
+                padding: '12px 14px',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--elevated)',
-                border: isIngestionDone ? '1px solid var(--border)' : '1px dashed var(--accent)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                position: 'relative',
+                border: '1px solid var(--border)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 01
-                </span>
-                {isIngestionDone ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--success, #10B981)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                    <CheckCircle2 size={12} /> Ready
-                  </span>
-                ) : (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--warning, #F59E0B)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                    <AlertCircle size={12} /> Required
-                  </span>
-                )}
+              <div style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                Codebase Snapshot
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Codebase Ingestion
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
+              <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--primary)', marginTop: '4px' }}>
                 {latestRun ? `${latestRun.files_ingested} files indexed` : 'No snapshot recorded'}
               </div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                Commit: {latestRun?.commit_sha ? latestRun.commit_sha.slice(0, 7) : 'head'}
+              </div>
             </div>
 
-            {/* Step 2: Multi-Engine Scanners */}
+            {/* OSV Scanner Status */}
             <div
               style={{
-                padding: '14px',
+                padding: '12px 14px',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--elevated)',
-                border: isScanActive ? '1px solid var(--accent)' : '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
+                border: '1px solid var(--border)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 02
+                <div style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  OSV-Scanner (SCA)
+                </div>
+                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--accent)', background: 'var(--accent-muted)', padding: '1px 6px', borderRadius: '3px' }}>
+                  v1.9.2
                 </span>
-                {isScanActive ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--accent)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                    <Wave size="xs" color="currentColor" /> Active
-                  </span>
-                ) : isScanDone ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--success, #10B981)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                    <CheckCircle2 size={12} /> Executed
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '10.5px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                    Queued
-                  </span>
-                )}
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Multi-Engine Scanners
+              <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--primary)', marginTop: '4px' }}>
+                {isScanActive ? 'Analyzing Dependencies…' : isScanDone ? 'Scan Execution Finished' : 'Ready'}
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                OSV, GitLeaks, Semgrep
+              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                Container: ghcr.io/google/osv-scanner:v1.9.2
               </div>
             </div>
 
-            {/* Step 3: Finding Normalization & Deduplication */}
+            {/* Findings Summary & Quick Action */}
             <div
               style={{
-                padding: '14px',
+                padding: '12px 14px',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--elevated)',
                 border: '1px solid var(--border)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '8px',
+                justifyContent: 'space-between',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 03
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: isScanDone ? 'var(--success, #10B981)' : 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                  {isScanDone ? <CheckCircle2 size={12} /> : null}
-                  {isScanDone ? 'Normalized' : 'Pending'}
-                </span>
+              <div>
+                <div style={{ fontSize: '10.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)', textTransform: 'uppercase' }}>
+                  Security Findings
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 650, color: 'var(--primary)', marginTop: '4px' }}>
+                  {latestScan?.status === 'COMPLETED' || latestScan?.status === 'PARTIAL' ? 'Findings Available' : 'No Active Scan'}
+                </div>
               </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Finding Normalization
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Canonical schema &amp; SHA-256
-              </div>
-            </div>
-
-            {/* Step 4: AST & Semantic Mapping */}
-            <div
-              style={{
-                padding: '14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--elevated)',
-                border: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                opacity: 0.8,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 04
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 600, background: 'var(--elevated-2)', padding: '1px 6px', borderRadius: '4px' }}>
-                  Planned
-                </span>
-              </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                AST &amp; Semantic Mapping
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Symbol resolution &amp; flows (Roadmap)
-              </div>
-            </div>
-
-            {/* Step 5: Attack Graph & Proofs */}
-            <div
-              style={{
-                padding: '14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--elevated)',
-                border: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-                opacity: 0.8,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 05
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 600, background: 'var(--elevated-2)', padding: '1px 6px', borderRadius: '4px' }}>
-                  Planned
-                </span>
-              </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Attack Graph &amp; Proofs
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Entrypoint-to-sink synthesis (Roadmap)
+              <div style={{ marginTop: '6px' }}>
+                <a
+                  href={`/findings${currentProjectId ? `?repo=${currentProjectId}` : ''}`}
+                  style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                >
+                  Open Findings Dashboard →
+                </a>
               </div>
             </div>
           </div>
@@ -779,48 +707,44 @@ export const AnalysisPage: React.FC = () => {
                           <th>Status</th>
                           <th>Exit Code</th>
                           <th>Duration</th>
-                          <th>Output Artifact</th>
+                          <th>Cloud Storage (Backblaze B2)</th>
+                          <th style={{ textAlign: 'right' }}>Artifact Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {selectedScanStatus?.engine_runs && selectedScanStatus.engine_runs.length > 0 ? (
                           selectedScanStatus.engine_runs.map((er) => (
                             <tr key={er.id}>
-                              <td style={{ fontFamily: 'var(--font-code)', fontWeight: 650 }}>{er.engine_name}</td>
+                              <td style={{ fontFamily: 'var(--font-code)', fontWeight: 650, color: 'var(--primary)' }}>
+                                {er.engine_name.toUpperCase()}
+                              </td>
                               <td><StatusBadge status={er.status} size="sm" /></td>
                               <td style={{ fontFamily: 'var(--font-code)' }}>{er.exit_code ?? '0'}</td>
                               <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
                                 {er.duration_ms ? `${er.duration_ms}ms` : '—'}
                               </td>
-                              <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: 'var(--muted)' }}>
-                                {er.artifact_reference || 'Normal execution'}
+                              <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: er.artifact_reference ? 'var(--accent)' : 'var(--muted)' }}>
+                                {er.artifact_reference || 'Cloud upload pending'}
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <button
+                                  className="btn btn-secondary"
+                                  style={{ fontSize: '11px', padding: '3px 8px', gap: '4px' }}
+                                  onClick={() => handleInspectArtifact(selectedScanStatus.id, er.engine_name)}
+                                  disabled={loadingArtifact}
+                                >
+                                  <FileJson size={12} />
+                                  View Raw JSON
+                                </button>
                               </td>
                             </tr>
                           ))
                         ) : (
-                          <>
-                            <tr>
-                              <td style={{ fontFamily: 'var(--font-code)', fontWeight: 650 }}>osv-scanner</td>
-                              <td><StatusBadge status="COMPLETED" size="sm" /></td>
-                              <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
-                              <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>340ms</td>
-                              <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: 'var(--muted)' }}>artifacts/osv-result.json</td>
-                            </tr>
-                            <tr>
-                              <td style={{ fontFamily: 'var(--font-code)', fontWeight: 650 }}>gitleaks</td>
-                              <td><StatusBadge status="COMPLETED" size="sm" /></td>
-                              <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
-                              <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>180ms</td>
-                              <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: 'var(--muted)' }}>artifacts/gitleaks-result.json</td>
-                            </tr>
-                            <tr>
-                              <td style={{ fontFamily: 'var(--font-code)', fontWeight: 650 }}>semgrep</td>
-                              <td><StatusBadge status="COMPLETED" size="sm" /></td>
-                              <td style={{ fontFamily: 'var(--font-code)' }}>0</td>
-                              <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>620ms</td>
-                              <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: 'var(--muted)' }}>artifacts/semgrep-result.json</td>
-                            </tr>
-                          </>
+                          <tr>
+                            <td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: '24px' }}>
+                              {isScanActive ? 'Scanner engines are currently executing in Docker containers…' : 'No engine execution records for this scan.'}
+                            </td>
+                          </tr>
                         )}
                       </tbody>
                     </table>
@@ -869,6 +793,78 @@ export const AnalysisPage: React.FC = () => {
             refreshRuns();
           }}
         />
+      )}
+
+      {/* Raw Scanner Artifact Inspection Modal */}
+      {viewingArtifact && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 99999,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px',
+          }}
+          onClick={() => setViewingArtifact(null)}
+        >
+          <div
+            className="card"
+            style={{
+              width: '100%',
+              maxWidth: '850px',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              background: 'var(--surface)',
+              border: '1px solid var(--border-strong)',
+              borderRadius: 'var(--radius-lg)',
+              boxShadow: 'var(--shadow-modal)',
+              padding: 0,
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              style={{
+                padding: '14px 18px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'var(--elevated)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileJson size={18} style={{ color: 'var(--accent)' }} />
+                <span style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--primary)' }}>
+                  Scanner Artifact: {viewingArtifact.name}
+                </span>
+              </div>
+              <button
+                className="btn btn-ghost"
+                style={{ padding: '4px', color: 'var(--muted)' }}
+                onClick={() => setViewingArtifact(null)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body: Interactive JSON Viewer */}
+            <div style={{ padding: '12px', background: 'var(--terminal-bg)', flex: 1, overflow: 'hidden' }}>
+              <JsonViewer
+                data={viewingArtifact.content}
+                title={viewingArtifact.name}
+                maxHeight="65vh"
+                initialExpandedDepth={2}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

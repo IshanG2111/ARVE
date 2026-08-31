@@ -55,7 +55,26 @@ const LANGUAGE_CONFIG: Record<string, { label: string; color: string }> = {
   java: { label: 'Java', color: '#B07219' },
   c: { label: 'C', color: '#555555' },
   cpp: { label: 'C++', color: '#F34B7D' },
+  cs: { label: 'C#', color: '#178600' },
+  php: { label: 'PHP', color: '#4F5D95' },
+  rb: { label: 'Ruby', color: '#701516' },
+  kt: { label: 'Kotlin', color: '#A97BFF' },
+  swift: { label: 'Swift', color: '#F05138' },
+  vue: { label: 'Vue', color: '#41B883' },
+  svelte: { label: 'Svelte', color: '#FF3E00' },
+  astro: { label: 'Astro', color: '#FF5D01' },
 };
+
+const MEDIA_AND_BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'webp', 'bmp', 'tiff',
+  'mp4', 'mov', 'avi', 'mkv', 'webm', 'mp3', 'wav', 'ogg', 'flac',
+  'zip', 'tar', 'gz', '7z', 'rar', 'bz2',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  'exe', 'dll', 'so', 'dylib', 'bin', 'iso', 'dmg',
+  'woff', 'woff2', 'ttf', 'eot', 'otf',
+  'pyc', 'pyo', 'pyd', 'db', 'sqlite', 'sqlite3',
+  'map',
+]);
 
 export const RepositoryPage: React.FC = () => {
   const navigate = useNavigate();
@@ -69,6 +88,7 @@ export const RepositoryPage: React.FC = () => {
     latestRun,
     findings = [],
     isLoading: isRepoLoading,
+    isProjectLoading,
     refreshRuns,
   } = useRepository();
 
@@ -119,14 +139,26 @@ export const RepositoryPage: React.FC = () => {
     }
   };
 
-  // Compute normalized language distribution
+  // Source files only (ingested or valid code languages, excluding media/binary)
+  const sourceFiles = useMemo(() => {
+    return files.filter((f) => {
+      const rawExt = (f.extension || '').replace(/^\./, '').toLowerCase();
+      if (MEDIA_AND_BINARY_EXTENSIONS.has(rawExt)) return false;
+      if (f.status === 'SKIPPED' && f.skip_reason?.toLowerCase().includes('binary')) return false;
+      return true;
+    });
+  }, [files]);
+
+  // Compute normalized language distribution from actual source code files
   const languageStats = useMemo(() => {
-    if (!files.length) return [];
+    const list = sourceFiles.length > 0 ? sourceFiles : files;
     const counts: Record<string, { bytes: number; count: number; rawKey: string }> = {};
     let totalBytes = 0;
 
-    files.forEach((f) => {
+    list.forEach((f) => {
       const rawExt = (f.extension || f.language || '').replace(/^\./, '').toLowerCase() || 'other';
+      if (MEDIA_AND_BINARY_EXTENSIONS.has(rawExt)) return;
+
       const size = f.size || 500;
       totalBytes += size;
       if (!counts[rawExt]) {
@@ -153,18 +185,20 @@ export const RepositoryPage: React.FC = () => {
       })
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 6);
-  }, [files]);
+  }, [sourceFiles, files]);
 
   const totalSizeKb = useMemo(() => {
-    const bytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
+    const list = sourceFiles.length > 0 ? sourceFiles : files;
+    const bytes = list.reduce((acc, f) => acc + (f.size || 0), 0);
     return (bytes / 1024).toFixed(1);
-  }, [files]);
+  }, [sourceFiles, files]);
 
   const avgFileSizeBytes = useMemo(() => {
-    if (!files.length) return '0.0';
-    const bytes = files.reduce((acc, f) => acc + (f.size || 0), 0);
-    return (bytes / files.length / 1024).toFixed(1);
-  }, [files]);
+    const list = sourceFiles.length > 0 ? sourceFiles : files;
+    if (!list.length) return '0.0';
+    const bytes = list.reduce((acc, f) => acc + (f.size || 0), 0);
+    return (bytes / list.length / 1024).toFixed(1);
+  }, [sourceFiles, files]);
 
   // Extract real detected manifest & configuration files (up to 4 for unified height)
   const discoveredManifests = useMemo(() => {
@@ -192,12 +226,15 @@ export const RepositoryPage: React.FC = () => {
       .slice(0, 4);
   }, [files]);
 
-  // Extract top 4 largest files in snapshot
+  // Extract top 4 largest source code files in snapshot (excluding media/binaries)
   const topLargestFiles = useMemo(() => {
-    return [...files].sort((a, b) => (b.size || 0) - (a.size || 0)).slice(0, 4);
-  }, [files]);
+    const list = sourceFiles.length > 0 ? sourceFiles : files;
+    return [...list].sort((a, b) => (b.size || 0) - (a.size || 0)).slice(0, 4);
+  }, [sourceFiles, files]);
 
-  if (!currentProject && !isRepoLoading) {
+  const isPageLoading = isRepoLoading || (!currentProject && isProjectLoading);
+
+  if (!currentProject && !isPageLoading) {
     return (
       <div className="page-container" style={{ padding: '40px 24px' }}>
         <EmptyState

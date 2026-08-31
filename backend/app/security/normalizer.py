@@ -107,6 +107,7 @@ class FindingNormalizer:
                 ghsa=f.ghsa,
                 cwe=f.cwe,
                 rule_id=f.rule_id,
+                fixed_version=f.fixed_version,
                 fingerprint=fp,
                 raw_json=raw_payload,
                 created_at=now,

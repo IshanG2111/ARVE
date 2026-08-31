@@ -104,10 +104,13 @@ export const StaggeredMenu: React.FC<StaggeredMenuProps> = ({
     if (link.startsWith('http')) {
       window.open(link, '_blank', 'noreferrer');
     } else {
-      // Preserve repo param if present in current query
+      // Preserve repo param if present in current query or localStorage
       const currentQuery = location.search;
+      const storedRepo = typeof window !== 'undefined' ? localStorage.getItem('arve_active_project_id') : null;
       if (currentQuery && !link.includes('?')) {
         navigate(`${link}${currentQuery}`);
+      } else if (storedRepo && !link.includes('?')) {
+        navigate(`${link}?repo=${storedRepo}`);
       } else {
         navigate(link);
       }

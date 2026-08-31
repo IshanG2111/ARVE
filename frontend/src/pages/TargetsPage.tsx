@@ -18,7 +18,7 @@ import {
 
 export const TargetsPage: React.FC = () => {
   const toast = useToast();
-  const { currentProject, currentProjectId, displayName, targets, refreshProjects } = useRepository();
+  const { currentProject, currentProjectId, displayName, targets, refreshProjects, isProjectLoading } = useRepository();
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedVerifyTarget, setSelectedVerifyTarget] = useState<TargetWebsite | null>(null);
@@ -43,6 +43,14 @@ export const TargetsPage: React.FC = () => {
       toast.error(err instanceof Error ? err.message : 'Failed to delete target');
     }
   };
+
+  if (isProjectLoading && !currentProject) {
+    return (
+      <div className="page-container" style={{ padding: '40px 24px' }}>
+        <div className="card skeleton-shimmer" style={{ height: '280px', borderRadius: 'var(--radius-lg)' }} />
+      </div>
+    );
+  }
 
   if (!currentProject || !currentProjectId) {
     return (

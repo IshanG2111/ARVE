@@ -34,6 +34,7 @@ export const DashboardPage: React.FC = () => {
     currentProject,
     currentProjectId,
     isLoading,
+    isProjectLoading,
     displayName,
     repoLabel,
     defaultBranch,
@@ -103,7 +104,7 @@ export const DashboardPage: React.FC = () => {
       })
     : 'Never';
 
-  if (isLoading) {
+  if (isLoading || (!currentProject && isProjectLoading)) {
     return (
       <div className="dashboard-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
         <div className="page-container" style={{ padding: '0 24px' }}>
@@ -305,11 +306,11 @@ export const DashboardPage: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className={`dot ${attentionCount > 0 ? 'dot-red' : 'dot-green'}`} />
                 <span style={{ fontSize: '16px', fontWeight: 750, color: attentionCount > 0 ? 'var(--critical)' : 'var(--success)' }}>
-                  {attentionCount > 0 ? `${attentionCount} Actionable Items` : 'Clean Snapshot'}
+                  {attentionCount > 0 ? `${attentionCount} Critical & High Issues` : 'Clean Snapshot'}
                 </span>
               </div>
               <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
-                {findings.length > 0 ? `${findings.length} total findings recorded` : 'No active security findings'}
+                {findings.length > 0 ? `${findings.length} security issues found` : 'No active security issues'}
               </div>
             </div>
           </div>

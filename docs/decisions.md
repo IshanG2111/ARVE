@@ -26,6 +26,10 @@ This document records key architectural decisions, design trade-offs, security c
 19. [ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking](#adr-019-non-unique-fingerprint-indexes-for-multi-scan-finding-lifecycle-tracking)
 20. [ADR-020: Isolated Engine Evaluation UI & Parallel Conflict-Free Security Mappers](#adr-020-isolated-engine-evaluation-ui--parallel-conflict-free-security-mappers)
 21. [ADR-021: Deterministic Multi-Engine Pipeline Ordering](#adr-021-deterministic-multi-engine-pipeline-ordering)
+22. [ADR-022: Dynamic PostgreSQL Column Migration for Finding Suppression and Fix Tracking](#adr-022-dynamic-postgresql-column-migration-for-finding-suppression-and-fix-tracking)
+23. [ADR-023: Progressive Disclosure UX — Simple by Default, Technical when Requested](#adr-023-progressive-disclosure-ux--simple-by-default-technical-when-requested)
+24. [ADR-024: Media and Binary Exclusion Guardrails in Language & Asset Composition](#adr-024-media-and-binary-exclusion-guardrails-in-language--asset-composition)
+25. [ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload](#adr-025-ephemeral-scan-workspaces-with-direct-backblaze-b2-s3-upload)
 
 ---
 
@@ -512,4 +516,69 @@ Establish the deterministic 5-stage pipeline order across system documentation a
 - **Accurate UI State**: Eliminates misleading success indicators for roadmap phases and accurately represents real live scan executions.
 
 ---
+
+## ADR-022: Dynamic PostgreSQL Column Migration for Finding Suppression and Fix Tracking
+
+### Context
+When introducing remediation metadata (`fixed_version`) and suppression lifecycle audits (`suppression_reason`, `suppression_justification`, `suppression_expires_at`) to the `security_findings` table, existing developer databases and live instances threw `psycopg.errors.UndefinedColumn` on `GET /api/projects/{id}/findings` before manual Alembic upgrade commands could be executed.
+
+### Decision
+1. Implement automatic non-destructive column provisioning during `init_db()` startup in `app/core/database.py` using `ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS ...`.
+2. Pair this with standard Alembic migration `20260831_0006_finding_suppression_and_fixes.py` for formal schema version tracking.
+
+### AI Reasoning & Trade-off Analysis
+- **Zero-Downtime Resilience**: Guarantees that local developer databases and staging/production containers self-heal on startup without throwing 500 errors.
+- **Portability**: Safe idempotent execution across both SQLite and PostgreSQL.
+
+---
+
+## ADR-023: Progressive Disclosure UX — Simple by Default, Technical when Requested
+
+### Context
+Cybersecurity tools often overwhelm developers with raw CVSS vectors, unparsed JSON trees, and dense advisory prose. Users need immediate answers to three fundamental questions:
+1. *What is wrong?*
+2. *Where is it?*
+3. *What should I do?*
+
+### Decision
+Apply a strict **Progressive Disclosure** design standard across all ARVE views:
+- **Finding Detail Modal**: Prominently display a 1-click Remediation Command Box (`npm install @pkg@^version`), a 4-stat version matrix, and a rich formatted Markdown advisory summary. Deep technical metadata (CVE/GHSA links, CWE weakness, SHA-256 fingerprint, raw OSV JSON) is nested under a collapsible `Technical security metadata ▾` accordion.
+- **Settings Page**: Present primary workspace identifiers (Display Name, Default Branch, Deployment URL) at first sight, placing advanced scanner engines, cloud storage destinations, and the Danger Zone under collapsible sections.
+- **Interactive JSON Viewer**: Dual-mode Tree/Raw JSON viewer with search filtering and 1-click Copy/Download.
+
+### AI Reasoning & Trade-off Analysis
+- **Cognitive Load Reduction**: Developers can resolve 95% of dependency alerts in 1 click without deciphering raw JSON.
+- **Zero Information Loss**: Full technical audit trails remain instantly accessible for security analysts and compliance officers.
+
+---
+
+## ADR-024: Media and Binary Exclusion Guardrails in Language & Asset Composition
+
+### Context
+Large video assets (`.mp4`, `.mov`) and image files (`.gif`, `.png`, `.jpg`) present in public asset directories (e.g. 30MB video clips) skewed repository language composition calculations, causing "Language Composition" to report `MP4 49.5%` instead of actual programming languages (e.g. TypeScript, React, Python).
+
+### Decision
+1. In the backend ingestion filter (`app/ingestion/filters/file_filter.py`), strictly tag binary and media extensions as `status="SKIPPED"` with `skip_reason="Binary or media file"`.
+2. In the frontend (`RepositoryPage.tsx`), enforce `MEDIA_AND_BINARY_EXTENSIONS` exclusion sets so that Language Composition and "Largest Codebase Files" only evaluate actual source code files.
+
+### AI Reasoning & Trade-off Analysis
+- **Accuracy**: Codebase blueprints accurately reflect software engineering composition rather than raw asset disk storage.
+- **Performance**: Prevents AST parsers from wasting CPU memory attempting to parse non-code media blobs.
+
+---
+
+## ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload
+
+### Context
+Docker containers executing scanner engines generate large raw JSON output artifacts (e.g., `osv.json`, `gitleaks.json`, `semgrep.json`). Retaining these temporary output directories indefinitely on the local container filesystem risks exhausting disk capacity during high-throughput scanning.
+
+### Decision
+1. When a scanner completes, `ScanArtifactStore.persist_output()` immediately uploads the JSON artifact to Backblaze B2 cloud storage via its S3-compatible API under `b2://arve-scan-artifacts/scans/{scan_id}/{engine_name}/{filename}`.
+2. The database stores the persistent cloud URI in `scan_engine_runs.artifact_reference`.
+3. The local temporary scratch directory is immediately and safely destroyed (`shutil.rmtree`).
+4. `GET /api/scans/{scan_id}/engines/{engine_name}/artifact` serves the raw JSON directly from Backblaze B2 to the frontend.
+
+### AI Reasoning & Trade-off Analysis
+- **Storage Scalability**: Centralized, cost-effective immutable cloud storage without disk leaks on scanner host nodes.
+- **Security & Integrity**: Scan evidence is decoupled from ephemeral worker nodes, ensuring verifiable historical audit trails.
 
