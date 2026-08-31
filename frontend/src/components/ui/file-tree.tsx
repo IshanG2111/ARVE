@@ -36,6 +36,8 @@ type FileTreeCtx = {
   setHighlightBounds: React.Dispatch<
     React.SetStateAction<HighlightBounds | null>
   >;
+  selectedId?: string;
+  onSelectFile?: (filePath: string, node: FileTreeElement) => void;
 };
 
 type HighlightBounds = {
@@ -65,38 +67,37 @@ const FolderContext = React.createContext<FolderCtx | null>(null);
 function useFolder() {
   const context = React.useContext(FolderContext);
   if (!context) {
-    throw new Error("Folder components must be used within a folder item");
+    throw new Error("Folder components must be used within <Folder />");
   }
   return context;
 }
 
-// ─── Icon resolution ───────────────────────────────────────────────────────────
+// ─── Helpers: File icons based on extension ───────────────────────────────────
 
-const EXT_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  tsx: FileCode,
+const EXT_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string }>
+> = {
   ts: FileCode,
-  jsx: FileCode,
+  tsx: FileCode,
   js: FileCode,
-  json: FileJson,
+  jsx: FileCode,
   py: FileCode,
-  rs: FileCode,
-  go: FileCode,
+  json: FileJson,
   md: FileText,
-  mdx: FileText,
+  txt: FileText,
   png: FileImage,
   jpg: FileImage,
   jpeg: FileImage,
   svg: FileImage,
+  gif: FileImage,
   webp: FileImage,
-  config: FileCog,
-  toml: FileCog,
-  yaml: FileCog,
   yml: FileCog,
-  env: FileCog,
-  ico: FileImage,
+  yaml: FileCog,
+  toml: FileCog,
   lock: FileCog,
-  html: FileCode,
-  css: FileCode,
+  gitignore: FileCog,
+  env: FileCog,
 };
 
 function resolveFileIcon(
@@ -178,16 +179,11 @@ function FolderIcon({
       <AnimatePresence initial={false} mode="popLayout">
         <motion.span
           key={isOpen ? "open" : "close"}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-          initial={{ scale: 0.5, opacity: 0, rotate: -15 }}
-          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-          exit={{ scale: 0.5, opacity: 0, rotate: 15 }}
-          transition={{
-            type: "spring",
-            stiffness: 500,
-            damping: 30,
-            mass: 0.8,
-          }}
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.8, opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          style={{ display: "inline-flex" }}
         >
           {isOpen ? openIcon : closeIcon}
         </motion.span>
@@ -204,9 +200,22 @@ function FolderContent({ children }: { children: React.ReactNode }) {
       {isOpen && (
         <motion.div
           initial={{ height: 0, opacity: 0 }}
-          animate={{ height: "auto", opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 500, damping: 40 }}
+          animate={{
+            height: "auto",
+            opacity: 1,
+            transition: {
+              height: { type: "spring", stiffness: 500, damping: 40 },
+              opacity: { duration: 0.2, delay: 0.05 },
+            },
+          }}
+          exit={{
+            height: 0,
+            opacity: 0,
+            transition: {
+              height: { duration: 0.2 },
+              opacity: { duration: 0.1 },
+            },
+          }}
           style={{ overflow: "hidden" }}
         >
           {children}
@@ -219,32 +228,60 @@ function FolderContent({ children }: { children: React.ReactNode }) {
 // ─── Node renderers ────────────────────────────────────────────────────────────
 
 function FileTreeFile({ node }: { node: FileTreeElement }) {
-  const { highlightColor, showIcons } = useFileTree();
+  const { highlightColor, showIcons, selectedId, onSelectFile } = useFileTree();
   const Icon = resolveFileIcon(node.name, node.icon);
   const highlightTarget = useHighlightTarget();
+
+  const isSelected = selectedId === node.id || selectedId?.endsWith(`/${node.name}`) || selectedId === node.name;
 
   return (
     <div
       ref={highlightTarget.ref}
-      style={{ position: 'relative', zIndex: 1 }}
+      style={{
+        position: 'relative',
+        zIndex: 1,
+        cursor: 'pointer',
+        borderRadius: 'var(--radius-xs, 4px)',
+        background: isSelected ? 'var(--accent-muted)' : 'transparent',
+        transition: 'background 140ms ease',
+      }}
       onMouseEnter={highlightTarget.onMouseEnter}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelectFile?.(node.id, node);
+      }}
     >
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          padding: '7px 10px',
-          pointerEvents: 'none',
-          color: node.highlight ? highlightColor : 'var(--primary)',
+          padding: '6px 10px',
+          color: isSelected
+            ? 'var(--accent)'
+            : node.highlight
+            ? highlightColor
+            : 'var(--primary)',
+          fontWeight: isSelected ? 650 : 400,
         }}
       >
         {showIcons && (
-          <span style={{ display: 'inline-flex', flexShrink: 0, opacity: 0.85, color: node.highlight ? highlightColor : 'var(--muted)' }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              flexShrink: 0,
+              opacity: isSelected ? 1 : 0.85,
+              color: isSelected
+                ? 'var(--accent)'
+                : node.highlight
+                ? highlightColor
+                : 'var(--muted)',
+            }}
+          >
             <Icon className="w-4 h-4" />
           </span>
         )}
-        <span style={{ fontSize: '13px', fontFamily: 'var(--font-code)' }}>
+        <span style={{ fontSize: '13px', fontFamily: 'var(--font-code)', userSelect: 'none' }}>
           {node.name}
         </span>
       </div>
@@ -286,7 +323,7 @@ function FileTreeFolder({ node }: { node: FileTreeElement }) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
-                padding: '7px 10px',
+                padding: '6px 10px',
                 pointerEvents: 'none',
               }}
             >
@@ -303,6 +340,7 @@ function FileTreeFolder({ node }: { node: FileTreeElement }) {
                   fontSize: '13.5px',
                   fontWeight: 550,
                   color: node.highlight ? highlightColor : 'var(--primary)',
+                  userSelect: 'none',
                 }}
               >
                 {node.name}
@@ -347,6 +385,8 @@ export type FileTreeProps = {
   indentSize?: number;
   showIcons?: boolean;
   defaultOpenIds?: string[];
+  selectedId?: string;
+  onSelectFile?: (filePath: string, node: FileTreeElement) => void;
 };
 
 export function FileTree({
@@ -356,6 +396,8 @@ export function FileTree({
   indentSize = 20,
   showIcons = true,
   defaultOpenIds = [],
+  selectedId,
+  onSelectFile,
 }: FileTreeProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [highlightBounds, setHighlightBounds] =
@@ -375,6 +417,8 @@ export function FileTree({
         containerRef,
         highlightBounds,
         setHighlightBounds,
+        selectedId,
+        onSelectFile,
       }}
     >
       <div
@@ -387,7 +431,7 @@ export function FileTree({
       >
         <div
           ref={containerRef}
-          style={{ padding: '12px', width: '100%', position: 'relative' }}
+          style={{ padding: '10px', width: '100%', position: 'relative' }}
           onMouseLeave={() => setHighlightBounds(null)}
         >
           <FileTreeHoverHighlight />
@@ -453,5 +497,3 @@ export function buildFileTree(
   sortTree(root);
   return root;
 }
-
-export default FileTree;

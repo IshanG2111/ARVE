@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { motion, type TargetAndTransition } from 'framer-motion';
 
-interface BlurTextProps {
+export interface BlurTextProps {
   text?: string;
   delay?: number;
+  initialDelay?: number;
   className?: string;
   animateBy?: 'words' | 'letters';
   direction?: 'top' | 'bottom';
@@ -15,6 +16,7 @@ interface BlurTextProps {
   onAnimationComplete?: () => void;
   stepDuration?: number;
   style?: React.CSSProperties;
+  trigger?: boolean;
 }
 
 const buildKeyframes = (
@@ -32,9 +34,10 @@ const buildKeyframes = (
 
 export const BlurText: React.FC<BlurTextProps> = ({
   text = '',
-  delay = 140,
+  delay = 40,
+  initialDelay = 0,
   className = '',
-  animateBy = 'words',
+  animateBy = 'letters',
   direction = 'top',
   threshold = 0.1,
   rootMargin = '0px',
@@ -42,19 +45,24 @@ export const BlurText: React.FC<BlurTextProps> = ({
   animationTo,
   easing = (t) => t,
   onAnimationComplete,
-  stepDuration = 0.35,
+  stepDuration = 0.3,
   style = {},
+  trigger,
 }) => {
   const elements = animateBy === 'words' ? text.split(' ') : text.split('');
-  const [inView, setInView] = useState(false);
-  const ref = useRef<HTMLParagraphElement | null>(null);
+  const [internalInView, setInternalInView] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    if (trigger !== undefined) {
+      setInternalInView(trigger);
+      return;
+    }
     if (!ref.current) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          setInView(true);
+          setInternalInView(true);
           observer.unobserve(ref.current!);
         }
       },
@@ -62,13 +70,15 @@ export const BlurText: React.FC<BlurTextProps> = ({
     );
     observer.observe(ref.current);
     return () => observer.disconnect();
-  }, [threshold, rootMargin]);
+  }, [threshold, rootMargin, trigger]);
+
+  const inView = trigger !== undefined ? trigger : internalInView;
 
   const defaultFrom = useMemo(
     () =>
       direction === 'top'
-        ? { filter: 'blur(10px)', opacity: 0, y: -40 }
-        : { filter: 'blur(10px)', opacity: 0, y: 40 },
+        ? { filter: 'blur(12px)', opacity: 0, y: -24 }
+        : { filter: 'blur(12px)', opacity: 0, y: 24 },
     [direction]
   );
 
@@ -76,8 +86,8 @@ export const BlurText: React.FC<BlurTextProps> = ({
     () => [
       {
         filter: 'blur(4px)',
-        opacity: 0.5,
-        y: direction === 'top' ? 4 : -4,
+        opacity: 0.6,
+        y: direction === 'top' ? 3 : -3,
       },
       { filter: 'blur(0px)', opacity: 1, y: 0 },
     ],
@@ -98,7 +108,7 @@ export const BlurText: React.FC<BlurTextProps> = ({
       ref={ref}
       className={className}
       style={{
-        display: 'flex',
+        display: 'inline-flex',
         flexWrap: 'wrap',
         rowGap: '0.1em',
         ...style,
@@ -110,7 +120,7 @@ export const BlurText: React.FC<BlurTextProps> = ({
         const spanTransition: any = {
           duration: totalDuration,
           times,
-          delay: (index * delay) / 1000,
+          delay: initialDelay + (index * delay) / 1000,
           ease: easing,
         };
 
