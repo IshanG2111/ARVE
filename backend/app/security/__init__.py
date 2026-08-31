@@ -4,7 +4,7 @@ Provides engine-agnostic contracts, severity taxonomy, deterministic
 fingerprinting, mapper interfaces, and finding normalizers.
 """
 from app.security.fingerprint import compute_finding_fingerprint, generate_fingerprint_from_parts
-from app.security.mappers.base import FindingMapper
+from app.security.mappers import FindingMapper, OsvFindingMapper
 from app.security.models import (
     EngineName,
     FindingConfidence,
@@ -30,6 +30,7 @@ __all__ = [
     "FindingStatus",
     "FindingType",
     "NormalizedFinding",
+    "OsvFindingMapper",
     "compute_finding_fingerprint",
     "generate_fingerprint_from_parts",
     "normalize_cvss_score",

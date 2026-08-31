@@ -232,6 +232,7 @@ export type FindingType =
 
 export type FindingStatus =
   | 'OPEN'
+  | 'ACKNOWLEDGED'
   | 'RESOLVED'
   | 'REOPENED'
   | 'FALSE_POSITIVE'
@@ -253,11 +254,15 @@ export interface SecurityFinding {
   line_end?: number;
   package_name?: string;
   package_version?: string;
+  fixed_version?: string;
   ecosystem?: string;
   cve?: string;
   ghsa?: string;
   cwe?: string;
   rule_id?: string;
+  suppression_reason?: string;
+  suppression_justification?: string;
+  suppression_expires_at?: string;
   fingerprint?: string;
   raw_json?: any;
   created_at?: string;

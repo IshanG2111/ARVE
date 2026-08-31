@@ -1,6 +1,8 @@
 """Scan orchestration API."""
 from __future__ import annotations
 
+import json
+import logging
 from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -8,11 +10,21 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models.models import Project, Scan, ScanEngineRun, User
+from app.models.models import Project, Scan, ScanEngineRun, SecurityFinding, User
+from app.scanner.artifacts import ScanArtifactStore
 from app.scanner.exceptions import ScanValidationError
 from app.scanner.queue import enqueue_scan
 from app.scanner.service import ScanExecutionService
-from app.schemas.schemas import ScanCreate, ScanEngineRunResponse, ScanResponse, ScanStatusResponse
+
+logger = logging.getLogger(__name__)
+from app.schemas.schemas import (
+    ScanCreate,
+    ScanEngineRunResponse,
+    ScanResponse,
+    ScanStatusResponse,
+    SecurityFindingResponse,
+    SecurityFindingStatusUpdate,
+)
 
 router = APIRouter(tags=["scans"])
 
@@ -119,3 +131,135 @@ def list_project_scans(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return db.query(Scan).filter(Scan.project_id == project_id).order_by(Scan.created_at.desc()).all()
+
+
+@router.get("/projects/{project_id}/findings", response_model=List[SecurityFindingResponse])
+def list_project_findings(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = (
+        db.query(Project)
+        .filter(Project.id == project_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return (
+        db.query(SecurityFinding)
+        .filter(SecurityFinding.project_id == project_id)
+        .order_by(SecurityFinding.created_at.desc())
+        .all()
+    )
+
+
+@router.get("/scans/{scan_id}/findings", response_model=List[SecurityFindingResponse])
+def list_scan_findings(
+    scan_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scan = _owned_scan(db, scan_id, current_user.id)
+    return (
+        db.query(SecurityFinding)
+        .filter(SecurityFinding.scan_id == scan.id)
+        .order_by(SecurityFinding.created_at.desc())
+        .all()
+    )
+
+
+@router.patch("/findings/{finding_id}/status", response_model=SecurityFindingResponse)
+def update_finding_status(
+    finding_id: str,
+    payload: SecurityFindingStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    finding = (
+        db.query(SecurityFinding)
+        .join(Project, Project.id == SecurityFinding.project_id)
+        .filter(SecurityFinding.id == finding_id, Project.user_id == current_user.id)
+        .first()
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+
+    valid_statuses = {"OPEN", "ACKNOWLEDGED", "SUPPRESSED", "RESOLVED", "REOPENED"}
+    target_status = payload.status.strip().upper()
+    if target_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid finding status: {payload.status}")
+
+    finding.status = target_status
+    if payload.suppression_reason is not None:
+        finding.suppression_reason = payload.suppression_reason
+    if payload.suppression_justification is not None:
+        finding.suppression_justification = payload.suppression_justification
+    if payload.suppression_expires_at is not None:
+        finding.suppression_expires_at = payload.suppression_expires_at
+
+    db.commit()
+    db.refresh(finding)
+    return finding
+
+
+@router.get("/scans/{scan_id}/engines/{engine_name}/artifact")
+def get_engine_artifact(
+    scan_id: str,
+    engine_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    scan = _owned_scan(db, scan_id, current_user.id)
+    engine_run = (
+        db.query(ScanEngineRun)
+        .filter(ScanEngineRun.scan_id == scan.id, ScanEngineRun.engine_name == engine_name)
+        .first()
+    )
+    if not engine_run:
+        raise HTTPException(status_code=404, detail="Engine run not found")
+
+    # If artifact is in Backblaze B2, attempt direct fetch
+    if engine_run.artifact_reference:
+        try:
+            store = ScanArtifactStore()
+            client = store._get_client()
+            for cand_filename in (f"{engine_name}.json", "osv.json"):
+                object_key = f"{store.prefix}/{scan.id}/{engine_name}/{cand_filename}"
+                try:
+                    resp = client.get_object(Bucket=store.bucket, Key=object_key)
+                    content = resp["Body"].read().decode("utf-8")
+                    return json.loads(content)
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.debug("Failed to fetch from B2: %s", exc)
+
+    # Fallback to findings raw_json for audit inspection
+    findings = (
+        db.query(SecurityFinding)
+        .filter(SecurityFinding.scan_id == scan.id, SecurityFinding.engine == engine_name)
+        .all()
+    )
+    if findings:
+        raw_list = []
+        for f in findings:
+            if f.raw_json:
+                try:
+                    raw_list.append(json.loads(f.raw_json) if isinstance(f.raw_json, str) else f.raw_json)
+                except Exception:
+                    raw_list.append({"title": f.title, "raw": f.raw_json})
+        return {
+            "scan_id": scan.id,
+            "engine": engine_name,
+            "artifact_reference": engine_run.artifact_reference,
+            "results": raw_list,
+        }
+
+    return {
+        "scan_id": scan.id,
+        "engine": engine_name,
+        "artifact_reference": engine_run.artifact_reference,
+        "status": engine_run.status,
+        "message": "No raw artifact findings available for this engine run.",
+    }

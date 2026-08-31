@@ -10,6 +10,7 @@ interface RepositoryContextType {
   currentProject: Project | null;
   currentProjectId: string | null;
   isLoading: boolean;
+  isProjectLoading: boolean;
   selectProject: (projectId: string) => void;
   refreshProjects: () => void;
   runs: AnalysisRun[];
@@ -49,20 +50,32 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const location = useLocation();
   const queryClient = useQueryClient();
 
-  const { data: projects = [], isLoading } = useProjects();
+  const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
 
   // Extract repo ID from URL search param or URL path (/projects/:id)
   const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
   const repoParam = searchParams.get('repo') || pathProjectId;
 
-  // Selected project resolution
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Selected project resolution with localStorage fallback for persistent reloads
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return repoParam || localStorage.getItem('arve_active_project_id');
+  });
 
   useEffect(() => {
-    if (repoParam && projects.some(p => p.id === repoParam)) {
-      setSelectedId(repoParam);
-    } else if (projects.length > 0 && (!selectedId || !projects.some(p => p.id === selectedId))) {
-      setSelectedId(projects[0].id);
+    if (repoParam && projects.some((p) => p.id === repoParam)) {
+      if (selectedId !== repoParam) {
+        setSelectedId(repoParam);
+        localStorage.setItem('arve_active_project_id', repoParam);
+      }
+    } else if (selectedId && projects.some((p) => p.id === selectedId)) {
+      // Valid existing selectedId
+    } else if (projects.length > 0) {
+      const storedId = localStorage.getItem('arve_active_project_id');
+      const matched = storedId ? projects.find((p) => p.id === storedId) : null;
+      const targetId = matched ? matched.id : projects[0].id;
+      setSelectedId(targetId);
+      localStorage.setItem('arve_active_project_id', targetId);
     }
   }, [repoParam, projects, selectedId]);
 
@@ -74,14 +87,22 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const currentProjectId = currentProject?.id || null;
 
   // Query analysis runs for the active project
-  const { data: runs = [], refetch: refreshRuns } = useQuery({
+  const {
+    data: runs = [],
+    refetch: refreshRuns,
+    isFetching: isRunsFetching,
+  } = useQuery({
     queryKey: ['analysis-runs', currentProjectId],
     queryFn: () => (currentProjectId ? api.getAnalysisRuns(currentProjectId) : Promise.resolve([])),
     enabled: !!currentProjectId,
   });
 
   // Query scans for the active project (polls when active)
-  const { data: scans = [], refetch: refreshScans } = useQuery({
+  const {
+    data: scans = [],
+    refetch: refreshScans,
+    isFetching: isScansFetching,
+  } = useQuery({
     queryKey: ['scans', currentProjectId],
     queryFn: () => (currentProjectId ? api.getProjectScans(currentProjectId) : Promise.resolve([])),
     enabled: !!currentProjectId,
@@ -97,12 +118,28 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     latestScan && ['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(latestScan.status)
   );
 
-  // In-memory or persisted normalized findings state
+  // Query findings for the active project
+  const {
+    data: serverFindings = [],
+    isFetching: isFindingsFetching,
+  } = useQuery({
+    queryKey: ['findings', currentProjectId],
+    queryFn: () => (currentProjectId ? api.getProjectFindings(currentProjectId) : Promise.resolve([])),
+    enabled: !!currentProjectId,
+  });
+
+  // Local state initialized with server data, updated immediately on project change
   const [findings, setFindings] = useState<SecurityFinding[]>([]);
+
+  useEffect(() => {
+    setFindings(serverFindings || []);
+  }, [serverFindings, currentProjectId]);
 
   const selectProject = useCallback(
     (projectId: string) => {
       setSelectedId(projectId);
+      setFindings([]); // immediately clear old findings to avoid stale flicker
+      localStorage.setItem('arve_active_project_id', projectId);
       const newParams = new URLSearchParams(searchParams);
       newParams.set('repo', projectId);
       setSearchParams(newParams, { replace: true });
@@ -110,11 +147,15 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     [searchParams, setSearchParams]
   );
 
+  const isProjectLoading =
+    isProjectsLoading || (!!currentProjectId && (isRunsFetching || isScansFetching || isFindingsFetching));
+
   const refreshProjects = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['projects'] });
     if (currentProjectId) {
       queryClient.invalidateQueries({ queryKey: ['analysis-runs', currentProjectId] });
       queryClient.invalidateQueries({ queryKey: ['scans', currentProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['findings', currentProjectId] });
     }
   }, [queryClient, currentProjectId]);
   const value = useMemo(
@@ -122,7 +163,8 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       projects,
       currentProject,
       currentProjectId,
-      isLoading,
+      isLoading: isProjectsLoading,
+      isProjectLoading,
       selectProject,
       refreshProjects,
       runs,
@@ -143,7 +185,8 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       projects,
       currentProject,
       currentProjectId,
-      isLoading,
+      isProjectsLoading,
+      isProjectLoading,
       selectProject,
       refreshProjects,
       runs,

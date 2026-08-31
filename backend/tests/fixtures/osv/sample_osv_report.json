@@ -1,0 +1,143 @@
+{
+  "results": [
+    {
+      "source": {
+        "path": "/code/frontend/package-lock.json",
+        "type": "lockfile"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "lodash",
+            "version": "4.17.20",
+            "ecosystem": "npm"
+          },
+          "vulnerabilities": [
+            {
+              "id": "GHSA-35jh-r3h4-6jhm",
+              "summary": "Regular Expression Denial of Service (ReDoS) in lodash",
+              "details": "The vulnerable function is located in ... causing catastrophic backtracking.",
+              "aliases": [
+                "CVE-2020-28500",
+                "SNYK-JS-LODASH-1018905"
+              ],
+              "severity": [
+                {
+                  "type": "CVSS_V3",
+                  "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+                }
+              ],
+              "database_specific": {
+                "severity": "MODERATE",
+                "cwe_ids": [
+                  "CWE-1333"
+                ],
+                "cvss_score": 5.3,
+                "github_reviewed": true
+              }
+            }
+          ]
+        },
+        {
+          "package": {
+            "name": "axios",
+            "version": "0.21.1",
+            "ecosystem": "npm"
+          },
+          "vulnerabilities": [
+            {
+              "id": "CVE-2021-3749",
+              "summary": "Regular Expression Denial of Service in axios",
+              "details": "axios is vulnerable to Inefficient Regular Expression Complexity",
+              "aliases": [
+                "GHSA-cph5-m8f7-6c5x"
+              ],
+              "severity": [
+                {
+                  "type": "CVSS_V3",
+                  "score": 7.5
+                }
+              ],
+              "database_specific": {
+                "severity": "HIGH",
+                "cwe_ids": [
+                  "CWE-1333"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "\\code\\backend\\requirements.txt",
+        "type": "requirements.txt"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "requests",
+            "version": "2.25.0",
+            "ecosystem": "PyPI"
+          },
+          "vulnerabilities": [
+            {
+              "id": "PYSEC-2023-74",
+              "summary": "Leaked Proxy Authorization Headers in requests",
+              "details": "Requests session exposes Authorization headers across redirects.",
+              "aliases": [
+                "CVE-2023-32681",
+                "GHSA-j8r2-6x86-q33q"
+              ],
+              "severity": [
+                {
+                  "type": "CVSS_V3",
+                  "score": 6.1
+                }
+              ],
+              "database_specific": {
+                "severity": "MEDIUM",
+                "cwe_ids": [
+                  "CWE-200"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "source": {
+        "path": "/code/go.mod",
+        "type": "go.mod"
+      },
+      "packages": [
+        {
+          "package": {
+            "name": "golang.org/x/net",
+            "version": "0.0.0-20210226172049-e18ecbb05110",
+            "ecosystem": "Go"
+          },
+          "vulnerabilities": [
+            {
+              "id": "GO-2022-0493",
+              "summary": "HTTP/2 Rapid Reset vulnerability in net/http",
+              "details": "Denial of Service via rapid multiplexed stream creation.",
+              "aliases": [
+                "CVE-2023-44487"
+              ],
+              "severity": [],
+              "database_specific": {
+                "severity": "CRITICAL",
+                "cwe_ids": [
+                  "CWE-400"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -23,7 +23,7 @@ function norm(p: string): string {
 
 export const CodeIntelligencePage: React.FC = () => {
   const [searchParams] = useSearchParams();
-  const { currentProject, latestRun, findings, isLoading: ctxLoading } = useRepository();
+  const { currentProject, latestRun, findings, isLoading: ctxLoading, isProjectLoading } = useRepository();
 
   const [files, setFiles] = useState<RepositoryFile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -103,7 +103,7 @@ export const CodeIntelligencePage: React.FC = () => {
   }, [selectedFile]);
 
   // Loading state
-  if (ctxLoading || loading) {
+  if (ctxLoading || loading || (!currentProject && isProjectLoading)) {
     return (
       <div className="anim-fade-up" style={{ padding: '24px 0 64px' }}>
         <div className="page-container" style={{ padding: '0 24px' }}>

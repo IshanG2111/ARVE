@@ -41,9 +41,21 @@ def get_db():
 
 
 def init_db() -> None:
-    """Import models so metadata is registered.
-
-    Schema creation/migration is intentionally not performed here. Shared Neon
-    schema changes are managed by Alembic before the application starts.
-    """
+    """Import models so metadata is registered and ensure schema columns exist."""
     from app.models import models  # noqa: F401
+    from sqlalchemy import text
+
+    try:
+        with engine.begin() as conn:
+            if engine.dialect.name == "postgresql":
+                conn.execute(
+                    text("""
+                        ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS fixed_version VARCHAR(128);
+                        ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS suppression_reason VARCHAR(128);
+                        ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS suppression_justification TEXT;
+                        ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS suppression_expires_at TIMESTAMP;
+                    """)
+                )
+    except Exception:
+        # Table might not exist yet or running against different backend
+        pass

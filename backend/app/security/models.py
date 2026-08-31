@@ -29,6 +29,7 @@ class FindingType(str, Enum):
 class FindingStatus(str, Enum):
     """Lifecycle status for a security finding."""
     OPEN = "OPEN"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
     RESOLVED = "RESOLVED"
     REOPENED = "REOPENED"
     FALSE_POSITIVE = "FALSE_POSITIVE"
@@ -80,6 +81,7 @@ class NormalizedFinding(BaseModel):
     # SCA (Dependency) specific metadata
     package_name: Optional[str] = Field(None, description="Vulnerable dependency package name")
     package_version: Optional[str] = Field(None, description="Vulnerable package version string")
+    fixed_version: Optional[str] = Field(None, description="Patched or fixed package version string")
     ecosystem: Optional[str] = Field(None, description="Package ecosystem (e.g. 'npm', 'PyPI', 'Go')")
     cve: Optional[str] = Field(None, description="Common Vulnerabilities and Exposures identifier")
     ghsa: Optional[str] = Field(None, description="GitHub Security Advisory identifier")

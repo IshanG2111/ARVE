@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useProjects } from '../hooks/useProjects';
 import { useQueryClient } from '@tanstack/react-query';
 import { AnimatedThemeToggler } from '@/registry/magicui/animated-theme-toggler';
 import { GitHubIcon } from './GitHubIcon';
 import { ProjectWizardModal } from './ProjectWizardModal';
 import { useToast } from './ui/ToastProvider';
 import { StaggeredMenu } from './ui/StaggeredMenu';
+import { useRepository } from '../context/RepositoryContext';
 import {
   LogOut,
   ChevronDown,
   Plus,
   GitBranch,
   Check,
+  Loader2,
 } from 'lucide-react';
 import type { User } from '@/types';
 
@@ -24,12 +25,15 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
   const navigate = useNavigate();
-  const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
   const { logout } = useAuth();
-  const { data: projects = [] } = useProjects();
+  const {
+    projects,
+    currentProject: activeProject,
+    selectProject,
+    isProjectLoading,
+  } = useRepository();
 
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -64,10 +68,6 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
     };
   }, []);
 
-  const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
-  const currentRepoParam = searchParams.get('repo') || pathProjectId;
-  const activeProject = projects.find((p) => p.id === currentRepoParam) || projects[0];
-
   const activeRepoName = activeProject?.name || activeProject?.repo_name?.split('/').pop() || 'ARVE Workspace';
   const activeRepoOwner = activeProject?.repo_owner || (activeProject?.repo_name?.includes('/') ? activeProject.repo_name.split('/')[0] : '');
   const activeBranch = activeProject?.branch || activeProject?.default_branch || 'main';
@@ -82,9 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
 
   const handleSelectProject = (projectId: string) => {
     setRepoDropdownOpen(false);
-    const newParams = new URLSearchParams(searchParams);
-    newParams.set('repo', projectId);
-    setSearchParams(newParams, { replace: true });
+    selectProject(projectId);
   };
 
   const handleLogout = async () => {
@@ -200,9 +198,13 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
                 }}
                 id="repo-switcher-btn"
               >
-                <GitHubIcon size={14} />
-                <span style={{ fontWeight: 600, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {activeRepoName}
+                {isProjectLoading ? (
+                  <Loader2 size={14} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                ) : (
+                  <GitHubIcon size={14} />
+                )}
+                <span style={{ fontWeight: 600, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeRepoOwner ? `${activeRepoOwner}/${activeRepoName}` : activeRepoName}
                 </span>
                 <span
                   style={{
@@ -329,7 +331,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
           )}
         </div>
 
-        {/* CENTER: Current Repository Context Indicator (Clean & Minimal) */}
+        {/* CENTER: Current Repository Context Indicator */}
         {user && activeProject && (
           <div
             className="navbar-repo-context"
@@ -342,13 +344,8 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
               fontFamily: 'var(--font-ui)',
             }}
           >
-            {activeRepoOwner && (
-              <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                {activeRepoOwner} /
-              </span>
-            )}
             <span style={{ fontWeight: 650, color: 'var(--primary)' }}>
-              {activeRepoName}
+              {activeProject?.name || activeProject?.repo_name?.split('/').pop() || 'ARVE Workspace'}
             </span>
           </div>
         )}

@@ -11,16 +11,13 @@ import {
   Search,
   FileCode,
   ShieldCheck,
-  Package,
-  KeyRound,
-  FileCode2,
   Filter,
 } from 'lucide-react';
 import type { SecurityFinding } from '@/types';
 
 export const FindingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentProject, currentProjectId, findings, setFindings } = useRepository();
+  const { currentProject, currentProjectId, findings, setFindings, isProjectLoading } = useRepository();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('ALL');
@@ -34,12 +31,18 @@ export const FindingsPage: React.FC = () => {
 
   const repoQuery = currentProjectId ? `?repo=${currentProjectId}` : '';
 
-  // Calculate separate engine counts
+  // Calculate separate engine & package counts
+  const uniquePackagesCount = useMemo(
+    () => new Set(findings.map((f) => f.package_name).filter(Boolean)).size,
+    [findings]
+  );
+  const uniqueAdvisoriesCount = useMemo(
+    () => new Set(findings.map((f) => f.cve || f.ghsa || f.rule_id || f.title).filter(Boolean)).size,
+    [findings]
+  );
   const osvFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'osv'), [findings]);
-  const gitleaksFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'gitleaks'), [findings]);
-  const semgrepFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'semgrep'), [findings]);
 
-  // Distinct ecosystems and packages for OSV
+  // Distinct ecosystems for OSV
   const osvEcosystems = useMemo(() => {
     const set = new Set<string>();
     osvFindings.forEach((f) => {
@@ -47,15 +50,6 @@ export const FindingsPage: React.FC = () => {
     });
     return Array.from(set);
   }, [osvFindings]);
-
-  // Distinct rules and files for GitLeaks
-  const gitleaksRules = useMemo(() => {
-    const set = new Set<string>();
-    gitleaksFindings.forEach((f) => {
-      if (f.rule_id) set.add(f.rule_id);
-    });
-    return Array.from(set);
-  }, [gitleaksFindings]);
 
   // Filter & Search Logic
   const filteredFindings = useMemo(() => {
@@ -150,8 +144,12 @@ export const FindingsPage: React.FC = () => {
         {/* Page Header */}
         <PageHeader
           category="Security Findings"
-          title="Vulnerability Management"
-          description="Normalized security findings across SAST, secret detection, and dependency composition scanners."
+          title="Security Issues"
+          description={
+            findings.length > 0
+              ? `${findings.length} security issues found across ${uniquePackagesCount} affected package${uniquePackagesCount === 1 ? '' : 's'} · ${uniqueAdvisoriesCount} unique advisories`
+              : 'No security vulnerabilities identified in the current analysis snapshot.'
+          }
           badge={
             <span
               style={{
@@ -170,100 +168,136 @@ export const FindingsPage: React.FC = () => {
           }
         />
 
-        {/* ── Engine Separation Summary Cards (OSV vs Gitleaks vs Semgrep) ──── */}
+        {/* ── Severity & Vulnerability Metric Bar ── */}
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-            gap: '14px',
-            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            marginBottom: '18px',
+            flexWrap: 'wrap',
           }}
         >
-          {/* OSV Engine Card */}
-          <div
-            className="card"
-            style={{
-              padding: '14px 16px',
-              background: selectedEngine === 'osv' ? 'var(--elevated-2)' : 'var(--surface)',
-              border: selectedEngine === 'osv' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setSelectedEngine(selectedEngine === 'osv' ? 'ALL' : 'osv')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
-                <Package size={14} color="var(--accent)" />
-                <span>OSV-Scanner (SCA)</span>
-              </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Total Count */}
+            <button
+              onClick={() => setSelectedSeverity('ALL')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                background: selectedSeverity === 'ALL' ? 'var(--elevated-2)' : 'var(--surface)',
+                border: selectedSeverity === 'ALL' ? '1px solid var(--accent)' : '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 650,
+                color: 'var(--primary)',
+                cursor: 'pointer',
+              }}
+            >
+              <span>All Findings</span>
               <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
-                {osvFindings.length} findings
+                {findings.length}
               </span>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
-              {osvFindings.length > 0
-                ? `${osvFindings.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').length} Crit/High • Ecosystems: ${osvEcosystems.join(', ') || 'npm/pip'}`
-                : 'Dependency scanner active (0 CVEs)'}
-            </div>
+            </button>
+
+            {/* Critical Count */}
+            <button
+              onClick={() => setSelectedSeverity(selectedSeverity === 'CRITICAL' ? 'ALL' : 'CRITICAL')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                background: selectedSeverity === 'CRITICAL' ? 'rgba(239, 68, 68, 0.15)' : 'var(--surface)',
+                border: selectedSeverity === 'CRITICAL' ? '1px solid #ef4444' : '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 650,
+                color: '#ef4444',
+                cursor: 'pointer',
+              }}
+            >
+              <span>Critical</span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', padding: '1px 6px', borderRadius: '3px', background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}>
+                {findings.filter(f => f.severity === 'CRITICAL').length}
+              </span>
+            </button>
+
+            {/* High Count */}
+            <button
+              onClick={() => setSelectedSeverity(selectedSeverity === 'HIGH' ? 'ALL' : 'HIGH')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                background: selectedSeverity === 'HIGH' ? 'rgba(249, 115, 22, 0.15)' : 'var(--surface)',
+                border: selectedSeverity === 'HIGH' ? '1px solid #f97316' : '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 650,
+                color: '#f97316',
+                cursor: 'pointer',
+              }}
+            >
+              <span>High</span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', padding: '1px 6px', borderRadius: '3px', background: 'rgba(249, 115, 22, 0.2)', color: '#f97316' }}>
+                {findings.filter(f => f.severity === 'HIGH').length}
+              </span>
+            </button>
+
+            {/* Medium Count */}
+            <button
+              onClick={() => setSelectedSeverity(selectedSeverity === 'MEDIUM' ? 'ALL' : 'MEDIUM')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                background: selectedSeverity === 'MEDIUM' ? 'rgba(234, 179, 8, 0.15)' : 'var(--surface)',
+                border: selectedSeverity === 'MEDIUM' ? '1px solid #eab308' : '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 650,
+                color: '#eab308',
+                cursor: 'pointer',
+              }}
+            >
+              <span>Medium</span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', padding: '1px 6px', borderRadius: '3px', background: 'rgba(234, 179, 8, 0.2)', color: '#eab308' }}>
+                {findings.filter(f => f.severity === 'MEDIUM').length}
+              </span>
+            </button>
+
+            {/* Low Count */}
+            <button
+              onClick={() => setSelectedSeverity(selectedSeverity === 'LOW' ? 'ALL' : 'LOW')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                background: selectedSeverity === 'LOW' ? 'rgba(59, 130, 246, 0.15)' : 'var(--surface)',
+                border: selectedSeverity === 'LOW' ? '1px solid #3b82f6' : '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontWeight: 650,
+                color: '#3b82f6',
+                cursor: 'pointer',
+              }}
+            >
+              <span>Low</span>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', padding: '1px 6px', borderRadius: '3px', background: 'rgba(59, 130, 246, 0.2)', color: '#3b82f6' }}>
+                {findings.filter(f => f.severity === 'LOW').length}
+              </span>
+            </button>
           </div>
 
-          {/* Gitleaks Engine Card */}
-          <div
-            className="card"
-            style={{
-              padding: '14px 16px',
-              background: selectedEngine === 'gitleaks' ? 'var(--elevated-2)' : 'var(--surface)',
-              border: selectedEngine === 'gitleaks' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setSelectedEngine(selectedEngine === 'gitleaks' ? 'ALL' : 'gitleaks')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
-                <KeyRound size={14} color="var(--critical)" />
-                <span>GitLeaks (Secrets)</span>
-              </div>
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
-                {gitleaksFindings.length} findings
-              </span>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
-              {gitleaksFindings.length > 0
-                ? `${gitleaksFindings.filter(f => f.status === 'OPEN').length} Open Leaks • Rules: ${gitleaksRules.slice(0, 2).join(', ') || 'generic-key'}`
-                : 'Secret leak detection active (0 Leaks)'}
-            </div>
-          </div>
-
-          {/* Semgrep SAST Engine Card */}
-          <div
-            className="card"
-            style={{
-              padding: '14px 16px',
-              background: selectedEngine === 'semgrep' ? 'var(--elevated-2)' : 'var(--surface)',
-              border: selectedEngine === 'semgrep' ? '1px solid var(--accent)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-            onClick={() => setSelectedEngine(selectedEngine === 'semgrep' ? 'ALL' : 'semgrep')}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
-                <FileCode2 size={14} color="var(--warning)" />
-                <span>Semgrep (SAST)</span>
-              </div>
-              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
-                {semgrepFindings.length} findings
-              </span>
-            </div>
-            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
-              {semgrepFindings.length > 0
-                ? `${semgrepFindings.filter(f => f.severity === 'CRITICAL').length} Critical • AST Invariants`
-                : 'Syntax & semantic analysis active'}
-            </div>
+          <div style={{ fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
+            Engine: <span style={{ color: 'var(--primary)', fontWeight: 600 }}>OSV-Scanner</span> • Ecosystems: <span style={{ color: 'var(--accent)' }}>{osvEcosystems.join(', ') || 'npm'}</span>
           </div>
         </div>
 
@@ -401,7 +435,37 @@ export const FindingsPage: React.FC = () => {
         </div>
 
         {/* Findings Data Table */}
-        {filteredFindings.length === 0 ? (
+        {isProjectLoading && findings.length === 0 ? (
+          <div className="data-table-container">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '110px' }}>Severity</th>
+                  <th>Finding</th>
+                  <th>Affected File</th>
+                  <th>Recommended Fix</th>
+                  <th style={{ width: '130px' }}>Status</th>
+                  <th style={{ width: '90px', textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <tr key={i}>
+                    <td><div className="skeleton-shimmer" style={{ width: '60px', height: '20px', borderRadius: '4px' }} /></td>
+                    <td>
+                      <div className="skeleton-shimmer" style={{ width: '220px', height: '16px', borderRadius: '4px', marginBottom: '4px' }} />
+                      <div className="skeleton-shimmer" style={{ width: '120px', height: '12px', borderRadius: '3px' }} />
+                    </td>
+                    <td><div className="skeleton-shimmer" style={{ width: '140px', height: '14px', borderRadius: '4px' }} /></td>
+                    <td><div className="skeleton-shimmer" style={{ width: '160px', height: '14px', borderRadius: '4px' }} /></td>
+                    <td><div className="skeleton-shimmer" style={{ width: '70px', height: '20px', borderRadius: '4px' }} /></td>
+                    <td style={{ textAlign: 'right' }}><div className="skeleton-shimmer" style={{ width: '50px', height: '16px', borderRadius: '4px', marginLeft: 'auto' }} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : filteredFindings.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
             title={searchQuery || selectedSeverity !== 'ALL' || selectedEngine !== 'ALL' ? 'No matching findings' : 'No security findings detected'}
@@ -432,12 +496,12 @@ export const FindingsPage: React.FC = () => {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th style={{ width: '120px' }}>Severity</th>
-                  <th>Finding Title &amp; Identifiers</th>
-                  <th>Target / File / Package</th>
-                  <th>Engine</th>
-                  <th>Status</th>
-                  <th style={{ textAlign: 'right' }}>Action</th>
+                  <th style={{ width: '110px' }}>Severity</th>
+                  <th>Finding</th>
+                  <th>Affected File</th>
+                  <th>Recommended Fix</th>
+                  <th style={{ width: '120px' }}>Status</th>
+                  <th style={{ textAlign: 'right', width: '100px' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -454,46 +518,18 @@ export const FindingsPage: React.FC = () => {
                       <div style={{ fontWeight: 650, color: 'var(--primary)', fontSize: '13px' }}>
                         {f.title}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {f.rule_id && <span style={{ background: 'var(--elevated)', padding: '1px 4px', borderRadius: '3px' }}>Rule: {f.rule_id}</span>}
-                        {f.cve && <span style={{ color: 'var(--critical)', fontWeight: 600 }}>{f.cve}</span>}
-                        {f.ghsa && <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{f.ghsa}</span>}
-                        {f.cwe && <span>{f.cwe}</span>}
+                      <div style={{ fontSize: '11.5px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
+                        {f.package_name ? `${f.package_name} ${f.package_version || ''}` : f.file_path || '—'}
                       </div>
                     </td>
                     <td style={{ fontFamily: 'var(--font-code)', color: 'var(--secondary)', fontSize: '12px' }}>
-                      {f.file_path ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <FileCode size={13} color="var(--accent)" />
-                          {f.file_path}
-                          {f.line_start ? ` : ${f.line_start}` : ''}
-                        </span>
-                      ) : f.package_name ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                          <Package size={13} color="var(--accent)" />
-                          {f.package_name} {f.package_version ? `@ ${f.package_version}` : ''}
-                          {f.ecosystem ? ` (${f.ecosystem})` : ''}
-                        </span>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        style={{
-                          fontSize: '11px',
-                          fontFamily: 'var(--font-code)',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          background: f.engine === 'osv' ? 'var(--accent-muted)' : f.engine === 'gitleaks' ? 'var(--critical-bg)' : 'var(--elevated)',
-                          border: '1px solid var(--border)',
-                          color: f.engine === 'osv' ? 'var(--accent)' : f.engine === 'gitleaks' ? 'var(--critical)' : 'var(--muted)',
-                          textTransform: 'uppercase',
-                          fontWeight: 600,
-                        }}
-                      >
-                        {f.engine}
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <FileCode size={13} color="var(--accent)" />
+                        {f.file_path || '—'}
                       </span>
+                    </td>
+                    <td style={{ fontSize: '12px', color: f.fixed_version ? 'var(--accent)' : 'var(--muted)' }}>
+                      {f.fixed_version ? `Upgrade to ${f.fixed_version}+` : 'Review dependency'}
                     </td>
                     <td>
                       <StatusBadge status={f.status} size="sm" />
