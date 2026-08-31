@@ -855,88 +855,864 @@ schema-validation test passes.
 
 ------------------------------------------------------------------------
 
-# 7. Phase 6 --- AST / Code Intelligence
+# 7. Phase 6 — Security Evidence Mapping
 
-**Owner:** Security/Backend + Cybersecurity Lead\
-**Estimate:** 2 weeks\
-**Risk:** Highest
+**Owner:** Security/Backend + Cybersecurity Lead
+**Estimate:** 2 weeks
+**Risk:** Medium
 
 ## Goal
 
-Understand code structure well enough to attach findings to functions.
+Transform raw security findings into a security-aware representation of
+the code context surrounding each finding.
 
-## Implementation
+The purpose of this phase is **not** to build a complete code-analysis
+engine or research-grade program analysis system.
+
+Instead, ARVE should extract only the code structures and
+security-relevant context required to answer:
+
+> **"Where does this security finding exist, what application component
+> does it belong to, and what security-relevant context surrounds it?"**
+
+The engine uses Tree-sitter internally as the code-structure extraction
+mechanism.
+
+The architectural distinction is:
+
+```
+Tree-sitter
+     ↓
+Code Structure Extraction
+     ↓
+Security Evidence Mapping
+     ↓
+Security Context
+```
+
+Tree-sitter is therefore an implementation component, not the primary
+ARVE product feature.
+
+## 6.1 Code structure extraction
 
 Use:
 
-``` text
+```
 tree-sitter
 tree-sitter-javascript
 tree-sitter-typescript
 ```
 
-Extract:
+Extract only the structures required for security evidence mapping:
 
--   files
--   functions/methods
--   classes
--   imports
--   routes/endpoints
+```
+Files
+Functions / Methods
+Classes
+Imports
+Exports
+Routes / Endpoints
+```
 
-Function fields:
+Each extracted structure must contain enough location information to
+connect it to scanner findings.
 
-``` text
-name
+Function representation:
+
+```
+Function
+├── id
+├── name
+├── file
+├── line_start
+├── line_end
+└── enclosing_class
+```
+
+Route representation:
+
+```
+Route
+├── id
+├── method
+├── path
+├── framework
+├── file
+├── line_start
+├── line_end
+└── handler
+```
+
+## 6.2 Finding location resolution
+
+Every normalized finding containing:
+
+```
+file
 line_start
 line_end
-file
-enclosing class
 ```
 
-Route extraction:
+should be resolved against the extracted code structure.
 
-``` text
-Express app.get/post/...
-Next.js file-based routes
+Example:
+
+```
+Finding
+   ↓
+routes/users.ts:42
+   ↓
+Function: updateUser()
+   ↓
+Route: PUT /users/:id
 ```
 
-Build line-range index:
+Build a line-range index so that:
 
-``` text
-file:line → enclosing function
+```
+file + line
+       ↓
+enclosing function
 ```
 
-Complexity:
+can be resolved efficiently.
 
-``` text
+Target complexity:
+
+```
 O(log n)
 ```
 
-Use stable node IDs:
+The mapping must remain deterministic.
 
-``` text
+If no enclosing function exists, the finding should still remain valid
+and be associated with the nearest available code structure such as:
+
+```
+File
+Class
+Route
+```
+
+The system must not invent a function relationship.
+
+## 6.3 Endpoint and route mapping
+
+Route detection is one of the highest-value parts of the v1 Security
+Evidence Mapping layer.
+
+Support the scoped frameworks:
+
+```
+Express
+Next.js
+```
+
+For Express, identify common route declarations such as:
+
+```
+app.get(...)
+app.post(...)
+app.put(...)
+app.patch(...)
+app.delete(...)
+
+router.get(...)
+router.post(...)
+router.put(...)
+router.patch(...)
+router.delete(...)
+```
+
+For Next.js, identify the scoped file-based route structures supported
+by the project.
+
+The extracted route should preserve:
+
+```
+HTTP method
+Route path
+Handler
+File
+Line range
+Framework
+```
+
+Example:
+
+```
+POST /api/users/:id
+        ↓
+createUser()
+        ↓
+routes/users.ts
+```
+
+This allows ARVE to determine whether a finding occurs inside an
+application endpoint.
+
+## 6.4 Security-relevant input detection
+
+The engine should identify common security-relevant input locations
+without claiming complete data-flow analysis.
+
+Examples include:
+
+```
+req.params
+req.query
+req.body
+req.headers
+request parameters
+route parameters
+form/request payloads
+```
+
+The purpose is to provide **security context**, not to prove that an
+input reaches a particular sink.
+
+Example:
+
+```
+Route:
+GET /users/:id
+
+Observed input:
+req.params.id
+```
+
+This can become evidence attached to the finding:
+
+```
+INPUT_CONTEXT
+```
+
+The engine must distinguish:
+
+```
+Observed in code
+```
+
+from:
+
+```
+Proven data flow
+```
+
+It must not label an input as flowing to a sink unless a supported
+analysis actually proves that relationship.
+
+## 6.5 Security-sensitive operation detection
+
+Identify common security-sensitive operations that provide useful
+context around findings.
+
+Examples may include:
+
+```
+Database queries
+Command execution
+Filesystem access
+Authentication operations
+Authorization checks
+External network requests
+JWT verification
+```
+
+The implementation should remain limited to recognizable structural
+patterns and should not attempt full semantic program analysis.
+
+The result should be represented as:
+
+```
+SECURITY_OPERATION
+```
+
+Example:
+
+```
+Function:
+updateUser()
+
+Observed security operation:
+database.query(...)
+```
+
+This provides contextual evidence for security findings without making
+unsupported source-to-sink claims.
+
+## 6.6 Security boundary mapping
+
+Combine the extracted code structures into a lightweight security
+boundary model.
+
+The initial model is:
+
+```
+HTTP Endpoint
+      ↓
+Route Handler
+      ↓
+Observed Input
+      ↓
+Security-Relevant Operation
+```
+
+Example:
+
+```
+GET /users/:id
+      ↓
+getUser()
+      ↓
+req.params.id
+      ↓
+database.query(...)
+```
+
+The engine should record each relationship only when it is directly
+supported by structural evidence.
+
+Possible evidence relationships:
+
+```
+EXPOSED_BY
+HANDLED_BY
+CONTAINS_INPUT
+CONTAINS_SECURITY_OPERATION
+LOCATED_IN
+```
+
+These relationships form the foundation for later correlation and graph
+construction.
+
+## 6.7 Security Context
+
+For every finding that can be resolved, construct a Security Context.
+
+Conceptual representation:
+
+```
+SecurityContext
+├── finding_id
+├── file
+├── function
+├── class
+├── route
+├── framework
+├── inputs[]
+├── security_operations[]
+└── evidence[]
+```
+
+Example:
+
+```json
+{
+  "finding_id": "F-102",
+  "file": "routes/users.ts",
+  "function": "getUser",
+  "route": {
+    "method": "GET",
+    "path": "/users/:id",
+    "framework": "express"
+  },
+  "inputs": [
+    {
+      "type": "route_parameter",
+      "name": "id"
+    }
+  ],
+  "security_operations": [
+    {
+      "type": "database_operation"
+    }
+  ]
+}
+```
+
+This context becomes the bridge between:
+
+```
+Raw Scanner Finding
+        ↓
+Canonical Finding
+        ↓
+Security Context
+        ↓
+Correlation
+        ↓
+Risk
+        ↓
+Graph
+        ↓
+AI
+```
+
+## 6.8 Evidence model
+
+Every extracted security relationship must have traceable evidence.
+
+Example:
+
+```json
+{
+  "evidence_type": "AST_RELATIONSHIP",
+  "file": "routes/users.ts",
+  "line_start": 21,
+  "line_end": 27,
+  "relationship": "HANDLED_BY"
+}
+```
+
+Possible evidence types include:
+
+```
+SOURCE_LOCATION
+AST_RELATIONSHIP
+ROUTE_DETECTION
+INPUT_CONTEXT
+SECURITY_OPERATION
+```
+
+The evidence layer must preserve:
+
+```
+file
+line_start
+line_end
+node
+relationship
+```
+
+This allows the dashboard and AI layer to reference the exact code
+location responsible for the conclusion.
+
+## 6.9 Security-aware finding context
+
+The Security Evidence Mapping layer should enrich findings with
+context such as:
+
+```
+File
+Function
+Class
+Route
+HTTP method
+Framework
+Observed input
+Security-sensitive operation
+Evidence
+```
+
+Example:
+
+```
+SQL Injection
+     ↓
+routes/users.ts
+     ↓
+updateUser()
+     ↓
+PUT /users/:id
+     ↓
+req.params.id
+     ↓
+database operation
+```
+
+This should be displayed as contextual evidence rather than as a claim
+of complete data flow.
+
+## 6.10 Security Hotspot preparation
+
+The Security Evidence Mapping layer should produce the structured
+information required for the later correlation phase to identify
+security hotspots.
+
+A security hotspot is an application area where multiple security
+signals converge.
+
+Example:
+
+```
+PUT /users/:id
+      │
+      ├── Missing Authorization
+      ├── SQL Injection
+      └── Vulnerable Dependency
+```
+
+The Security Evidence Mapping phase does **not** perform final hotspot
+scoring.
+
+It only provides the evidence required by the correlation and risk
+phases.
+
+## 6.11 Stable node IDs
+
+Use deterministic IDs for extracted code structures:
+
+```
 {scan_id}:{file_path}:{node_type}:{name}:{line_start}
 ```
 
-Store code-intelligence data.
+Example:
 
-Parse failures must log a warning and continue.
+```
+scan_001:routes/users.ts:function:updateUser:21
+```
 
-## Deferred to v2
+The same repository commit must produce the same node identifiers.
 
--   Function-call graphs
--   Variable/symbol tracking
--   Data-flow/taint analysis
--   Cross-file resolution
--   Source/sink research beyond the constrained scope
+## 6.12 Parse failure handling
+
+AST parsing must fail gracefully.
+
+If one file cannot be parsed:
+
+```
+Log warning
+Record parse failure
+Continue processing remaining files
+```
+
+A single malformed or unsupported file must not terminate the complete
+scan.
+
+Example:
+
+```
+[WARN] Tree-sitter parse failed
+[WARN] File: src/legacy.js
+[INFO] Continuing security evidence mapping
+```
+
+## 6.13 Scope boundary
+
+The v1 Security Evidence Mapping layer is intentionally limited.
+
+### Included
+
+```
+JavaScript
+TypeScript
+
+Files
+Functions
+Methods
+Classes
+Imports
+Exports
+Express routes
+Next.js routes
+Finding location mapping
+Basic security-input recognition
+Basic security-operation recognition
+Security boundary mapping
+Evidence generation
+```
+
+### Deferred
+
+```
+Full function-call graphs
+Interprocedural analysis
+Variable/symbol tracking
+Complete data-flow analysis
+Taint propagation
+Cross-file semantic resolution
+Whole-program analysis
+Symbolic execution
+ML-based code understanding
+```
+
+These capabilities must not be added merely to make the Code
+Intelligence layer appear more advanced.
+
+The goal is to produce **useful, evidence-backed security context** with
+a bounded implementation.
+
+## 6.14 Data model
+
+The implementation may persist the extracted structures using the
+existing code-intelligence concepts:
+
+```
+files
+functions
+classes
+routes
+```
+
+Security-specific context can be represented through:
+
+```
+security_contexts
+security_context_items
+evidence
+relationships
+```
+
+The exact schema should remain compatible with the existing canonical
+Finding and graph models.
+
+## 6.15 Pipeline
+
+Implement:
+
+```
+Normalized Finding
+        ↓
+Resolve File
+        ↓
+Resolve Line Range
+        ↓
+Find Enclosing Function
+        ↓
+Find Enclosing Class
+        ↓
+Resolve Route / Endpoint
+        ↓
+Detect Security-Relevant Inputs
+        ↓
+Detect Security-Relevant Operations
+        ↓
+Construct Security Context
+        ↓
+Generate Evidence
+        ↓
+Attach Context to Finding
+```
+
+## 6.16 Example
+
+Given:
+
+```
+routes/users.ts
+
+router.get("/users/:id", async (req, res) => {
+    const id = req.params.id;
+    const user = await db.query(
+        `SELECT * FROM users WHERE id = ${id}`
+    );
+
+    res.json(user);
+});
+```
+
+The Security Evidence Mapping layer should produce approximately:
+
+```
+Route
+└── GET /users/:id
+
+Function
+└── anonymous route handler
+
+Input
+└── req.params.id
+
+Security Operation
+└── database query
+
+Finding
+└── SQL Injection
+
+Security Context
+└── Finding occurs inside externally reachable route
+```
+
+The system should **not** claim:
+
+```
+req.params.id
+      ↓
+database.query()
+```
+
+as a proven data-flow relationship unless a supported data-flow engine
+establishes it.
+
+## 6.17 Tests
+
+Code structure tests:
+
+```
+[ ] JavaScript function extraction
+[ ] TypeScript function extraction
+[ ] Class extraction
+[ ] Import extraction
+[ ] Export extraction
+```
+
+Route tests:
+
+```
+[ ] Express GET route
+[ ] Express POST route
+[ ] Express PUT route
+[ ] Express PATCH route
+[ ] Express DELETE route
+[ ] Express router route
+[ ] Next.js route detection
+```
+
+Finding mapping tests:
+
+```
+[ ] file:line → function
+[ ] file:line → class
+[ ] file:line → route
+[ ] line outside function
+[ ] overlapping nested functions
+[ ] invalid location
+```
+
+Security-context tests:
+
+```
+[ ] Route parameter detection
+[ ] Request query detection
+[ ] Request body detection
+[ ] Request header detection
+[ ] Database operation detection
+[ ] Command execution detection
+[ ] Filesystem operation detection
+[ ] Authentication operation detection
+[ ] Authorization operation detection
+```
+
+Evidence tests:
+
+```
+[ ] Every relationship has evidence
+[ ] Evidence contains source location
+[ ] Invalid relationships are rejected
+[ ] Unsupported data-flow claims are not generated
+```
+
+Failure tests:
+
+```
+[ ] Malformed JavaScript
+[ ] Malformed TypeScript
+[ ] Unsupported syntax
+[ ] Parse failure in one file
+[ ] Missing route
+[ ] Missing function
+[ ] Finding outside known code structure
+```
+
+## 6.18 Performance
+
+The implementation must remain bounded by the v1 repository limits:
+
+```
+≤ 5,000 source files
+≤ 200 MB
+```
+
+The engine should process files independently where possible.
+
+Avoid constructing a complete repository-wide semantic graph.
+
+The primary optimization target is:
+
+```
+finding location → security context
+```
+
+rather than whole-program analysis.
 
 ## Done When
 
-ARVE can answer:
+ARVE can take a normalized security finding and deterministically answer:
 
--   Which functions exist?
--   Which HTTP endpoints exist?
--   Given `file:line`, which function contains it?
+1. **Which file contains the finding?**
+2. **Which function/method contains it, when one exists?**
+3. **Which class contains it, when one exists?**
+4. **Which HTTP endpoint exposes the code, when one can be detected?**
+5. **Which framework is associated with the endpoint?**
+6. **Which security-relevant inputs are observed nearby?**
+7. **Which security-sensitive operations are observed nearby?**
+8. **What evidence supports each relationship?**
+
+The final output should resemble:
+
+```
+Finding
+   ↓
+File
+   ↓
+Function
+   ↓
+Endpoint
+   ↓
+Observed Input
+   ↓
+Security Operation
+   ↓
+Evidence
+```
+
+without claiming unsupported data-flow or call relationships.
+
+The output must be sufficient for the next phases to perform:
+
+```
+Finding Correlation
+        ↓
+Security Hotspot Detection
+        ↓
+Risk Analysis
+        ↓
+Security Relationship Graph
+        ↓
+Evidence-backed AI Analysis
+```
+
+---
+
+# 9. Phase 7 — Security Context Correlation & Hotspots
+
+*(Renamed from "Phase 7 — Finding Correlation" as a consequence of the Phase 6 replacement above.)*
+
+## Goal
+
+```
+Canonical Findings
+        ↓
+Security Contexts
+        ↓
+Group by:
+  - same endpoint
+  - same function
+  - same file
+  - same dependency
+  - same CWE
+        ↓
+Security Hotspots
+```
+
+---
+
+## Why this replacement
+
+This swaps the old generic **AST / Code Intelligence** phase for a **Security Evidence Mapping Engine**, giving the plan a clearer, security-specific progression:
+
+```
+Scanners → Findings → Security Context → Correlation → Hotspots → Risk → Graph → AI
+```
+
+instead of the more generic:
+
+```
+Scanners → Findings → generic AST → generic correlation
+```
+
+Tree-sitter remains the underlying parsing mechanism, but it's now framed as an implementation detail in service of security context, not the headline feature.
 
 ------------------------------------------------------------------------
 
