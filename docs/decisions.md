@@ -24,6 +24,8 @@ This document records key architectural decisions, design trade-offs, security c
 17. [ADR-017: Shared Security Foundation & Canonical NormalizedFinding Contract](#adr-017-shared-security-foundation--canonical-normalizedfinding-contract)
 18. [ADR-018: Line-Independent Deterministic Finding Fingerprinting](#adr-018-line-independent-deterministic-finding-fingerprinting)
 19. [ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking](#adr-019-non-unique-fingerprint-indexes-for-multi-scan-finding-lifecycle-tracking)
+20. [ADR-020: Isolated Engine Evaluation UI & Parallel Conflict-Free Security Mappers](#adr-020-isolated-engine-evaluation-ui--parallel-conflict-free-security-mappers)
+21. [ADR-021: Deterministic Multi-Engine Pipeline Ordering](#adr-021-deterministic-multi-engine-pipeline-ordering)
 
 ---
 
@@ -464,4 +466,50 @@ Maintain `(project_id, fingerprint)` and `(scan_id, engine)` as **non-unique com
 - Preserves complete immutable scan audit history.
 - Enables the UI and analytics engine to calculate mean-time-to-remediate (MTTR) and detect regressed vulnerabilities without compromising historical records.
 
----
+---
+
+## ADR-020: Isolated Engine Evaluation UI & Parallel Conflict-Free Security Mappers
+
+### Context
+Phase 4 involves distinct teams or engineers simultaneously developing and testing scanner plugins:
+- **OSV-Scanner** for Software Composition Analysis (SCA) & dependency vulnerabilities.
+- **GitLeaks** for secret, token, and credential detection.
+- **Semgrep** for Static Application Security Testing (SAST).
+
+Engineers require dedicated UI views to judge their engine yields, examine raw JSON outputs, and test their specific mapper logic without stepping on each other's code or encountering database merge conflicts.
+
+### Decision
+1. **Isolated Backend Mappers**:
+   - Each engine implementation lives in its own dedicated mapper module (`app/security/mappers/osv.py`, `app/security/mappers/gitleaks.py`, `app/security/mappers/semgrep.py`).
+   - Mappers strictly implement the frozen `FindingMapper` interface and output canonical `NormalizedFinding` objects.
+   - Separate unit test suites (`test_osv_mapper.py`, `test_gitleaks_mapper.py`) guarantee independent CI verification.
+2. **Specialized UI Engine Panels & 1-Click Isolation**:
+   - The Security Findings view (`/findings`) features dedicated Engine Summary Cards (`OSV-Scanner`, `GitLeaks`, `Semgrep`).
+   - Clicking an engine card isolates the table, showing engine-tailored badges (e.g. `package_name @ version (ecosystem)`, `CVE`/`GHSA` tags for OSV; `rule_id`, file path & line, secret status for GitLeaks).
+   - The Finding Inspector modal displays the exact raw scanner JSON artifact, SHA-256 fingerprint, and technical diagnostics.
+
+### AI Reasoning & Trade-off Analysis
+- **Zero Merge Conflicts**: Shared database schemas and normalization pipelines remain immutable, so engine developers only modify their isolated mapper files.
+- **Immediate Feedback Loop**: Developers can trigger scans, switch to their engine tab in the UI, and immediately verify mapped finding fields and raw outputs.
+
+---
+
+## ADR-021: Deterministic Multi-Engine Pipeline Ordering
+
+### Context
+The execution sequence between repository snapshotting, scanner runners, finding normalization, AST symbol resolution, and attack graph reconstruction must follow a strict causal order to avoid invalid states.
+
+### Decision
+Establish the deterministic 5-stage pipeline order across system documentation and UI visualizers:
+1. **Step 01: Codebase Ingestion (Phase 2)** — Snapshot & index source repository files, framework, and routes.
+2. **Step 02: Multi-Engine Scanners (Phase 3)** — Execute external scanner binaries (OSV-Scanner, GitLeaks, Semgrep) against the ingested snapshot.
+3. **Step 03: Finding Normalization (Phase 4A)** — Parse raw outputs via `FindingMapper` instances and persist canonical `NormalizedFinding` records with deterministic SHA-256 identities.
+4. **Step 04: AST & Semantic Mapping (Phase 5 / Roadmap)** — Resolve syntax symbols, entrypoints, and data flow paths on normalized findings.
+5. **Step 05: Attack Graph & Proofs (Phase 6/7 / Roadmap)** — Synthesize end-to-end exploit chains from internet entrypoints to sensitive database sinks.
+
+### AI Reasoning & Trade-off Analysis
+- **Causal Alignment**: Scanners require ingested files before executing; normalizers require scanner outputs before deduplicating; AST & attack graphs require normalized findings before reconstructing exploit paths.
+- **Accurate UI State**: Eliminates misleading success indicators for roadmap phases and accurately represents real live scan executions.
+
+---
+

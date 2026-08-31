@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Shield,
-  Sparkles,
   RefreshCw,
 } from 'lucide-react';
 import type { ScanStatusResponse } from '@/types';
@@ -229,7 +228,7 @@ export const AnalysisPage: React.FC = () => {
               gap: '12px',
             }}
           >
-            {/* Step 1: Ingestion */}
+            {/* Step 1: Codebase Ingestion */}
             <div
               style={{
                 padding: '14px',
@@ -264,36 +263,7 @@ export const AnalysisPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Step 2: AST Normalization */}
-            <div
-              style={{
-                padding: '14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--elevated)',
-                border: '1px solid var(--border)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '8px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 02
-                </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: isIngestionDone ? 'var(--success, #10B981)' : 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                  {isIngestionDone ? <CheckCircle2 size={12} /> : null}
-                  {isIngestionDone ? 'Normalized' : 'Pending'}
-                </span>
-              </div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                AST Normalization
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Symbol mapping &amp; filtering
-              </div>
-            </div>
-
-            {/* Step 3: Security Scanners */}
+            {/* Step 2: Multi-Engine Scanners */}
             <div
               style={{
                 padding: '14px',
@@ -307,7 +277,7 @@ export const AnalysisPage: React.FC = () => {
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
-                  STEP 03
+                  STEP 02
                 </span>
                 {isScanActive ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: 'var(--accent)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
@@ -331,7 +301,7 @@ export const AnalysisPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Step 4: Vulnerability Triaging */}
+            {/* Step 3: Finding Normalization & Deduplication */}
             <div
               style={{
                 padding: '14px',
@@ -341,26 +311,55 @@ export const AnalysisPage: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
+                  STEP 03
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: isScanDone ? 'var(--success, #10B981)' : 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
+                  {isScanDone ? <CheckCircle2 size={12} /> : null}
+                  {isScanDone ? 'Normalized' : 'Pending'}
+                </span>
+              </div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
+                Finding Normalization
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
+                Canonical schema &amp; SHA-256
+              </div>
+            </div>
+
+            {/* Step 4: AST & Semantic Mapping */}
+            <div
+              style={{
+                padding: '14px',
+                borderRadius: 'var(--radius-md)',
+                background: 'var(--elevated)',
+                border: '1px solid var(--border)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                opacity: 0.8,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
                   STEP 04
                 </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: isScanDone ? 'var(--success, #10B981)' : 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                  {isScanDone ? <CheckCircle2 size={12} /> : null}
-                  {isScanDone ? 'Triaged' : 'Pending'}
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 600, background: 'var(--elevated-2)', padding: '1px 6px', borderRadius: '4px' }}>
+                  Planned
                 </span>
               </div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Finding Deduplication
+                AST &amp; Semantic Mapping
               </div>
               <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Severity scoring &amp; paths
+                Symbol resolution &amp; flows (Roadmap)
               </div>
             </div>
 
-            {/* Step 5: Verification Proofs */}
+            {/* Step 5: Attack Graph & Proofs */}
             <div
               style={{
                 padding: '14px',
@@ -370,21 +369,22 @@ export const AnalysisPage: React.FC = () => {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                opacity: 0.8,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '10px', fontFamily: 'var(--font-code)', color: 'var(--muted)', fontWeight: 600 }}>
                   STEP 05
                 </span>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10.5px', color: isScanDone ? 'var(--accent)' : 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 650 }}>
-                  <Sparkles size={11} /> Auto-Patch
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)', fontWeight: 600, background: 'var(--elevated-2)', padding: '1px 6px', borderRadius: '4px' }}>
+                  Planned
                 </span>
               </div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                Verification &amp; Proofs
+                Attack Graph &amp; Proofs
               </div>
               <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Deterministic remediation
+                Entrypoint-to-sink synthesis (Roadmap)
               </div>
             </div>
           </div>

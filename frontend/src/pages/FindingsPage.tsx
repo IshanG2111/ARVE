@@ -11,6 +11,10 @@ import {
   Search,
   FileCode,
   ShieldCheck,
+  Package,
+  KeyRound,
+  FileCode2,
+  Filter,
 } from 'lucide-react';
 import type { SecurityFinding } from '@/types';
 
@@ -29,6 +33,29 @@ export const FindingsPage: React.FC = () => {
   const [inspectingFinding, setInspectingFinding] = useState<SecurityFinding | null>(null);
 
   const repoQuery = currentProjectId ? `?repo=${currentProjectId}` : '';
+
+  // Calculate separate engine counts
+  const osvFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'osv'), [findings]);
+  const gitleaksFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'gitleaks'), [findings]);
+  const semgrepFindings = useMemo(() => findings.filter((f) => f.engine?.toLowerCase() === 'semgrep'), [findings]);
+
+  // Distinct ecosystems and packages for OSV
+  const osvEcosystems = useMemo(() => {
+    const set = new Set<string>();
+    osvFindings.forEach((f) => {
+      if (f.ecosystem) set.add(f.ecosystem);
+    });
+    return Array.from(set);
+  }, [osvFindings]);
+
+  // Distinct rules and files for GitLeaks
+  const gitleaksRules = useMemo(() => {
+    const set = new Set<string>();
+    gitleaksFindings.forEach((f) => {
+      if (f.rule_id) set.add(f.rule_id);
+    });
+    return Array.from(set);
+  }, [gitleaksFindings]);
 
   // Filter & Search Logic
   const filteredFindings = useMemo(() => {
@@ -122,8 +149,8 @@ export const FindingsPage: React.FC = () => {
       <div className="page-container" style={{ padding: '0 24px' }}>
         {/* Page Header */}
         <PageHeader
-          category="Security Vulnerabilities"
-          title="Security Findings"
+          category="Security Findings"
+          title="Vulnerability Management"
           description="Normalized security findings across SAST, secret detection, and dependency composition scanners."
           badge={
             <span
@@ -142,6 +169,103 @@ export const FindingsPage: React.FC = () => {
             </span>
           }
         />
+
+        {/* ── Engine Separation Summary Cards (OSV vs Gitleaks vs Semgrep) ──── */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: '14px',
+            marginBottom: '20px',
+          }}
+        >
+          {/* OSV Engine Card */}
+          <div
+            className="card"
+            style={{
+              padding: '14px 16px',
+              background: selectedEngine === 'osv' ? 'var(--elevated-2)' : 'var(--surface)',
+              border: selectedEngine === 'osv' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setSelectedEngine(selectedEngine === 'osv' ? 'ALL' : 'osv')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
+                <Package size={14} color="var(--accent)" />
+                <span>OSV-Scanner (SCA)</span>
+              </div>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
+                {osvFindings.length} findings
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
+              {osvFindings.length > 0
+                ? `${osvFindings.filter(f => f.severity === 'CRITICAL' || f.severity === 'HIGH').length} Crit/High • Ecosystems: ${osvEcosystems.join(', ') || 'npm/pip'}`
+                : 'Dependency scanner active (0 CVEs)'}
+            </div>
+          </div>
+
+          {/* Gitleaks Engine Card */}
+          <div
+            className="card"
+            style={{
+              padding: '14px 16px',
+              background: selectedEngine === 'gitleaks' ? 'var(--elevated-2)' : 'var(--surface)',
+              border: selectedEngine === 'gitleaks' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setSelectedEngine(selectedEngine === 'gitleaks' ? 'ALL' : 'gitleaks')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
+                <KeyRound size={14} color="var(--critical)" />
+                <span>GitLeaks (Secrets)</span>
+              </div>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
+                {gitleaksFindings.length} findings
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
+              {gitleaksFindings.length > 0
+                ? `${gitleaksFindings.filter(f => f.status === 'OPEN').length} Open Leaks • Rules: ${gitleaksRules.slice(0, 2).join(', ') || 'generic-key'}`
+                : 'Secret leak detection active (0 Leaks)'}
+            </div>
+          </div>
+
+          {/* Semgrep SAST Engine Card */}
+          <div
+            className="card"
+            style={{
+              padding: '14px 16px',
+              background: selectedEngine === 'semgrep' ? 'var(--elevated-2)' : 'var(--surface)',
+              border: selectedEngine === 'semgrep' ? '1px solid var(--accent)' : '1px solid var(--border)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => setSelectedEngine(selectedEngine === 'semgrep' ? 'ALL' : 'semgrep')}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', fontWeight: 650, color: 'var(--primary)' }}>
+                <FileCode2 size={14} color="var(--warning)" />
+                <span>Semgrep (SAST)</span>
+              </div>
+              <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', color: 'var(--muted)', background: 'var(--elevated)', padding: '1px 6px', borderRadius: '3px' }}>
+                {semgrepFindings.length} findings
+              </span>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '8px' }}>
+              {semgrepFindings.length > 0
+                ? `${semgrepFindings.filter(f => f.severity === 'CRITICAL').length} Critical • AST Invariants`
+                : 'Syntax & semantic analysis active'}
+            </div>
+          </div>
+        </div>
 
         {/* Filter Bar */}
         <div
@@ -214,9 +338,9 @@ export const FindingsPage: React.FC = () => {
               id="engine-filter"
             >
               <option value="ALL">All Engines</option>
-              <option value="osv">OSV Scanner</option>
-              <option value="gitleaks">GitLeaks</option>
-              <option value="semgrep">Semgrep SAST</option>
+              <option value="osv">OSV Scanner (SCA)</option>
+              <option value="gitleaks">GitLeaks (Secrets)</option>
+              <option value="semgrep">Semgrep (SAST)</option>
             </select>
 
             {/* Finding Type Filter */}
@@ -263,6 +387,16 @@ export const FindingsPage: React.FC = () => {
               <option value="RESOLVED">Resolved</option>
               <option value="SUPPRESSED">Suppressed</option>
             </select>
+
+            {selectedEngine !== 'ALL' && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => setSelectedEngine('ALL')}
+                style={{ fontSize: '11px', padding: '4px 8px', gap: '4px' }}
+              >
+                <Filter size={11} /> Reset Engine
+              </button>
+            )}
           </div>
         </div>
 
@@ -270,14 +404,14 @@ export const FindingsPage: React.FC = () => {
         {filteredFindings.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
-            title={searchQuery || selectedSeverity !== 'ALL' ? 'No matching findings' : 'No security findings detected'}
+            title={searchQuery || selectedSeverity !== 'ALL' || selectedEngine !== 'ALL' ? 'No matching findings' : 'No security findings detected'}
             description={
-              searchQuery || selectedSeverity !== 'ALL'
-                ? 'Try adjusting your search query or filter options.'
+              searchQuery || selectedSeverity !== 'ALL' || selectedEngine !== 'ALL'
+                ? 'Try adjusting your search query or engine filter options.'
                 : "ARVE hasn't identified any security vulnerabilities in the current analysis snapshot."
             }
             action={
-              searchQuery || selectedSeverity !== 'ALL' ? (
+              searchQuery || selectedSeverity !== 'ALL' || selectedEngine !== 'ALL' ? (
                 <button
                   className="btn btn-secondary"
                   onClick={() => {
@@ -288,7 +422,7 @@ export const FindingsPage: React.FC = () => {
                     setSelectedStatus('ALL');
                   }}
                 >
-                  Clear Filters
+                  Clear All Filters
                 </button>
               ) : undefined
             }
@@ -299,8 +433,8 @@ export const FindingsPage: React.FC = () => {
               <thead>
                 <tr>
                   <th style={{ width: '120px' }}>Severity</th>
-                  <th>Finding Title &amp; Details</th>
-                  <th>Location / Target</th>
+                  <th>Finding Title &amp; Identifiers</th>
+                  <th>Target / File / Package</th>
                   <th>Engine</th>
                   <th>Status</th>
                   <th style={{ textAlign: 'right' }}>Action</th>
@@ -320,9 +454,10 @@ export const FindingsPage: React.FC = () => {
                       <div style={{ fontWeight: 650, color: 'var(--primary)', fontSize: '13px' }}>
                         {f.title}
                       </div>
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px', display: 'flex', gap: '8px' }}>
-                        {f.rule_id && <span>Rule: {f.rule_id}</span>}
-                        {f.cve && <span style={{ color: 'var(--critical)' }}>{f.cve}</span>}
+                      <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {f.rule_id && <span style={{ background: 'var(--elevated)', padding: '1px 4px', borderRadius: '3px' }}>Rule: {f.rule_id}</span>}
+                        {f.cve && <span style={{ color: 'var(--critical)', fontWeight: 600 }}>{f.cve}</span>}
+                        {f.ghsa && <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{f.ghsa}</span>}
                         {f.cwe && <span>{f.cwe}</span>}
                       </div>
                     </td>
@@ -334,7 +469,11 @@ export const FindingsPage: React.FC = () => {
                           {f.line_start ? ` : ${f.line_start}` : ''}
                         </span>
                       ) : f.package_name ? (
-                        <span>{f.package_name} {f.package_version ? `@ ${f.package_version}` : ''}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Package size={13} color="var(--accent)" />
+                          {f.package_name} {f.package_version ? `@ ${f.package_version}` : ''}
+                          {f.ecosystem ? ` (${f.ecosystem})` : ''}
+                        </span>
                       ) : (
                         '—'
                       )}
@@ -346,10 +485,11 @@ export const FindingsPage: React.FC = () => {
                           fontFamily: 'var(--font-code)',
                           padding: '2px 6px',
                           borderRadius: '3px',
-                          background: 'var(--elevated)',
+                          background: f.engine === 'osv' ? 'var(--accent-muted)' : f.engine === 'gitleaks' ? 'var(--critical-bg)' : 'var(--elevated)',
                           border: '1px solid var(--border)',
-                          color: 'var(--muted)',
+                          color: f.engine === 'osv' ? 'var(--accent)' : f.engine === 'gitleaks' ? 'var(--critical)' : 'var(--muted)',
                           textTransform: 'uppercase',
+                          fontWeight: 600,
                         }}
                       >
                         {f.engine}
@@ -367,7 +507,7 @@ export const FindingsPage: React.FC = () => {
                           setInspectingFinding(f);
                         }}
                       >
-                        Details →
+                        Inspect →
                       </button>
                     </td>
                   </tr>

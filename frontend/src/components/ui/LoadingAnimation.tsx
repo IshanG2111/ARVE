@@ -10,11 +10,51 @@ export interface LoadingAnimationProps {
 }
 
 export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
-  size = 56,
-  fullScreen = false,
+  size = 48,
+  fullScreen = true,
   text,
   className = '',
 }) => {
+  if (fullScreen) {
+    return (
+      <div
+        className={cn('global-glyph-loader', className)}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          width: '100vw',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: text ? '16px' : '0',
+          zIndex: 99999,
+          background: 'var(--bg)',
+          userSelect: 'none',
+          textAlign: 'center',
+        }}
+      >
+        <Loader size={size} />
+        {text && (
+          <p
+            style={{
+              fontSize: '12px',
+              fontFamily: 'var(--font-code, monospace)',
+              color: 'var(--muted, #64748B)',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              margin: 0,
+              fontWeight: 600,
+            }}
+          >
+            {text}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn('global-glyph-loader', className)}
@@ -23,10 +63,10 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: text ? '20px' : '0',
-        padding: fullScreen ? '0' : '40px 24px',
-        minHeight: fullScreen ? '85vh' : '60vh',
+        gap: text ? '16px' : '0',
         width: '100%',
+        minHeight: '280px',
+        flex: 1,
         margin: '0 auto',
         userSelect: 'none',
         textAlign: 'center',
@@ -36,12 +76,13 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
       {text && (
         <p
           style={{
-            fontSize: '12.5px',
+            fontSize: '12px',
             fontFamily: 'var(--font-code, monospace)',
             color: 'var(--muted, #64748B)',
-            letterSpacing: '0.06em',
+            letterSpacing: '0.08em',
             textTransform: 'uppercase',
             margin: 0,
+            fontWeight: 600,
           }}
         >
           {text}
