@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     SCANNER_TEST_IMAGE: str = "arve-phase3-test-scanner:latest"
     SCANNER_TEST_MODE: str = "success"
 
+    # Phase 4A Security Engines
+    SCANNER_ENABLE_OSV: bool = True
+    SCANNER_OSV_IMAGE: str = "ghcr.io/google/osv-scanner:v1.9.2"
+    SCANNER_NETWORK_MODE: str = "none"
+    SCANNER_OSV_NETWORK: str = "bridge"
+
     # Backblaze B2 cloud-only raw scanner artifact storage.
     B2_ENDPOINT: Optional[str] = None
     B2_REGION: Optional[str] = None

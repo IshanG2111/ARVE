@@ -23,6 +23,22 @@ class FakeEngine:
         return context.output_path / "result.json"
 
 
+class FakeArtifactStore:
+    def __init__(self, root):
+        self.root = root
+
+    def persist_output(self, scan_id, engine_name, output_dir):
+        dest = self.root / scan_id / engine_name
+        dest.mkdir(parents=True, exist_ok=True)
+        for p in output_dir.rglob("*"):
+            if p.is_file():
+                target = dest / p.name
+                target.write_bytes(p.read_bytes())
+        import shutil
+        shutil.rmtree(output_dir, ignore_errors=True)
+        return f"fake://{scan_id}/{engine_name}"
+
+
 class FakeRunner:
     def __init__(self, status=EngineExecutionStatus.SUCCESS):
         self.status = status
@@ -166,7 +182,7 @@ def test_scan_execution_completes_with_generic_engine(db, tmp_path):
         registry=ScanEngineRegistry([FakeEngine()]),
         workspace_manager=ScanWorkspaceManager(db, root=tmp_path / "workspaces"),
         docker_runner=fake_runner,
-        artifact_store=ScanArtifactStore(tmp_path / "artifacts"),
+        artifact_store=FakeArtifactStore(tmp_path / "artifacts"),
     )
     completed = service.execute_scan(scan.id)
 
@@ -193,6 +209,7 @@ def test_scan_execution_marks_partial_on_engine_failure(db, tmp_path):
         registry=ScanEngineRegistry([FakeEngine()]),
         workspace_manager=ScanWorkspaceManager(db, root=tmp_path / "workspaces"),
         docker_runner=FakeRunner(EngineExecutionStatus.TIMEOUT),
+        artifact_store=FakeArtifactStore(tmp_path / "artifacts"),
     )
     completed = service.execute_scan(scan.id)
 
@@ -208,6 +225,7 @@ def test_scan_api_connects_to_completed_phase2_run(client_fixture, db, tmp_path,
 
     project, run = _make_snapshot(db)
     monkeypatch.setattr(config_module.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path / "api-workspaces"))
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
 
     user = db.query(User).filter(User.id == project.user_id).one()
     token = create_access_token(user.id)
@@ -324,6 +342,7 @@ def test_phase3_test_engine_is_opt_in(db, monkeypatch):
     from app.scanner.service import build_default_registry
 
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_TEST_ENGINE", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
     assert build_default_registry().list() == []
 
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_TEST_ENGINE", True)

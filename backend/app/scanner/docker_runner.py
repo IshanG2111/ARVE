@@ -59,13 +59,14 @@ class DockerRunner:
         engine_command: Sequence[str],
     ) -> list[str]:
         container_name = self._container_name(context.scan_id, engine_name)
+        network = getattr(settings, "SCANNER_OSV_NETWORK", "bridge") if engine_name == "osv" else getattr(settings, "SCANNER_NETWORK_MODE", "none")
         command = [
             self.docker_binary,
             "run",
             "--rm",
             "--name",
             container_name,
-            "--network=none",
+            f"--network={network}",
             "--read-only",
             "--memory",
             settings.SCANNER_MEMORY_LIMIT,

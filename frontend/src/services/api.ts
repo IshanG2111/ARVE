@@ -13,6 +13,7 @@ import type {
   RepositoryFile,
   Scan,
   ScanStatusResponse,
+  SecurityFinding,
 } from '@/types';
 
 export type {
@@ -29,6 +30,7 @@ export type {
   RepositoryFile,
   Scan,
   ScanStatusResponse,
+  SecurityFinding,
 };
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -255,6 +257,49 @@ export async function getProjectScans(projectId: string): Promise<Scan[]> {
   return handleResponse<Scan[]>(res);
 }
 
+// ─── Phase 4: Security Findings ───────────────────────────────────────────
+export async function getProjectFindings(projectId: string): Promise<SecurityFinding[]> {
+  const res = await fetch(`${BASE}/projects/${projectId}/findings`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<SecurityFinding[]>(res);
+}
+
+export async function getScanFindings(scanId: string): Promise<SecurityFinding[]> {
+  const res = await fetch(`${BASE}/scans/${scanId}/findings`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<SecurityFinding[]>(res);
+}
+
+export async function updateFindingStatus(
+  findingId: string,
+  payload: {
+    status: string;
+    suppression_reason?: string;
+    suppression_justification?: string;
+    suppression_expires_at?: string;
+  },
+): Promise<SecurityFinding> {
+  const res = await fetch(`${BASE}/findings/${findingId}/status`, {
+    method: 'PATCH',
+    headers: authHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  return handleResponse<SecurityFinding>(res);
+}
+
+export async function getEngineArtifact(scanId: string, engineName: string = 'osv'): Promise<any> {
+  const res = await fetch(`${BASE}/scans/${scanId}/engines/${engineName}/artifact`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<any>(res);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -276,4 +321,8 @@ Object.assign(api, {
   getScanStatus,
   cancelScan,
   getProjectScans,
+  getProjectFindings,
+  getScanFindings,
+  updateFindingStatus,
+  getEngineArtifact,
 });

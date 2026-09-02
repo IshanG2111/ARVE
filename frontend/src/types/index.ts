@@ -216,3 +216,55 @@ export interface RepositoryFile {
   skip_reason?: string;
   created_at: string;
 }
+
+// ─── Security Findings (Phase 4 / Normalized Engine Contract) ───────────────
+export type FindingSeverity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+
+export type FindingConfidence = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type FindingType =
+  | 'dependency'
+  | 'secret'
+  | 'sast'
+  | 'iac'
+  | 'container'
+  | 'configuration';
+
+export type FindingStatus =
+  | 'OPEN'
+  | 'ACKNOWLEDGED'
+  | 'RESOLVED'
+  | 'REOPENED'
+  | 'FALSE_POSITIVE'
+  | 'SUPPRESSED';
+
+export interface SecurityFinding {
+  id: string;
+  scan_id?: string;
+  project_id?: string;
+  engine: string;
+  finding_type: FindingType | string;
+  title: string;
+  description?: string;
+  severity: FindingSeverity | string;
+  confidence?: FindingConfidence | string;
+  status: FindingStatus | string;
+  file_path?: string;
+  line_start?: number;
+  line_end?: number;
+  package_name?: string;
+  package_version?: string;
+  fixed_version?: string;
+  ecosystem?: string;
+  cve?: string;
+  ghsa?: string;
+  cwe?: string;
+  rule_id?: string;
+  suppression_reason?: string;
+  suppression_justification?: string;
+  suppression_expires_at?: string;
+  fingerprint?: string;
+  raw_json?: any;
+  created_at?: string;
+  updated_at?: string;
+}

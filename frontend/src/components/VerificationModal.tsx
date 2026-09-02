@@ -114,18 +114,14 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ target, on
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <CodeBlock
-              tabs={[
-                {
-                  label: fileName,
-                  code: target.verification_token,
-                  language: 'txt',
-                },
-                {
-                  label: 'cURL test',
-                  code: `curl -I ${expectedUrl}`,
-                  language: 'bash',
-                },
-              ]}
+              code={target.verification_token}
+              filename={fileName}
+              language="txt"
+            />
+            <CodeBlock
+              code={`curl -I ${expectedUrl}`}
+              filename="cURL test"
+              language="bash"
             />
 
             <div>

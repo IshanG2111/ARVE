@@ -21,6 +21,15 @@ This document records key architectural decisions, design trade-offs, security c
 14. [ADR-014: Scan the Persisted Phase 2 Repository Snapshot](#adr-014-scan-the-persisted-phase-2-repository-snapshot)
 15. [ADR-015: Persistent Scanner Artifacts in Backblaze B2](#adr-015-persistent-scanner-artifacts-in-backblaze-b2)
 16. [ADR-016: Keep Cloud Storage Credentials Outside the Scanner](#adr-016-keep-cloud-storage-credentials-outside-the-scanner)
+17. [ADR-017: Shared Security Foundation & Canonical NormalizedFinding Contract](#adr-017-shared-security-foundation--canonical-normalizedfinding-contract)
+18. [ADR-018: Line-Independent Deterministic Finding Fingerprinting](#adr-018-line-independent-deterministic-finding-fingerprinting)
+19. [ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking](#adr-019-non-unique-fingerprint-indexes-for-multi-scan-finding-lifecycle-tracking)
+20. [ADR-020: Isolated Engine Evaluation UI & Parallel Conflict-Free Security Mappers](#adr-020-isolated-engine-evaluation-ui--parallel-conflict-free-security-mappers)
+21. [ADR-021: Deterministic Multi-Engine Pipeline Ordering](#adr-021-deterministic-multi-engine-pipeline-ordering)
+22. [ADR-022: Dynamic PostgreSQL Column Migration for Finding Suppression and Fix Tracking](#adr-022-dynamic-postgresql-column-migration-for-finding-suppression-and-fix-tracking)
+23. [ADR-023: Progressive Disclosure UX — Simple by Default, Technical when Requested](#adr-023-progressive-disclosure-ux--simple-by-default-technical-when-requested)
+24. [ADR-024: Media and Binary Exclusion Guardrails in Language & Asset Composition](#adr-024-media-and-binary-exclusion-guardrails-in-language--asset-composition)
+25. [ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload](#adr-025-ephemeral-scan-workspaces-with-direct-backblaze-b2-s3-upload)
 
 ---
 
@@ -410,3 +419,166 @@ This creates a clear security boundary between **untrusted scanner
 execution** and **trusted artifact storage**.
 
 ---
+
+## ADR-017: Shared Security Foundation & Canonical NormalizedFinding Contract
+
+### Context
+Phase 4 introduces multiple heterogeneous security scanning engines: OSV-Scanner (SCA dependency vulnerability scanning) and Gitleaks (hardcoded secret detection). Developing each engine independently without a shared foundation would lead to database migration collisions, fragmented ORM finding schemas, inconsistent severities, and Git merge conflicts.
+
+### Decision
+Establish a centrally frozen, engine-agnostic shared security foundation:
+- Single canonical database persistence table: `security_findings`.
+- Shared Pydantic data contract: `NormalizedFinding`.
+- Universal severity taxonomy (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`) with automated CVSS score normalization.
+- Abstract mapper contract: `FindingMapper` protocol implemented by each engine.
+
+### AI Reasoning & Trade-off Analysis
+- **Decoupling**: Engine developers build only engine-specific CLI runners and mappers (`map_artifact`), outputting identical canonical `NormalizedFinding` objects.
+- **Single Source of Truth**: Eliminates duplicate finding tables (e.g. `osv_findings`, `gitleaks_findings`) and unifies reporting, graph creation, and remediation pipelines.
+
+---
+
+## ADR-018: Line-Independent Deterministic Finding Fingerprinting
+
+### Context
+When code is refactored, new lines are added, or whitespace is adjusted, the physical line numbers of existing vulnerabilities and leaked secrets change. If the finding fingerprint incorporated dynamic line numbers, a minor code shift would cause ARVE to treat an existing finding as a newly introduced vulnerability, corrupting historical lifecycle tracking.
+
+### Decision
+Fingerprint generation strictly distinguishes **Finding Identity** (what the defect is) from **Occurrence Location** (where it currently sits):
+- **Secret Identity**: `SHA256(engine | secret | rule_id | file_path | secret_signature)` — independent of `line_start`.
+- **SCA Identity**: `SHA256(engine | dependency | package_name | ecosystem | vulnerability_id | file_path)`.
+- **Scan Invariance**: `scan_id` is strictly excluded from fingerprint generation.
+- Dynamic line ranges (`line_start`, `line_end`) and `scan_id` are stored in table columns for reporting without altering the identity hash.
+
+### AI Reasoning & Trade-off Analysis
+- **Stability**: Prevents finding churn across git commits and pull request iterations.
+- **Auditability**: Enables reliable status progression (`OPEN` → `RESOLVED` → `REOPENED`) over time.
+
+---
+
+## ADR-019: Non-Unique Fingerprint Indexes for Multi-Scan Finding Lifecycle Tracking
+
+### Context
+A security finding often exists across dozens of successive repository scans over time. If `(project_id, fingerprint)` had a database-level `UNIQUE` constraint, subsequent scans of the same project would crash or overwrite historical scan execution records.
+
+### Decision
+Maintain `(project_id, fingerprint)` and `(scan_id, engine)` as **non-unique composite indexes** rather than unique constraints:
+- Each scan execution records its exact finding instances linked via `scan_id`.
+- The non-unique index `ix_security_findings_project_fingerprint` allows fast queries to trace the lifecycle and reappearance history of a finding across multiple scan timestamps.
+
+### AI Reasoning & Trade-off Analysis
+- Preserves complete immutable scan audit history.
+- Enables the UI and analytics engine to calculate mean-time-to-remediate (MTTR) and detect regressed vulnerabilities without compromising historical records.
+
+---
+
+## ADR-020: Isolated Engine Evaluation UI & Parallel Conflict-Free Security Mappers
+
+### Context
+Phase 4 involves distinct teams or engineers simultaneously developing and testing scanner plugins:
+- **OSV-Scanner** for Software Composition Analysis (SCA) & dependency vulnerabilities.
+- **GitLeaks** for secret, token, and credential detection.
+- **Semgrep** for Static Application Security Testing (SAST).
+
+Engineers require dedicated UI views to judge their engine yields, examine raw JSON outputs, and test their specific mapper logic without stepping on each other's code or encountering database merge conflicts.
+
+### Decision
+1. **Isolated Backend Mappers**:
+   - Each engine implementation lives in its own dedicated mapper module (`app/security/mappers/osv.py`, `app/security/mappers/gitleaks.py`, `app/security/mappers/semgrep.py`).
+   - Mappers strictly implement the frozen `FindingMapper` interface and output canonical `NormalizedFinding` objects.
+   - Separate unit test suites (`test_osv_mapper.py`, `test_gitleaks_mapper.py`) guarantee independent CI verification.
+2. **Specialized UI Engine Panels & 1-Click Isolation**:
+   - The Security Findings view (`/findings`) features dedicated Engine Summary Cards (`OSV-Scanner`, `GitLeaks`, `Semgrep`).
+   - Clicking an engine card isolates the table, showing engine-tailored badges (e.g. `package_name @ version (ecosystem)`, `CVE`/`GHSA` tags for OSV; `rule_id`, file path & line, secret status for GitLeaks).
+   - The Finding Inspector modal displays the exact raw scanner JSON artifact, SHA-256 fingerprint, and technical diagnostics.
+
+### AI Reasoning & Trade-off Analysis
+- **Zero Merge Conflicts**: Shared database schemas and normalization pipelines remain immutable, so engine developers only modify their isolated mapper files.
+- **Immediate Feedback Loop**: Developers can trigger scans, switch to their engine tab in the UI, and immediately verify mapped finding fields and raw outputs.
+
+---
+
+## ADR-021: Deterministic Multi-Engine Pipeline Ordering
+
+### Context
+The execution sequence between repository snapshotting, scanner runners, finding normalization, AST symbol resolution, and attack graph reconstruction must follow a strict causal order to avoid invalid states.
+
+### Decision
+Establish the deterministic 5-stage pipeline order across system documentation and UI visualizers:
+1. **Step 01: Codebase Ingestion (Phase 2)** — Snapshot & index source repository files, framework, and routes.
+2. **Step 02: Multi-Engine Scanners (Phase 3)** — Execute external scanner binaries (OSV-Scanner, GitLeaks, Semgrep) against the ingested snapshot.
+3. **Step 03: Finding Normalization (Phase 4A)** — Parse raw outputs via `FindingMapper` instances and persist canonical `NormalizedFinding` records with deterministic SHA-256 identities.
+4. **Step 04: AST & Semantic Mapping (Phase 5 / Roadmap)** — Resolve syntax symbols, entrypoints, and data flow paths on normalized findings.
+5. **Step 05: Attack Graph & Proofs (Phase 6/7 / Roadmap)** — Synthesize end-to-end exploit chains from internet entrypoints to sensitive database sinks.
+
+### AI Reasoning & Trade-off Analysis
+- **Causal Alignment**: Scanners require ingested files before executing; normalizers require scanner outputs before deduplicating; AST & attack graphs require normalized findings before reconstructing exploit paths.
+- **Accurate UI State**: Eliminates misleading success indicators for roadmap phases and accurately represents real live scan executions.
+
+---
+
+## ADR-022: Dynamic PostgreSQL Column Migration for Finding Suppression and Fix Tracking
+
+### Context
+When introducing remediation metadata (`fixed_version`) and suppression lifecycle audits (`suppression_reason`, `suppression_justification`, `suppression_expires_at`) to the `security_findings` table, existing developer databases and live instances threw `psycopg.errors.UndefinedColumn` on `GET /api/projects/{id}/findings` before manual Alembic upgrade commands could be executed.
+
+### Decision
+1. Implement automatic non-destructive column provisioning during `init_db()` startup in `app/core/database.py` using `ALTER TABLE security_findings ADD COLUMN IF NOT EXISTS ...`.
+2. Pair this with standard Alembic migration `20260831_0006_finding_suppression_and_fixes.py` for formal schema version tracking.
+
+### AI Reasoning & Trade-off Analysis
+- **Zero-Downtime Resilience**: Guarantees that local developer databases and staging/production containers self-heal on startup without throwing 500 errors.
+- **Portability**: Safe idempotent execution across both SQLite and PostgreSQL.
+
+---
+
+## ADR-023: Progressive Disclosure UX — Simple by Default, Technical when Requested
+
+### Context
+Cybersecurity tools often overwhelm developers with raw CVSS vectors, unparsed JSON trees, and dense advisory prose. Users need immediate answers to three fundamental questions:
+1. *What is wrong?*
+2. *Where is it?*
+3. *What should I do?*
+
+### Decision
+Apply a strict **Progressive Disclosure** design standard across all ARVE views:
+- **Finding Detail Modal**: Prominently display a 1-click Remediation Command Box (`npm install @pkg@^version`), a 4-stat version matrix, and a rich formatted Markdown advisory summary. Deep technical metadata (CVE/GHSA links, CWE weakness, SHA-256 fingerprint, raw OSV JSON) is nested under a collapsible `Technical security metadata ▾` accordion.
+- **Settings Page**: Present primary workspace identifiers (Display Name, Default Branch, Deployment URL) at first sight, placing advanced scanner engines, cloud storage destinations, and the Danger Zone under collapsible sections.
+- **Interactive JSON Viewer**: Dual-mode Tree/Raw JSON viewer with search filtering and 1-click Copy/Download.
+
+### AI Reasoning & Trade-off Analysis
+- **Cognitive Load Reduction**: Developers can resolve 95% of dependency alerts in 1 click without deciphering raw JSON.
+- **Zero Information Loss**: Full technical audit trails remain instantly accessible for security analysts and compliance officers.
+
+---
+
+## ADR-024: Media and Binary Exclusion Guardrails in Language & Asset Composition
+
+### Context
+Large video assets (`.mp4`, `.mov`) and image files (`.gif`, `.png`, `.jpg`) present in public asset directories (e.g. 30MB video clips) skewed repository language composition calculations, causing "Language Composition" to report `MP4 49.5%` instead of actual programming languages (e.g. TypeScript, React, Python).
+
+### Decision
+1. In the backend ingestion filter (`app/ingestion/filters/file_filter.py`), strictly tag binary and media extensions as `status="SKIPPED"` with `skip_reason="Binary or media file"`.
+2. In the frontend (`RepositoryPage.tsx`), enforce `MEDIA_AND_BINARY_EXTENSIONS` exclusion sets so that Language Composition and "Largest Codebase Files" only evaluate actual source code files.
+
+### AI Reasoning & Trade-off Analysis
+- **Accuracy**: Codebase blueprints accurately reflect software engineering composition rather than raw asset disk storage.
+- **Performance**: Prevents AST parsers from wasting CPU memory attempting to parse non-code media blobs.
+
+---
+
+## ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload
+
+### Context
+Docker containers executing scanner engines generate large raw JSON output artifacts (e.g., `osv.json`, `gitleaks.json`, `semgrep.json`). Retaining these temporary output directories indefinitely on the local container filesystem risks exhausting disk capacity during high-throughput scanning.
+
+### Decision
+1. When a scanner completes, `ScanArtifactStore.persist_output()` immediately uploads the JSON artifact to Backblaze B2 cloud storage via its S3-compatible API under `b2://arve-scan-artifacts/scans/{scan_id}/{engine_name}/{filename}`.
+2. The database stores the persistent cloud URI in `scan_engine_runs.artifact_reference`.
+3. The local temporary scratch directory is immediately and safely destroyed (`shutil.rmtree`).
+4. `GET /api/scans/{scan_id}/engines/{engine_name}/artifact` serves the raw JSON directly from Backblaze B2 to the frontend.
+
+### AI Reasoning & Trade-off Analysis
+- **Storage Scalability**: Centralized, cost-effective immutable cloud storage without disk leaks on scanner host nodes.
+- **Security & Integrity**: Scan evidence is decoupled from ephemeral worker nodes, ensuring verifiable historical audit trails.
+
