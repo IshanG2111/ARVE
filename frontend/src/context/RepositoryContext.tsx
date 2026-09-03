@@ -49,14 +49,11 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
-
   const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
 
-  // Extract repo ID from URL search param or URL path (/projects/:id)
   const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
   const repoParam = searchParams.get('repo') || pathProjectId;
 
-  // Selected project resolution with localStorage fallback for persistent reloads
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return repoParam || localStorage.getItem('arve_active_project_id');
@@ -69,7 +66,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         localStorage.setItem('arve_active_project_id', repoParam);
       }
     } else if (selectedId && projects.some((p) => p.id === selectedId)) {
-      // Valid existing selectedId
+      // Valid existing selectedId.
     } else if (projects.length > 0) {
       const storedId = localStorage.getItem('arve_active_project_id');
       const matched = storedId ? projects.find((p) => p.id === storedId) : null;
@@ -86,7 +83,6 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const currentProjectId = currentProject?.id || null;
 
-  // Query analysis runs for the active project
   const {
     data: runs = [],
     refetch: refreshRuns,
@@ -97,7 +93,6 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     enabled: !!currentProjectId,
   });
 
-  // Query scans for the active project (polls when active)
   const {
     data: scans = [],
     refetch: refreshScans,
@@ -118,7 +113,6 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     latestScan && ['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(latestScan.status)
   );
 
-  // Query findings for the active project
   const {
     data: serverFindings = [],
     isFetching: isFindingsFetching,
@@ -126,9 +120,11 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     queryKey: ['findings', currentProjectId],
     queryFn: () => (currentProjectId ? api.getProjectFindings(currentProjectId) : Promise.resolve([])),
     enabled: !!currentProjectId,
+    // Findings are persisted only after the engines complete. Poll while a
+    // scan is active so the UI refreshes automatically when OSV/Gitleaks finish.
+    refetchInterval: isScanActive ? 2000 : false,
   });
 
-  // Local state initialized with server data, updated immediately on project change
   const [findings, setFindings] = useState<SecurityFinding[]>([]);
 
   useEffect(() => {
@@ -138,7 +134,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const selectProject = useCallback(
     (projectId: string) => {
       setSelectedId(projectId);
-      setFindings([]); // immediately clear old findings to avoid stale flicker
+      setFindings([]);
       localStorage.setItem('arve_active_project_id', projectId);
       const newParams = new URLSearchParams(searchParams);
       newParams.set('repo', projectId);
@@ -158,6 +154,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       queryClient.invalidateQueries({ queryKey: ['findings', currentProjectId] });
     }
   }, [queryClient, currentProjectId]);
+
   const value = useMemo(
     () => ({
       projects,
