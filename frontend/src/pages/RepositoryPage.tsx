@@ -96,6 +96,7 @@ export const RepositoryPage: React.FC = () => {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
   const [triggeringIngest, setTriggeringIngest] = useState(false);
+  const [activeIngestionId, setActiveIngestionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!latestRun?.id) {
@@ -129,15 +130,27 @@ export const RepositoryPage: React.FC = () => {
     setTriggeringIngest(true);
     setShowIngestionOverlay(true);
     try {
-      await api.triggerIngestion(currentProjectId);
+      const run = await api.triggerIngestion(currentProjectId);
+      setActiveIngestionId(run.id);
       toast.success('Codebase ingestion triggered.');
-      refreshRuns();
+      await refreshRuns();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to ingest repository');
     } finally {
       setTriggeringIngest(false);
     }
   };
+
+  useEffect(() => {
+    if (!activeIngestionId || latestRun?.id !== activeIngestionId) return;
+    const status = latestRun.status?.toUpperCase();
+    if (['COMPLETED', 'FAILED', 'CANCELLED', 'PARTIAL'].includes(status)) {
+      setShowIngestionOverlay(false);
+      setTriggeringIngest(false);
+      setActiveIngestionId(null);
+      refreshRuns();
+    }
+  }, [activeIngestionId, latestRun?.id, latestRun?.status, refreshRuns]);
 
   // Source files only (ingested or valid code languages, excluding media/binary)
   const sourceFiles = useMemo(() => {
