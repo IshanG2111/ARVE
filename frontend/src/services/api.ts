@@ -204,6 +204,30 @@ export async function getAnalysisRuns(projectId: string): Promise<AnalysisRun[]>
   return handleResponse<AnalysisRun[]>(res);
 }
 
+export async function waitForIngestionRun(
+  projectId: string,
+  runId: string,
+  options: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<AnalysisRun> {
+  const intervalMs = options.intervalMs ?? 1500;
+  const timeoutMs = options.timeoutMs ?? 10 * 60 * 1000;
+  const started = Date.now();
+
+  while (Date.now() - started < timeoutMs) {
+    const runs = await getAnalysisRuns(projectId);
+    const run = runs.find((candidate) => candidate.id === runId);
+    if (!run) throw new Error('Ingestion run could not be found.');
+    const status = run.status?.toUpperCase();
+    if (status === 'COMPLETED') return run;
+    if (['FAILED', 'CANCELLED', 'PARTIAL'].includes(status)) {
+      throw new Error(run.error_message || `Ingestion ${status.toLowerCase()}.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Timed out waiting for repository ingestion to complete.');
+}
+
 export async function getAnalysisSummary(runId: string): Promise<AnalysisSummary> {
   const res = await fetch(`${BASE}/analysis-runs/${runId}/summary`, {
     headers: authHeaders(),
