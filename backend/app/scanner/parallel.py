@@ -62,6 +62,12 @@ class ParallelSecurityScanService(ScanExecutionService):
             for record in engine_runs.values():
                 self._start_engine_run(record)
 
+            # Capture immutable scan context before entering worker threads.
+            # Never pass the SQLAlchemy-bound Scan ORM object to the thread pool.
+            scan_id_value = str(scan.id)
+            project_id_value = str(scan.project_id)
+            commit_sha_value = str(scan.commit_sha)
+
             deadline = time.monotonic() + settings.SCANNER_GLOBAL_TIMEOUT_SECONDS
             results: dict[str, ScannerExecutionResult] = {}
             all_db_findings = []
@@ -78,7 +84,7 @@ class ParallelSecurityScanService(ScanExecutionService):
                     )
                 try:
                     return self._run_engine(
-                        scan,
+                        scan_id_value,
                         workspace,
                         engine,
                         timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
@@ -117,25 +123,25 @@ class ParallelSecurityScanService(ScanExecutionService):
                                 normalized = normalizer.normalize_artifact(
                                     engine.name,
                                     raw_text,
-                                    context={"scan_id": scan.id, "commit_sha": scan.commit_sha},
+                                    context={"scan_id": scan_id_value, "commit_sha": commit_sha_value},
                                 )
                                 all_db_findings.extend(
                                     FindingNormalizer.to_db_models(
                                         normalized,
-                                        scan_id=scan.id,
-                                        project_id=scan.project_id,
+                                        scan_id=scan_id_value,
+                                        project_id=project_id_value,
                                     )
                                 )
                             except Exception as exc:
                                 logger.warning(
                                     "scan=%s engine=%s normalization failed: %s",
-                                    scan.id,
+                                    scan_id_value,
                                     engine.name,
                                     exc,
                                 )
 
                         try:
-                            persisted = self.artifact_store.persist_output(scan.id, engine.name, engine_dir)
+                            persisted = self.artifact_store.persist_output(scan_id_value, engine.name, engine_dir)
                             if persisted:
                                 result = ScannerExecutionResult(
                                     engine_name=result.engine_name,
@@ -164,7 +170,7 @@ class ParallelSecurityScanService(ScanExecutionService):
                     self._finish_engine_run(engine_runs[engine.name], result)
                     completed_count = len(results)
                     progress = 25 + int((completed_count / len(engines)) * 60)
-                    current = self.db.query(Scan).filter(Scan.id == scan.id).first()
+                    current = self.db.query(Scan).filter(Scan.id == scan_id_value).first()
                     if current and current.status != ScanStatus.CANCELLED.value:
                         self._set_status(
                             current,
@@ -174,7 +180,7 @@ class ParallelSecurityScanService(ScanExecutionService):
                         )
 
             # A cancelled scan is terminal and must not be overwritten.
-            scan = self.db.query(Scan).filter(Scan.id == scan.id).first() or scan
+            scan = self.db.query(Scan).filter(Scan.id == scan_id_value).first() or scan
             if scan.status == ScanStatus.CANCELLED.value:
                 return scan
 

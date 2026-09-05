@@ -2,14 +2,14 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useGitHubRepos, useBranchesByName } from '../hooks/useRepositories';
 import { useCreateProject } from '../hooks/useProjects';
-import type { GitHubRepo } from '../types';
+import type { GitHubRepo, Project } from '../types';
 import { ConfirmModal } from './ConfirmModal';
 import { ARVELoader } from './ui/ARVELoader';
 import { Search, X, Check, GitBranch, ArrowLeft, ArrowRight, Lock, Globe } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
-  onCreated: () => void;
+  onCreated: (project: Project) => void;
 }
 
 type Step = 1 | 2 | 3;
@@ -120,8 +120,8 @@ export const ProjectWizardModal: React.FC<Props> = ({ onClose, onCreated }) => {
         },
       },
       {
-        onSuccess: () => {
-          onCreated();
+        onSuccess: (project) => {
+          onCreated(project);
           onClose();
         },
         onError: (err) => {

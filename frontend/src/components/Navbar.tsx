@@ -491,11 +491,14 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
       {showConnectModal && (
         <ProjectWizardModal
           onClose={() => setShowConnectModal(false)}
-          onCreated={() => {
+          onCreated={(project) => {
             setShowConnectModal(false);
+            // Select the new project immediately so all project-scoped queries
+            // switch before the route changes.
+            selectProject(project.id);
             queryClient.invalidateQueries({ queryKey: ['projects'] });
             toast.success('Repository connected successfully.');
-            navigate('/overview');
+            navigate(`/overview?repo=${project.id}`, { replace: true });
           }}
         />
       )}

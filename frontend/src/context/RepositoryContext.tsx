@@ -91,6 +91,12 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     queryKey: ['analysis-runs', currentProjectId],
     queryFn: () => (currentProjectId ? api.getAnalysisRuns(currentProjectId) : Promise.resolve([])),
     enabled: !!currentProjectId,
+    refetchInterval: (query) => {
+      const latest = query.state.data?.[0];
+      return latest && ['PENDING', 'QUEUED', 'FETCHING', 'PROCESSING', 'INGESTING'].includes(latest.status?.toUpperCase())
+        ? 1500
+        : false;
+    },
   });
 
   const {

@@ -61,7 +61,8 @@ def test_registry_includes_gitleaks_when_enabled(monkeypatch):
 
 def test_exit_code_one_with_artifact_is_success(context):
     engine = GitleaksEngine()
-    artifact = context.output_path / "gitleaks.json"
+    artifact = context.output_path / "gitleaks" / "gitleaks.json"
+    artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_text("[]", encoding="utf-8")
 
     runner = MagicMock()
