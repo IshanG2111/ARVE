@@ -45,6 +45,7 @@ export const DashboardPage: React.FC = () => {
     refreshRuns,
     refreshScans,
     refreshProjects,
+    selectProject,
     targets,
     findings,
   } = useRepository();
@@ -63,36 +64,82 @@ export const DashboardPage: React.FC = () => {
   const highFindings = findings.filter((f) => f.severity === 'HIGH');
   const attentionCount = criticalFindings.length + highFindings.length;
 
-  const handleRunAnalysis = async () => {
-    if (!currentProjectId) return;
+    const handleRunAnalysis = async () => {
+        if (!currentProjectId) return;
 
-    if (!latestRun || latestRun.status !== 'COMPLETED') {
-      setTriggeringIngest(true);
-      setShowIngestionOverlay(true);
-      try {
-        await api.triggerIngestion(currentProjectId);
-        toast.success('Codebase ingestion initiated.');
-        refreshRuns();
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : 'Failed to trigger ingestion');
-      } finally {
-        setTriggeringIngest(false);
-      }
-      return;
-    }
+        setTriggeringIngest(true);
+        setShowIngestionOverlay(true);
 
-    setTriggeringScan(true);
-    try {
-      await api.createScan(currentProjectId, latestRun.id);
-      toast.success('Security analysis run queued.');
-      refreshScans();
-      navigate(`/analysis${repoQuery}`);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start analysis');
-    } finally {
-      setTriggeringScan(false);
-    }
-  };
+        try {
+            // 1. Start a fresh ingestion
+            const ingestionRun = await api.triggerIngestion(currentProjectId);
+
+            toast.success('Repository ingestion started.');
+
+            // 2. Poll the actual ingestion run until it reaches a terminal state
+            let completedRun = ingestionRun;
+
+            for (let attempt = 0; attempt < 180; attempt++) {
+                const runs = await api.getAnalysisRuns(currentProjectId);
+
+                const currentRun = runs.find(
+                    (run: any) => run.id === ingestionRun.id
+                );
+
+                if (currentRun) {
+                    completedRun = currentRun;
+                }
+
+                if (currentRun?.status === 'COMPLETED') {
+                    break;
+                }
+
+                if (
+                    currentRun?.status === 'FAILED' ||
+                    currentRun?.status === 'CANCELLED'
+                ) {
+                    throw new Error(
+                        currentRun.error_message ||
+                        `Repository ingestion ${currentRun.status.toLowerCase()}`
+                    );
+                }
+
+                // Poll every 2 seconds
+                await new Promise((resolve) => setTimeout(resolve, 2000));
+            }
+
+            // 3. Make sure ingestion actually completed
+            if (completedRun.status !== 'COMPLETED') {
+                throw new Error('Repository ingestion timed out.');
+            }
+
+            // 4. Refresh the repository state so UI has the new snapshot
+            await refreshRuns();
+
+            // 5. Now create the security scan against THIS ingestion run
+            setTriggeringIngest(false);
+            setTriggeringScan(true);
+
+            await api.createScan(currentProjectId, completedRun.id);
+
+            toast.success('Security analysis run queued.');
+
+            await refreshScans();
+
+            // 6. Move to Analysis page
+            navigate(`/analysis${repoQuery}`);
+        } catch (err: unknown) {
+            toast.error(
+                err instanceof Error
+                    ? err.message
+                    : 'Failed to run complete analysis'
+            );
+        } finally {
+            setTriggeringIngest(false);
+            setTriggeringScan(false);
+            setShowIngestionOverlay(false);
+        }
+    };
 
   const lastAnalyzedDate = latestScan?.completed_at || latestRun?.completed_at;
   const lastAnalyzedText = lastAnalyzedDate
@@ -169,9 +216,11 @@ export const DashboardPage: React.FC = () => {
         {showWizard && (
           <ProjectWizardModal
             onClose={() => setShowWizard(false)}
-            onCreated={() => {
+            onCreated={(project) => {
               setShowWizard(false);
+              selectProject(project.id);
               refreshProjects();
+              navigate(`/overview?repo=${project.id}`, { replace: true });
             }}
           />
         )}
