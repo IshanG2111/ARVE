@@ -127,7 +127,11 @@ class DockerRunner:
             try:
                 stdout, stderr = process.communicate(timeout=context.timeout_seconds)
                 duration_ms = int((time.monotonic() - started) * 1000)
-                status = EngineExecutionStatus.SUCCESS if process.returncode == 0 else EngineExecutionStatus.FAILED
+                status = (
+                    EngineExecutionStatus.SUCCESS
+                    if process.returncode == 0
+                    else EngineExecutionStatus.FAILED
+                )
                 return DockerRunResult(
                     status=status,
                     exit_code=process.returncode,

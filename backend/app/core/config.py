@@ -16,30 +16,20 @@ ENV_FILES = (
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ARVE - Adaptive Remediation & Verification Engine"
     API_V1_STR: str = "/api"
-
     ARVE_ENV: str = "dev"
-
     JWT_SECRET: str = "arve-secret-key-super-secure-change-in-production-2026"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 10080
-
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/arve_db"
-
-
     FRONTEND_URL: str = "http://localhost:5173"
-
     FIREBASE_PROJECT_ID: Optional[str] = "arve-fe63b"
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
     FIREBASE_SERVICE_ACCOUNT_JSON: Optional[str] = None
-
     BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:3000", "http://127.0.0.1:3000",
     ]
 
-    # Phase 3 scan orchestration. These are configuration values, not secrets.
     SCAN_WORKSPACE_ROOT: str = str(Path(tempfile.gettempdir()) / "arve_scans")
     DOCKER_BINARY: str = "docker"
     SCANNER_MEMORY_LIMIT: str = "1g"
@@ -49,7 +39,6 @@ class Settings(BaseSettings):
     SCANNER_GLOBAL_TIMEOUT_SECONDS: int = 600
     SCANNER_LOG_MAX_CHARS: int = 8000
 
-    # Phase 3 queue infrastructure. Long-running scans use Celery + Redis.
     SCAN_QUEUE_BACKEND: str = "celery"
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: Optional[str] = None
@@ -63,10 +52,11 @@ class Settings(BaseSettings):
     # Phase 4A Security Engines
     SCANNER_ENABLE_OSV: bool = True
     SCANNER_OSV_IMAGE: str = "ghcr.io/google/osv-scanner:v1.9.2"
+    SCANNER_ENABLE_GITLEAKS: bool = True
+    SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/gitleaks/gitleaks:v8.24.2"
     SCANNER_NETWORK_MODE: str = "none"
     SCANNER_OSV_NETWORK: str = "bridge"
 
-    # Backblaze B2 cloud-only raw scanner artifact storage.
     B2_ENDPOINT: Optional[str] = None
     B2_REGION: Optional[str] = None
     B2_BUCKET_NAME: Optional[str] = None
@@ -74,11 +64,7 @@ class Settings(BaseSettings):
     B2_SECRET_ACCESS_KEY: Optional[str] = None
     B2_ARTIFACT_PREFIX: str = "scans"
 
-    model_config = SettingsConfigDict(
-        case_sensitive=False,
-        env_file=ENV_FILES,
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(case_sensitive=False, env_file=ENV_FILES, extra="ignore")
 
     @model_validator(mode="after")
     def validate_runtime_security(self):
@@ -94,7 +80,6 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ARVE_ENV.lower() in {"prod", "production"}
-
 
     @property
     def effective_celery_broker_url(self) -> str:

@@ -1,9 +1,4 @@
-"""Queue abstraction for scan execution.
-
-Celery + Redis is the production/default path for Phase 3 because security
-scans can run for minutes. BackgroundTasks remains available as an explicit
-fallback for tests or dependency-deferred local development.
-"""
+"""Queue abstraction for ARVE security scan execution."""
 from __future__ import annotations
 
 import logging
@@ -12,7 +7,7 @@ from fastapi import BackgroundTasks
 
 from app.core.config import settings
 import app.core.database as app_db
-from app.scanner.service import ScanExecutionService, build_default_registry
+from app.scanner.parallel import ParallelSecurityScanService, build_security_registry
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +34,9 @@ def enqueue_scan(scan_id: str, background_tasks: BackgroundTasks | None = None) 
 def run_scan_background(scan_id: str) -> None:
     db = app_db.SessionLocal()
     try:
-        ScanExecutionService(db, registry=build_default_registry()).execute_scan(scan_id)
+        ParallelSecurityScanService(
+            db,
+            registry=build_security_registry(),
+        ).execute_scan(scan_id)
     finally:
         db.close()

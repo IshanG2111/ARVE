@@ -226,6 +226,7 @@ def test_scan_api_connects_to_completed_phase2_run(client_fixture, db, tmp_path,
     project, run = _make_snapshot(db)
     monkeypatch.setattr(config_module.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path / "api-workspaces"))
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_GITLEAKS", False)
 
     user = db.query(User).filter(User.id == project.user_id).one()
     token = create_access_token(user.id)
@@ -248,7 +249,7 @@ def test_scan_api_connects_to_completed_phase2_run(client_fixture, db, tmp_path,
     assert status_response.status_code == 200
     assert status_response.json()["analysis_run_id"] == run.id
     assert status_response.json()["status"] == "FAILED"
-    assert "No scanner engines" in status_response.json()["error_message"]
+    assert "scanner engines" in status_response.json()["error_message"].lower()
     assert status_response.json()["engine_statuses"] == {}
 
 

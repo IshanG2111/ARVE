@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRepository } from '../context/RepositoryContext';
 import { useToast } from '../components/ui/ToastProvider';
 import { api } from '../services/api';
@@ -21,6 +22,7 @@ import type { ScanStatusResponse } from '@/types';
 
 export const AnalysisPage: React.FC = () => {
   const toast = useToast();
+  const navigate = useNavigate();
   const {
     currentProject,
     currentProjectId,
@@ -43,6 +45,7 @@ export const AnalysisPage: React.FC = () => {
   const [activeInspectorTab, setActiveInspectorTab] = useState<'overview' | 'engines' | 'logs'>('overview');
   const [viewingArtifact, setViewingArtifact] = useState<{ name: string; content: any } | null>(null);
   const [loadingArtifact, setLoadingArtifact] = useState(false);
+  const [activeIngestionId, setActiveIngestionId] = useState<string | null>(null);
 
   const handleInspectArtifact = async (scanId: string, engineName: string) => {
     setLoadingArtifact(true);
@@ -55,6 +58,16 @@ export const AnalysisPage: React.FC = () => {
       setLoadingArtifact(false);
     }
   };
+
+  useEffect(() => {
+    if (!activeIngestionId || latestRun?.id !== activeIngestionId) return;
+    const status = latestRun.status?.toUpperCase();
+    if (['COMPLETED', 'FAILED', 'CANCELLED', 'PARTIAL'].includes(status)) {
+      setShowIngestionOverlay(false);
+      setActiveIngestionId(null);
+      refreshRuns();
+    }
+  }, [activeIngestionId, latestRun?.id, latestRun?.status, refreshRuns]);
 
   // Auto-select latest scan or run
   useEffect(() => {
@@ -99,9 +112,10 @@ export const AnalysisPage: React.FC = () => {
     if (!latestRun || latestRun.status !== 'COMPLETED') {
       setShowIngestionOverlay(true);
       try {
-        await api.triggerIngestion(currentProjectId);
+        const run = await api.triggerIngestion(currentProjectId);
+        setActiveIngestionId(run.id);
         toast.success('Codebase ingestion triggered.');
-        refreshRuns();
+        await refreshRuns();
       } catch (err: unknown) {
         toast.error(err instanceof Error ? err.message : 'Failed to ingest codebase');
       }
@@ -125,11 +139,14 @@ export const AnalysisPage: React.FC = () => {
     if (!currentProjectId) return;
     setShowIngestionOverlay(true);
     try {
-      await api.triggerIngestion(currentProjectId);
+      const run = await api.triggerIngestion(currentProjectId);
+      setActiveIngestionId(run.id);
       toast.success('Codebase ingestion triggered.');
-      refreshRuns();
+      await refreshRuns();
       setHistoryTab('ingestions');
     } catch (err: unknown) {
+      setShowIngestionOverlay(false);
+      setActiveIngestionId(null);
       toast.error(err instanceof Error ? err.message : 'Failed to trigger ingestion');
     }
   };
@@ -159,7 +176,10 @@ export const AnalysisPage: React.FC = () => {
 
   // Pipeline Stage Calculations
   const isIngestionDone = Boolean(latestRun && latestRun.status === 'COMPLETED');
-  const isScanDone = Boolean(latestScan && latestScan.status === 'COMPLETED');
+  const isScanDone = Boolean(
+      latestScan &&
+      ['COMPLETED', 'PARTIAL'].includes(latestScan.status)
+  );
 
   return (
     <div className="analysis-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
@@ -489,7 +509,7 @@ export const AnalysisPage: React.FC = () => {
                                 style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--accent)' }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedScanId(s.id);
+                                  navigate(`/findings?repo=${currentProjectId}&scan=${s.id}`);
                                 }}
                               >
                                 Telemetry →
@@ -719,23 +739,39 @@ export const AnalysisPage: React.FC = () => {
                                 {er.engine_name.toUpperCase()}
                               </td>
                               <td><StatusBadge status={er.status} size="sm" /></td>
-                              <td style={{ fontFamily: 'var(--font-code)' }}>{er.exit_code ?? '0'}</td>
+                              <td style={{ fontFamily: 'var(--font-code)' }}>{er.exit_code ?? '—'}</td>
                               <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
                                 {er.duration_ms ? `${er.duration_ms}ms` : '—'}
                               </td>
                               <td style={{ fontFamily: 'var(--font-code)', fontSize: '11px', color: er.artifact_reference ? 'var(--accent)' : 'var(--muted)' }}>
-                                {er.artifact_reference || 'Cloud upload pending'}
+                                {er.artifact_reference
+                                    ? er.artifact_reference
+                                    : er.status === 'SUCCESS'
+                                        ? 'No artifact'
+                                        : er.status === 'QUEUED' || er.status === 'RUNNING'
+                                            ? 'Pending'
+                                            : 'Not available'}
                               </td>
                               <td style={{ textAlign: 'right' }}>
-                                <button
-                                  className="btn btn-secondary"
-                                  style={{ fontSize: '11px', padding: '3px 8px', gap: '4px' }}
-                                  onClick={() => handleInspectArtifact(selectedScanStatus.id, er.engine_name)}
-                                  disabled={loadingArtifact}
-                                >
-                                  <FileJson size={12} />
-                                  View Raw JSON
-                                </button>
+                                {er.artifact_reference ? (
+                                    <button
+                                        className="btn btn-secondary"
+                                        style={{ fontSize: '11px', padding: '3px 8px', gap: '4px' }}
+                                        onClick={() => handleInspectArtifact(selectedScanStatus.id, er.engine_name)}
+                                        disabled={loadingArtifact}
+                                    >
+                                      <FileJson size={12} />
+                                      View Raw JSON
+                                    </button>
+                                ) : (
+                                    <span
+                                        style={{
+                                          fontSize: '11px',
+                                          color: 'var(--muted)',
+                                          fontFamily: 'var(--font-code)',
+                                        }}
+                                    >No artifact</span>
+                                )}
                               </td>
                             </tr>
                           ))
@@ -787,6 +823,7 @@ export const AnalysisPage: React.FC = () => {
           projectName={displayName}
           onClose={() => {
             setShowIngestionOverlay(false);
+            setActiveIngestionId(null);
             refreshRuns();
           }}
           onComplete={() => {

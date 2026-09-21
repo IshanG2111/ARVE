@@ -30,6 +30,12 @@ This document records key architectural decisions, design trade-offs, security c
 23. [ADR-023: Progressive Disclosure UX — Simple by Default, Technical when Requested](#adr-023-progressive-disclosure-ux--simple-by-default-technical-when-requested)
 24. [ADR-024: Media and Binary Exclusion Guardrails in Language & Asset Composition](#adr-024-media-and-binary-exclusion-guardrails-in-language--asset-composition)
 25. [ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload](#adr-025-ephemeral-scan-workspaces-with-direct-backblaze-b2-s3-upload)
+26. [ADR-026: AST-First Code Intelligence — ARVE-Specific Semantic Analysis over Generic Code Intelligence](#adr-026-ast-first-code-intelligence--arve-specific-semantic-analysis-over-generic-code-intelligence)
+27. [ADR-027: Parallel Multi-Engine Security Execution](#adr-027-parallel-multi-engine-security-execution)
+28. [ADR-028: Primitive Context Across Worker Threads — No SQLAlchemy ORM Objects](#adr-028-primitive-context-across-worker-threads--no-sqlalchemy-orm-objects)
+29. [ADR-029: Scanner-Specific Exit-Code Semantics](#adr-029-scanner-specific-exit-code-semantics)
+30. [ADR-030: Secret-Scanning Redaction and Non-Persistence](#adr-030-secret-scanning-redaction-and-non-persistence)
+31. [ADR-031: Per-Engine Failure Isolation and PARTIAL Scan Semantics](#adr-031-per-engine-failure-isolation-and-partial-scan-semantics)
 
 ---
 
@@ -581,4 +587,332 @@ Docker containers executing scanner engines generate large raw JSON output artif
 ### AI Reasoning & Trade-off Analysis
 - **Storage Scalability**: Centralized, cost-effective immutable cloud storage without disk leaks on scanner host nodes.
 - **Security & Integrity**: Scan evidence is decoupled from ephemeral worker nodes, ensuring verifiable historical audit trails.
-
+
+---
+
+## ADR-026: AST-First Code Intelligence — ARVE-Specific Semantic Analysis over Generic Code Intelligence
+
+### Context
+
+ARVE needs deeper code understanding beyond the findings produced by external
+security scanners. A generic code-intelligence or language-server approach
+would provide broad symbol/navigation capabilities but would not directly
+solve ARVE's core problem: connecting security findings to the actual
+application structure and potential exploit paths.
+
+### Decision
+
+Build ARVE's code intelligence around a **custom AST-first semantic analysis
+layer** rather than making generic code intelligence or language-server
+features a core dependency.
+
+The AST layer will progressively extract:
+
+- Files, modules, and syntax structures.
+- Functions, classes, methods, and symbols.
+- Imports and dependency relationships.
+- Framework-specific routes and entrypoints.
+- Calls and relevant data-flow relationships.
+- Security-sensitive sources and sinks.
+- Relationships between normalized security findings and affected code.
+- Evidence required for future attack-path reconstruction.
+
+External scanners remain responsible for discovering security findings, while
+ARVE's AST layer is responsible for understanding **how those findings relate
+to the application itself**.
+
+```text
+Repository Snapshot
+        ↓
+     AST Parse
+        ↓
+Semantic Code Model
+        ↓
+Finding ↔ Code Mapping
+        ↓
+Data Flow / Entry Points
+        ↓
+Attack Path Reconstruction
+````
+
+### AI Reasoning & Trade-off Analysis
+
+* **Differentiation:** Generic code intelligence is widely available; an
+  ARVE-specific semantic model connecting findings to application behavior is
+  the platform's stronger differentiator.
+* **Security Context:** AST analysis can determine whether a vulnerable
+  dependency or insecure pattern is actually reachable from an application
+  entrypoint.
+* **Extensibility:** The semantic model can later support framework-specific
+  analyzers without coupling the entire system to a single language server.
+* **Reduced Complexity:** ARVE avoids introducing a large generic code
+  intelligence subsystem whose features are not directly required for
+  security analysis.
+
+The decision deliberately separates **scanner detection** from **ARVE
+semantic reasoning**.
+
+---
+
+## ADR-027: Parallel Multi-Engine Security Execution
+
+### Context
+
+Phase 4A introduces multiple independent security engines, initially
+OSV-Scanner for dependency vulnerabilities and Gitleaks for secret
+detection.
+
+Executing these engines sequentially would unnecessarily increase total scan
+latency because the engines do not depend on one another.
+
+### Decision
+
+Execute independent security engines **in parallel** using the
+`ParallelSecurityScanService`.
+
+```text
+                    ┌──→ OSV-Scanner ──→ Normalize ──┐
+Repository Snapshot ┤                                ├──→ Persist Findings
+                    └──→ Gitleaks ─────→ Normalize ──┘
+```
+
+Each engine receives the same immutable repository snapshot and operates in
+its own scanner workspace.
+
+The orchestration layer is responsible for:
+
+1. Starting enabled engines concurrently.
+2. Tracking each engine independently.
+3. Collecting execution results.
+4. Normalizing successful outputs.
+5. Persisting findings and artifacts.
+6. Producing an overall scan status.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Performance:** OSV and Gitleaks can execute simultaneously, reducing
+  end-to-end scan time.
+* **Isolation:** Each engine retains its own runner, mapper, artifact, and
+  execution result.
+* **Extensibility:** Additional engines such as Semgrep can be added without
+  redesigning the orchestration model.
+* **Failure Containment:** One engine failing does not automatically prevent
+  another engine from producing useful security results.
+
+Parallelism is therefore implemented at the **orchestration layer**, rather
+than coupling the individual scanner implementations together.
+
+---
+
+## ADR-028: Primitive Context Across Worker Threads — No SQLAlchemy ORM Objects
+
+### Context
+
+The parallel security pipeline initially passed a SQLAlchemy ORM `Scan`
+object into worker threads.
+
+SQLAlchemy sessions and ORM objects are not safe to use concurrently in this
+manner. This caused concurrent connection/session provisioning failures during
+parallel engine execution.
+
+### Decision
+
+Before starting parallel workers, extract the required immutable primitive
+values from the ORM object:
+
+* `scan_id`
+* `project_id`
+* `commit_sha`
+
+Worker threads receive these primitive identifiers rather than sharing the
+SQLAlchemy ORM instance or its session.
+
+```text
+SQLAlchemy ORM Session
+        ↓
+Extract immutable IDs
+        ↓
+ ┌───────────────┐
+ │ Thread Worker │
+ └───────────────┘
+        ↓
+Fresh service/database operations
+```
+
+### AI Reasoning & Trade-off Analysis
+
+* **Thread Safety:** Prevents multiple workers from operating on the same
+  SQLAlchemy session.
+* **Clear Boundaries:** ORM lifecycle remains inside the owning application
+  context while workers operate on immutable scan identifiers.
+* **Reliability:** Eliminates intermittent
+  `InvalidRequestError` failures caused by concurrent session operations.
+* **Scalability:** The same pattern remains valid if scan execution is later
+  distributed across separate worker processes.
+
+The rule is:
+
+> **ORM objects stay in their owning session context; parallel workers receive
+> primitive identifiers.**
+
+---
+
+## ADR-029: Scanner-Specific Exit-Code Semantics
+
+### Context
+
+Different security scanners use exit codes to communicate different
+conditions. Treating every non-zero process exit code as a generic failure can
+incorrectly mark legitimate scanner results as failed.
+
+OSV-Scanner, for example, uses:
+
+* `0` — packages scanned with no known vulnerabilities.
+* `1` — packages scanned and vulnerabilities found.
+* `128` — no package sources were found.
+
+A repository containing only source files may legitimately produce exit code
+`128` because there are no supported dependency manifests or package sources.
+
+### Decision
+
+Keep the Docker runner **generic** and interpret scanner-specific exit codes
+inside the scanner service.
+
+For OSV:
+
+```text
+0   → SUCCESS
+1   → SUCCESS
+128 → SUCCESS
+other non-zero → FAILED
+```
+
+Artifact existence is evaluated independently from process success.
+
+A successful scan does not require an artifact to exist when the scanner has
+legitimately produced no output artifact.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Correctness:** Prevents clean repositories without dependency manifests
+  from appearing as failed scans.
+* **Separation of Concerns:** Docker execution remains generic while scanner
+  semantics remain inside the scanner service.
+* **Future-Proofing:** Each scanner can define its own legitimate result
+  semantics without contaminating the common Docker runner.
+* **Accurate UI:** Engine telemetry can distinguish an actual execution error
+  from a valid "nothing to scan" result.
+
+This establishes the rule that **process exit codes are interpreted according
+to the scanner's documented contract, not by a universal non-zero = failure
+rule**.
+
+---
+
+## ADR-030: Secret-Scanning Redaction and Non-Persistence
+
+### Context
+
+Gitleaks detects potentially sensitive credentials, API keys, tokens, and
+other secrets. Persisting the actual secret value would turn ARVE's security
+database and raw artifacts into another credential exposure surface.
+
+### Decision
+
+Gitleaks execution must use secret redaction and the ARVE mapper must enforce
+a second security boundary.
+
+```text
+Repository
+    ↓
+Gitleaks --redact
+    ↓
+Redacted JSON
+    ↓
+Gitleaks Mapper
+    ↓
+NormalizedFinding
+    ↓
+PostgreSQL
+```
+
+The following sensitive fields must never be persisted or displayed as finding
+content:
+
+* `Secret`
+* `Match`
+* Raw secret values
+* Raw secret-bearing `Line` values
+
+The mapper recursively removes sensitive keys before producing the canonical
+`NormalizedFinding`.
+
+Fingerprints must use non-secret metadata and deterministic identity
+components rather than the plaintext secret itself.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Security:** A vulnerability scanner must not create a second copy of the
+  credential it discovered.
+* **Defense in Depth:** Redaction occurs both during scanner execution and
+  during normalization.
+* **Auditability:** Findings can still be tracked using rule IDs, paths,
+  fingerprints, and locations without storing the credential.
+* **Compliance:** Persistent scan artifacts and database records remain safer
+  to retain and review.
+
+The security invariant is:
+
+> **ARVE may prove that a secret exists without retaining the secret itself.**
+
+---
+
+## ADR-031: Per-Engine Failure Isolation and PARTIAL Scan Semantics
+
+### Context
+
+A multi-engine security scan contains independent execution units. An engine
+may fail because of a scanner-specific problem, malformed input, timeout, or
+runtime issue while another engine successfully completes.
+
+Treating the entire scan as failed would discard useful security results from
+the successful engines.
+
+### Decision
+
+Track engine execution status independently and derive the overall scan status
+from the collection of engine outcomes.
+
+```text
+OSV       → COMPLETED
+Gitleaks  → FAILED
+              ↓
+           PARTIAL
+```
+
+The scan follows these principles:
+
+* All required engines succeed → `COMPLETED`.
+* At least one engine succeeds and another fails → `PARTIAL`.
+* All engines fail → `FAILED`.
+* Timeout/cancellation remains visible at the individual engine level.
+* Successful engine findings and artifacts are persisted even when another
+  engine fails.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Resilience:** One scanner outage does not erase the results of other
+  scanners.
+* **Transparency:** Users can immediately see which engine failed and which
+  results remain trustworthy.
+* **Incremental Expansion:** Adding Semgrep or future engines does not require
+  changing the fundamental scan lifecycle.
+* **Operational Debugging:** Engine-level telemetry provides enough
+  information to diagnose failures without treating the whole pipeline as a
+  black box.
+
+This makes the multi-engine pipeline **fault-tolerant by design rather than
+all-or-nothing**.
+
+---

@@ -27,20 +27,24 @@ logger = logging.getLogger(__name__)
 
 
 def build_default_registry() -> "ScanEngineRegistry":
-    """Build the engine registry for the current runtime.
-
-    Phase 3 exposes the test engine if enabled. Phase 4A registers
-    OSV-Scanner if SCANNER_ENABLE_OSV is enabled.
-    """
+    """Build the engine registry for the current runtime."""
     registry = ScanEngineRegistry()
+
     if settings.SCANNER_ENABLE_TEST_ENGINE:
         from app.scanner.test_engine import Phase3TestEngine
 
         registry.register(Phase3TestEngine())
-    if getattr(settings, "SCANNER_ENABLE_OSV", False):
+
+    if getattr(settings, "SCANNER_ENABLE_OSV", True):
         from app.scanner.engines.osv import OsvEngine
 
         registry.register(OsvEngine())
+
+    if getattr(settings, "SCANNER_ENABLE_GITLEAKS", True):
+        from app.scanner.engines.gitleaks import GitleaksEngine
+
+        registry.register(GitleaksEngine())
+
     return registry
 
 
@@ -192,11 +196,34 @@ class ScanExecutionService:
 
     def _run_engine(
         self,
-        scan: Scan,
-        workspace,
-        engine: ScannerEngine,
-        timeout_seconds: int,
+        scan_id: str | None = None,
+        workspace=None,
+        engine: ScannerEngine | None = None,
+        timeout_seconds: int = 0,
+        *,
+        scan: Scan | None = None,
     ) -> ScannerExecutionResult:
+        """Run one engine using only immutable scan context.
+
+        ``scan`` remains accepted as a backward-compatible keyword for
+        existing callers/tests, but its ID is extracted immediately so the
+        SQLAlchemy ORM object is never used by the engine execution path.
+        """
+        if scan is not None:
+            if scan_id is not None:
+                raise ScanValidationError("Provide scan_id or scan, not both")
+            scan_id = str(scan.id)
+        elif scan_id is None:
+            raise ScanValidationError("scan_id is required")
+        elif not isinstance(scan_id, str):
+            # Backward compatibility for older callers/tests that passed the
+            # Scan ORM object positionally. Convert it to a primitive once.
+            scan_id = str(scan_id.id)
+        else:
+            scan_id = str(scan_id)
+
+        if workspace is None or engine is None:
+            raise ScanValidationError("workspace and engine are required")
         engine_output = (workspace.output / self._safe_engine_name(engine.name)).resolve()
         if os.path.commonpath([str(workspace.output.resolve()), str(engine_output)]) != str(workspace.output.resolve()):
             raise ScanOrchestrationError("Invalid engine output path")
@@ -207,7 +234,7 @@ class ScanExecutionService:
             # Docker Desktop/Windows may not expose POSIX permissions.
             pass
         context = ScannerExecutionContext(
-            scan_id=scan.id,
+            scan_id=scan_id,
             workspace_path=workspace.source,
             output_path=engine_output,
             timeout_seconds=max(1, timeout_seconds),
@@ -231,10 +258,18 @@ class ScanExecutionService:
         status = docker_result.status
         error_message = docker_result.error_message
 
-        # Security scanner engines (e.g. OSV) return exit code 1 when findings/vulnerabilities
-        # are detected. When a valid output artifact is produced and no timeout occurred,
-        # treat this as successful engine completion.
-        if docker_result.exit_code == 1 and artifact_path is not None and status != EngineExecutionStatus.TIMEOUT:
+        # Scanner exit-code semantics:
+        #
+        # 0   = packages scanned, no findings
+        # 1   = packages scanned, findings detected
+        # 128 = no packages/package sources found
+        #
+        # For ARVE these are all successful scanner executions. Artifact
+        # existence is handled separately and must not determine execution status.
+        if (
+                docker_result.exit_code in {0, 1, 128}
+                and status != EngineExecutionStatus.TIMEOUT
+        ):
             status = EngineExecutionStatus.SUCCESS
             error_message = None
 
@@ -312,7 +347,7 @@ class ScanExecutionService:
                 self._start_engine_run(engine_run)
                 try:
                     result = self._run_engine(
-                        scan,
+                        str(scan.id),
                         workspace,
                         engine,
                         timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
@@ -323,13 +358,20 @@ class ScanExecutionService:
                     if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
                         try:
                             from app.security.normalizer import FindingNormalizer
-                            from app.security.mappers import OsvFindingMapper
+                            from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper
 
-                            normalizer = FindingNormalizer([OsvFindingMapper()])
-                            artifact_candidates = [
-                                engine_dir / "osv.json",
-                                engine_dir / f"{engine.name}.json",
-                            ]
+                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper()])
+                            artifact_candidates = []
+                            engine_artifact = result.artifact_path
+                            if engine_artifact:
+                                artifact_candidates.append(engine_artifact)
+                            artifact_candidates.extend(
+                                [
+                                    engine_dir / "osv.json",
+                                    engine_dir / "gitleaks.json",
+                                    engine_dir / f"{engine.name}.json",
+                                ]
+                            )
                             for cand in artifact_candidates:
                                 if cand.exists() and cand.stat().st_size > 0:
                                     raw_text = cand.read_text(encoding="utf-8")
@@ -344,21 +386,53 @@ class ScanExecutionService:
                         except Exception as exc:
                             logger.warning("scan=%s error normalizing artifact for engine %s: %s", scan.id, engine.name, exc)
 
-                    persisted_artifact = self.artifact_store.persist_output(
-                        scan.id, engine.name, engine_dir
-                    )
-                    if persisted_artifact:
-                        result = ScannerExecutionResult(
-                            engine_name=result.engine_name,
-                            status=result.status,
-                            exit_code=result.exit_code,
-                            duration_ms=result.duration_ms,
-                            artifact_path=None,
-                            artifact_reference=persisted_artifact,
-                            stdout=result.stdout,
-                            stderr=result.stderr,
-                            error_message=result.error_message,
-                        )
+                    # Persist scanner artifacts only after a successful engine
+                    # execution. A clean OSV scan may have no artifact at all;
+                    # that is a valid successful scan and simply has nothing to
+                    # upload to cloud storage.
+                    if result.status == EngineExecutionStatus.SUCCESS:
+                        persisted_artifact = None
+                        if (
+                                result.status == EngineExecutionStatus.SUCCESS
+                                and result.artifact_path is not None
+                                and result.artifact_path.exists()
+                        ):
+                            try:
+                                persisted_artifact = self.artifact_store.persist_output(
+                                    scan.id,
+                                    engine.name,
+                                    engine_dir,
+                                )
+                            except Exception as exc:
+                                logger.exception(
+                                    "scan=%s failed to persist artifact for engine %s: %s",
+                                    scan.id,
+                                    engine.name,
+                                    exc,
+                                )
+                                result = ScannerExecutionResult(
+                                    engine_name=result.engine_name,
+                                    status=EngineExecutionStatus.FAILED,
+                                    exit_code=result.exit_code,
+                                    duration_ms=result.duration_ms,
+                                    artifact_path=result.artifact_path,
+                                    stdout=result.stdout,
+                                    stderr=result.stderr,
+                                    error_message=f"Failed to persist scanner artifact: {exc}",
+                                )
+                            else:
+                                if persisted_artifact:
+                                    result = ScannerExecutionResult(
+                                        engine_name=result.engine_name,
+                                        status=result.status,
+                                        exit_code=result.exit_code,
+                                        duration_ms=result.duration_ms,
+                                        artifact_path=None,
+                                        artifact_reference=persisted_artifact,
+                                        stdout=result.stdout,
+                                        stderr=result.stderr,
+                                        error_message=result.error_message,
+                                    )
                     self._finish_engine_run(engine_run, result)
                 except ScannerExecutionError:
                     raise
