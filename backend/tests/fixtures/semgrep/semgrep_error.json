@@ -1,0 +1,15 @@
+{
+  "version": "1.90.0",
+  "results": [],
+  "errors": [
+    {
+      "message": "Semgrep syntax error in rule definition",
+      "level": "error",
+      "type": "RuleParseError"
+    }
+  ],
+  "paths": {
+    "scanned": [],
+    "skipped": []
+  }
+}

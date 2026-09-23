@@ -146,12 +146,20 @@ def list_project_findings(
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return (
+    all_findings = (
         db.query(SecurityFinding)
         .filter(SecurityFinding.project_id == project_id)
         .order_by(SecurityFinding.created_at.desc())
         .all()
     )
+    seen_fingerprints: set[str] = set()
+    deduped_findings = []
+    for finding in all_findings:
+        if finding.fingerprint not in seen_fingerprints:
+            seen_fingerprints.add(finding.fingerprint)
+            deduped_findings.append(finding)
+
+    return deduped_findings
 
 
 @router.get("/scans/{scan_id}/findings", response_model=List[SecurityFindingResponse])

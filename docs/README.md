@@ -14,7 +14,7 @@
 | **Phase 1** | **Authentication + GitHub Integration** | ✅ **Completed** | Firebase Authentication + GitHub OAuth Provider, Firebase ID Token validation in FastAPI, User session management, GitHub repo listing & selection. |
 | **Phase 2** | **Repository Ingestion & Normalization** | ✅ **Completed** | GitHub authenticated tree ingestion, file filtering, language/framework detection, SHA-256 normalization, and analysis run state machine. |
 | **Phase 3** | **Security Detection Orchestration** | ✅ **Completed** | Docker container scanner orchestrator, Celery task distribution, execution telemetry, and Backblaze B2 cloud storage. |
-| **Phase 4A** | **Shared Security Foundation & OSV** | ✅ **Completed** | Canonical finding contract, CVSS normalizer, deterministic SemVer evaluation, OSV engine, 1-click remediation, and Markdown/JSON viewers. *(See [OSV Implementation Guide](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/docs/OSV_SCANNER_ARCHITECTURE_AND_IMPLEMENTATION.md))* |
+| **Phase 4A** | **Multi-Engine Security (OSV, Gitleaks, Semgrep)** | ✅ **Completed** | Canonical finding contract, CVSS normalizer, OSV-Scanner (SCA), Gitleaks (Secrets with redaction), Semgrep (SAST with remediation), deterministic fingerprinting, and unified PostgreSQL persistence. |
 | **Phase 4B** | **ARVE Security Dataset** | 📅 **Planned** | Security pattern corpus combining OWASP/Juliet ground truth, AI-generated apps, and vulnerability mutations. |
 | **Phase 5** | **ML Security Pattern Engine** | 📅 **Planned** | Code/security embeddings, HDBSCAN/K-Means vector clustering, and LLM pattern interpretation. |
 | **Phase 6** | **Security Knowledge Graph** | 📅 **Planned** | Neo4j security graph, Obsidian-style interactive node visualization (vulnerabilities, CWEs, frameworks, attack techniques). |
@@ -27,6 +27,8 @@
 ---
 
 ## 📚 Specialized Architecture Documentation
+- [Infisical Environment Setup & Essential Keys](INFISICAL_ENV_SETUP.md)
+- [CodeQL & Security Engines Handover Document](HANDOVER_CODEQL_AND_SECURITY_ENGINES.md)
 - [OSV-Scanner Architecture & Complete Implementation Guide](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/docs/OSV_SCANNER_ARCHITECTURE_AND_IMPLEMENTATION.md)
 - [Backblaze B2 Cloud Artifact Storage Guide](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/docs/BACKBLAZE_B2_ARTIFACT_STORAGE.md)
 - [Database Coordination and Migration Strategy](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/docs/phase-3(IG)/ARVE_Database_Coordination_and_Migration_Strategy.md)
@@ -68,9 +70,13 @@
 
 - **Frontend**: React 19, Vite, TypeScript, Tailwind CSS, Lucide Icons, React Router 7.
 - **Backend**: FastAPI, Python 3.12, Pydantic v2, SQLAlchemy 2.0, HTTPX, PyJWT.
+- **Asynchronous Task Queue**: Celery 5.6, Redis 7 (Broker & Backend).
 - **Authentication**: Firebase Authentication + GitHub OAuth Provider, Firebase Admin / PyJWT token verification.
-- **Database**: SQLite (dev) / PostgreSQL (production), Neo4j (Knowledge Graph).
-- **Security Tools (Targeted)**: Semgrep, Gitleaks, Trivy, OWASP ZAP.
+- **Database**: PostgreSQL (Neon cloud pooler) / SQLite (dev fallback), Neo4j (Knowledge Graph).
+- **Security Engines (Phase 4A)**:
+  - **OSV-Scanner** (`ghcr.io/google/osv-scanner:v1.9.2`): Software Composition Analysis (SCA).
+  - **Gitleaks** (`ghcr.io/gitleaks/gitleaks:v8.24.2`): Hardcoded secrets & credential leak detection.
+  - **Semgrep** (`semgrep/semgrep:1.90.0`): Static Application Security Testing (SAST) with remediation catalogs.
 - **ML / AI**: scikit-learn, sentence/code embeddings, HDBSCAN / K-Means, LLM explanation engine.
 
 ---
@@ -80,52 +86,57 @@
 ### 1. Prerequisites
 - Python 3.10+
 - Node.js 18+
+- Docker Desktop (running)
 
-### 2. Environment Setup
+### 2. Unified One-Click Start (Recommended)
 
-Copy example environment files for backend and frontend:
-
+From the ARVE project root:
 ```bash
-# Backend configuration
-cp backend/.env.example backend/.env
+python run.py
+# or
+npm start
+```
+This automatically verifies Docker, boots Redis (`arve-redis`), builds scanner images, applies database migrations, starts the Celery worker, launches FastAPI on `:8000`, and starts Vite on `:5173`.
 
-# Frontend configuration
-cp frontend/.env.example frontend/.env
+### 3. Manual Step-by-Step Execution
+
+#### Step A: Start Redis (Docker)
+```bash
+docker compose up -d redis
 ```
 
-#### Firebase & GitHub Auth Setup (Phase 1)
-1. Register a GitHub OAuth App with callback URL:  
-   `https://arve-fe63b.firebaseapp.com/__/auth/handler`
-2. In [Firebase Console](https://console.firebase.google.com/), enable GitHub Authentication provider and enter your Client ID & Secret.
+#### Step B: Run Celery Worker
+```bash
+# On Linux/macOS
+celery -A app.celery_app worker --loglevel=info --concurrency=4 --workdir backend
 
-3. Update `frontend/.env` with your Firebase web configuration (`VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, etc.).
+# On Windows
+npm run worker
+```
 
-### 3. Run Backend (FastAPI)
-
+#### Step C: Run Backend (FastAPI)
 ```bash
 cd backend
-pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
-Interactive OpenAPI documentation will be accessible at [http://localhost:8000/docs](http://localhost:8000/docs).
+Interactive OpenAPI docs: [http://localhost:8000/docs](http://localhost:8000/docs)  
+System health endpoint: [http://localhost:8000/health](http://localhost:8000/health)
 
-### 4. Run Frontend (React + Vite)
-
+#### Step D: Run Frontend (React + Vite)
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
-Web application will be accessible at [http://localhost:5173](http://localhost:5173).
+Web application: [http://localhost:5173](http://localhost:5173)
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run backend pytest suite
+# Run backend scanner & security test suites (151 tests)
 cd backend
-python -m pytest tests
+python -m pytest tests/scanner tests/security
 
 # Run frontend type-check & production build
 cd frontend

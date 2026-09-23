@@ -1,0 +1,43 @@
+rules:
+  - id: arve.generic.hardcoded-jwt-secret
+    languages: [python, javascript, typescript]
+    severity: ERROR
+    message: "Hardcoded secret key used for signing JWT tokens or sessions."
+    metadata:
+      cwe: ["CWE-798: Use of Hard-coded Credentials"]
+      owasp: ["A07:2021 - Identification and Authentication Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: hardcoded-secret
+      arve_title: "Hardcoded Credential or Token"
+    patterns:
+      - pattern-either:
+          - pattern: jwt.encode(..., "...", ...)
+          - pattern: jwt.sign(..., "...", ...)
+          - pattern: jwt.decode(..., "...", ...)
+          - pattern: jwt.verify(..., "...", ...)
+
+  - id: arve.python.hardcoded-password
+    languages: [python]
+    severity: WARNING
+    message: "Potential hardcoded password assigned to variable."
+    metadata:
+      cwe: ["CWE-259: Use of Hard-coded Password"]
+      owasp: ["A07:2021 - Identification and Authentication Failures"]
+      category: security
+      confidence: MEDIUM
+      provenance: arve
+      remediation_id: hardcoded-secret
+      technology: [python]
+      arve_title: "Hardcoded Credential or Token"
+    patterns:
+      - pattern-either:
+          - pattern: $PASS = "..."
+      - metavariable-regex:
+          metavariable: $PASS
+          regex: (?i).*(password|passwd|pwd|secret_key).*
+      - pattern-not: $PASS = ""
+      - pattern-not: $PASS = " "
+      - pattern-not: $PASS = os.environ[...]
+      - pattern-not: $PASS = os.getenv(...)

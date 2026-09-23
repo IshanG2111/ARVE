@@ -1,0 +1,117 @@
+rules:
+  - id: arve.python.sql-injection
+    languages: [python]
+    severity: ERROR
+    message: "Detected SQL query formatted with dynamic user input. Use parameterized queries instead."
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: sql-injection
+      technology: [python]
+      arve_title: "SQL Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute(f"...{$VAR}...")
+          - pattern: $CURSOR.execute("..." % $VAR)
+          - pattern: $CURSOR.execute("..." + $VAR)
+          - pattern: $CURSOR.execute($QUERY.format(...))
+
+  - id: arve.javascript.sql-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Detected database query formatted with dynamic user input. Use parameterized queries instead."
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: sql-injection
+      technology: [javascript, nodejs]
+      arve_title: "SQL Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: $DB.query(`...${$VAR}...`)
+          - pattern: $DB.query("..." + $VAR)
+
+  - id: arve.python.command-injection
+    languages: [python]
+    severity: ERROR
+    message: "Untrusted input passed to shell interpreter or os.system can lead to arbitrary command execution."
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: command-injection
+      technology: [python]
+      arve_title: "Command Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: os.system(...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+
+  - id: arve.javascript.command-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Untrusted input passed to child_process.exec can allow arbitrary command execution."
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: command-injection
+      technology: [javascript, nodejs]
+      arve_title: "Command Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: exec("..." + $VAR, ...)
+          - pattern: exec(`...${$VAR}...`, ...)
+
+  - id: arve.javascript.xss
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Directly rendering untrusted input to HTTP response or innerHTML creates a Cross-Site Scripting (XSS) vulnerability."
+    metadata:
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: xss
+      technology: [javascript]
+      arve_title: "Cross-Site Scripting (XSS)"
+    patterns:
+      - pattern-either:
+          - pattern: $RES.send("..." + $VAR)
+          - pattern: $RES.send(`...${$VAR}...`)
+          - pattern: $EL.innerHTML = $VAR
+
+  - id: arve.python.ssrf
+    languages: [python]
+    severity: WARNING
+    message: "Request made to user-controlled URL without destination validation can result in SSRF."
+    metadata:
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      owasp: ["A10:2021 - Server-Side Request Forgery (SSRF)"]
+      category: security
+      confidence: MEDIUM
+      provenance: arve
+      remediation_id: ssrf
+      technology: [python]
+      arve_title: "Server-Side Request Forgery (SSRF)"
+    patterns:
+      - pattern-either:
+          - pattern: requests.get($URL, ...)
+          - pattern: requests.post($URL, ...)
+          - pattern: urllib.request.urlopen($URL, ...)
+      - pattern-not: requests.get("...", ...)
+      - pattern-not: requests.post("...", ...)
+      - pattern-not: urllib.request.urlopen("...", ...)

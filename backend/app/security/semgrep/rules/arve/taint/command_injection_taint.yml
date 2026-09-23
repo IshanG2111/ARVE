@@ -1,0 +1,25 @@
+rules:
+  - id: arve.python.command-injection-taint
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: "Untrusted input flows into operating system command execution."
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: command-injection
+      technology: [python]
+      arve_title: "Command Injection Risk (Taint Flow)"
+    pattern-sources:
+      - pattern: flask.request.args.get(...)
+      - pattern: request.query_params[...]
+      - pattern: request.GET[...]
+    pattern-sanitizers:
+      - pattern: shlex.quote(...)
+    pattern-sinks:
+      - pattern: os.system(...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: subprocess.run(..., shell=True, ...)

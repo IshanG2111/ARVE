@@ -1,0 +1,19 @@
+rules:
+  - id: arve.python.path-traversal
+    languages: [python]
+    severity: ERROR
+    message: "Constructing file paths with user input without validation can allow arbitrary file access outside the working directory."
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      category: security
+      confidence: MEDIUM
+      provenance: arve
+      remediation_id: path-traversal
+      technology: [python]
+      arve_title: "Path Traversal Vulnerability"
+    patterns:
+      - pattern-either:
+          - pattern: open(os.path.join(..., $INPUT, ...), ...)
+          - pattern: open(f".../{$INPUT}...", ...)
+          - pattern: open($BASE + "/" + $INPUT, ...)

@@ -1,0 +1,634 @@
+{
+  "$schema": "https://json-schema.arve.dev/rulepack-manifest.v1.json",
+  "rulepack_version": "2026.09.1",
+  "semgrep_version": "1.90.0",
+  "upstream_revision": "8f1a23c",
+  "sync_date": "2026-09-23T15:08:58.134316+00:00",
+  "total_rules": 27,
+  "languages": [
+    "go",
+    "javascript",
+    "php",
+    "python",
+    "typescript"
+  ],
+  "provenance_summary": {
+    "arve": 24,
+    "upstream": 3
+  },
+  "profiles": {
+    "standard": {
+      "description": "Default security profile for fast, high-confidence CI scanning",
+      "rule_count": 25,
+      "rule_ids": [
+        "arve.generic.hardcoded-jwt-secret",
+        "arve.go.command-injection",
+        "arve.go.insecure-tls-verify-false",
+        "arve.go.path-traversal",
+        "arve.go.sql-injection",
+        "arve.javascript.command-injection",
+        "arve.javascript.sql-injection",
+        "arve.javascript.xss",
+        "arve.php.command-injection",
+        "arve.php.eval-injection",
+        "arve.php.path-traversal",
+        "arve.php.sql-injection",
+        "arve.python.command-injection",
+        "arve.python.hardcoded-password",
+        "arve.python.insecure-tls-verify-false",
+        "arve.python.path-traversal",
+        "arve.python.sql-injection",
+        "arve.python.ssrf",
+        "arve.python.unsafe-deserialization-pickle",
+        "arve.python.unsafe-yaml-load",
+        "arve.python.weak-hash-md5",
+        "arve.python.weak-hash-sha1",
+        "arve.upstream.generic.private-key",
+        "arve.upstream.javascript.eval-injection",
+        "arve.upstream.python.aws-secret-key"
+      ]
+    },
+    "extended": {
+      "description": "Comprehensive security audit profile including deep taint dataflow analysis",
+      "rule_count": 27,
+      "rule_ids": [
+        "arve.generic.hardcoded-jwt-secret",
+        "arve.go.command-injection",
+        "arve.go.insecure-tls-verify-false",
+        "arve.go.path-traversal",
+        "arve.go.sql-injection",
+        "arve.javascript.command-injection",
+        "arve.javascript.sql-injection",
+        "arve.javascript.xss",
+        "arve.php.command-injection",
+        "arve.php.eval-injection",
+        "arve.php.path-traversal",
+        "arve.php.sql-injection",
+        "arve.python.command-injection",
+        "arve.python.command-injection-taint",
+        "arve.python.hardcoded-password",
+        "arve.python.insecure-tls-verify-false",
+        "arve.python.path-traversal",
+        "arve.python.sql-injection",
+        "arve.python.sql-injection-taint",
+        "arve.python.ssrf",
+        "arve.python.unsafe-deserialization-pickle",
+        "arve.python.unsafe-yaml-load",
+        "arve.python.weak-hash-md5",
+        "arve.python.weak-hash-sha1",
+        "arve.upstream.generic.private-key",
+        "arve.upstream.javascript.eval-injection",
+        "arve.upstream.python.aws-secret-key"
+      ]
+    },
+    "ci": {
+      "description": "Strict low-false-positive profile for PR blocking gates",
+      "rule_count": 20,
+      "rule_ids": [
+        "arve.generic.hardcoded-jwt-secret",
+        "arve.go.command-injection",
+        "arve.go.insecure-tls-verify-false",
+        "arve.go.sql-injection",
+        "arve.javascript.command-injection",
+        "arve.javascript.sql-injection",
+        "arve.javascript.xss",
+        "arve.php.command-injection",
+        "arve.php.eval-injection",
+        "arve.php.sql-injection",
+        "arve.python.command-injection",
+        "arve.python.insecure-tls-verify-false",
+        "arve.python.sql-injection",
+        "arve.python.unsafe-deserialization-pickle",
+        "arve.python.unsafe-yaml-load",
+        "arve.python.weak-hash-md5",
+        "arve.python.weak-hash-sha1",
+        "arve.upstream.generic.private-key",
+        "arve.upstream.javascript.eval-injection",
+        "arve.upstream.python.aws-secret-key"
+      ]
+    }
+  },
+  "rules": {
+    "arve.python.command-injection-taint": {
+      "id": "arve.python.command-injection-taint",
+      "file": "arve/taint/command_injection_taint.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "command-injection",
+      "provenance": "arve",
+      "mode": "taint"
+    },
+    "arve.python.sql-injection-taint": {
+      "id": "arve.python.sql-injection-taint",
+      "file": "arve/taint/sql_injection_taint.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "sql-injection",
+      "provenance": "arve",
+      "mode": "taint"
+    },
+    "arve.generic.hardcoded-jwt-secret": {
+      "id": "arve.generic.hardcoded-jwt-secret",
+      "file": "auth.yml",
+      "languages": [
+        "python",
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "owasp": [
+        "A07:2021 - Identification and Authentication Failures"
+      ],
+      "remediation_id": "hardcoded-secret",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.hardcoded-password": {
+      "id": "arve.python.hardcoded-password",
+      "file": "auth.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "WARNING",
+      "confidence": "MEDIUM",
+      "category": "security",
+      "cwe": [
+        "CWE-259: Use of Hard-coded Password"
+      ],
+      "owasp": [
+        "A07:2021 - Identification and Authentication Failures"
+      ],
+      "remediation_id": "hardcoded-secret",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.weak-hash-md5": {
+      "id": "arve.python.weak-hash-md5",
+      "file": "crypto.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "WARNING",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      ],
+      "owasp": [
+        "A02:2021 - Cryptographic Failures"
+      ],
+      "remediation_id": "weak-crypto",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.weak-hash-sha1": {
+      "id": "arve.python.weak-hash-sha1",
+      "file": "crypto.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "WARNING",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-328: Use of Weak Hash"
+      ],
+      "owasp": [
+        "A02:2021 - Cryptographic Failures"
+      ],
+      "remediation_id": "weak-crypto",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.insecure-tls-verify-false": {
+      "id": "arve.python.insecure-tls-verify-false",
+      "file": "crypto.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-295: Improper Certificate Validation"
+      ],
+      "owasp": [
+        "A02:2021 - Cryptographic Failures"
+      ],
+      "remediation_id": "insecure-tls",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.unsafe-deserialization-pickle": {
+      "id": "arve.python.unsafe-deserialization-pickle",
+      "file": "deserialization.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-502: Deserialization of Untrusted Data"
+      ],
+      "owasp": [
+        "A08:2021 - Software and Data Integrity Failures"
+      ],
+      "remediation_id": "unsafe-deserialization",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.unsafe-yaml-load": {
+      "id": "arve.python.unsafe-yaml-load",
+      "file": "deserialization.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-502: Deserialization of Untrusted Data"
+      ],
+      "owasp": [
+        "A08:2021 - Software and Data Integrity Failures"
+      ],
+      "remediation_id": "unsafe-deserialization",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.path-traversal": {
+      "id": "arve.python.path-traversal",
+      "file": "filesystem.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "MEDIUM",
+      "category": "security",
+      "cwe": [
+        "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      ],
+      "owasp": [
+        "A01:2021 - Broken Access Control"
+      ],
+      "remediation_id": "path-traversal",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.go.sql-injection": {
+      "id": "arve.go.sql-injection",
+      "file": "go.yml",
+      "languages": [
+        "go"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "sql-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.go.command-injection": {
+      "id": "arve.go.command-injection",
+      "file": "go.yml",
+      "languages": [
+        "go"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "command-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.go.path-traversal": {
+      "id": "arve.go.path-traversal",
+      "file": "go.yml",
+      "languages": [
+        "go"
+      ],
+      "severity": "ERROR",
+      "confidence": "MEDIUM",
+      "category": "security",
+      "cwe": [
+        "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      ],
+      "owasp": [
+        "A01:2021 - Broken Access Control"
+      ],
+      "remediation_id": "path-traversal",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.go.insecure-tls-verify-false": {
+      "id": "arve.go.insecure-tls-verify-false",
+      "file": "go.yml",
+      "languages": [
+        "go"
+      ],
+      "severity": "WARNING",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-295: Improper Certificate Validation"
+      ],
+      "owasp": [
+        "A07:2021 - Identification and Authentication Failures"
+      ],
+      "remediation_id": "insecure-tls",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.sql-injection": {
+      "id": "arve.python.sql-injection",
+      "file": "injection.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "sql-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.javascript.sql-injection": {
+      "id": "arve.javascript.sql-injection",
+      "file": "injection.yml",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "sql-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.command-injection": {
+      "id": "arve.python.command-injection",
+      "file": "injection.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "command-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.javascript.command-injection": {
+      "id": "arve.javascript.command-injection",
+      "file": "injection.yml",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "command-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.javascript.xss": {
+      "id": "arve.javascript.xss",
+      "file": "injection.yml",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "xss",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.python.ssrf": {
+      "id": "arve.python.ssrf",
+      "file": "injection.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "WARNING",
+      "confidence": "MEDIUM",
+      "category": "security",
+      "cwe": [
+        "CWE-918: Server-Side Request Forgery (SSRF)"
+      ],
+      "owasp": [
+        "A10:2021 - Server-Side Request Forgery (SSRF)"
+      ],
+      "remediation_id": "ssrf",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.php.sql-injection": {
+      "id": "arve.php.sql-injection",
+      "file": "php.yml",
+      "languages": [
+        "php"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "sql-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.php.command-injection": {
+      "id": "arve.php.command-injection",
+      "file": "php.yml",
+      "languages": [
+        "php"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "command-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.php.eval-injection": {
+      "id": "arve.php.eval-injection",
+      "file": "php.yml",
+      "languages": [
+        "php"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "code-injection",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.php.path-traversal": {
+      "id": "arve.php.path-traversal",
+      "file": "php.yml",
+      "languages": [
+        "php"
+      ],
+      "severity": "ERROR",
+      "confidence": "MEDIUM",
+      "category": "security",
+      "cwe": [
+        "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      ],
+      "owasp": [
+        "A01:2021 - Broken Access Control"
+      ],
+      "remediation_id": "path-traversal",
+      "provenance": "arve",
+      "mode": "search"
+    },
+    "arve.upstream.javascript.eval-injection": {
+      "id": "arve.upstream.javascript.eval-injection",
+      "file": "upstream/eval.yml",
+      "languages": [
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      ],
+      "owasp": [
+        "A03:2021 - Injection"
+      ],
+      "remediation_id": "code-injection",
+      "provenance": "upstream",
+      "mode": "search"
+    },
+    "arve.upstream.python.aws-secret-key": {
+      "id": "arve.upstream.python.aws-secret-key",
+      "file": "upstream/secrets.yml",
+      "languages": [
+        "python"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "owasp": [
+        "A07:2021 - Identification and Authentication Failures"
+      ],
+      "remediation_id": "hardcoded-secret",
+      "provenance": "upstream",
+      "mode": "search"
+    },
+    "arve.upstream.generic.private-key": {
+      "id": "arve.upstream.generic.private-key",
+      "file": "upstream/secrets.yml",
+      "languages": [
+        "python",
+        "javascript",
+        "typescript"
+      ],
+      "severity": "ERROR",
+      "confidence": "HIGH",
+      "category": "security",
+      "cwe": [
+        "CWE-798: Use of Hard-coded Credentials"
+      ],
+      "owasp": [
+        "A07:2021 - Identification and Authentication Failures"
+      ],
+      "remediation_id": "hardcoded-secret",
+      "provenance": "upstream",
+      "mode": "search"
+    }
+  }
+}

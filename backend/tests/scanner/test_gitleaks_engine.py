@@ -50,6 +50,7 @@ def test_registry_includes_gitleaks_when_enabled(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_TEST_ENGINE", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", True)
+    monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
 
     # Import locally to avoid changing the Phase 3 registry contract.
     from app.scanner.parallel import build_security_registry

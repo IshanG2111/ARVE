@@ -1,0 +1,87 @@
+rules:
+  - id: arve.go.sql-injection
+    languages: [go]
+    severity: ERROR
+    message: "Detected database query constructed with dynamic string formatting or concatenation. Use parameterized queries with parameter placeholders ('?', '$1')."
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: sql-injection
+      technology: [go]
+      arve_title: "SQL Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: $DB.Query(fmt.Sprintf(...), ...)
+          - pattern: $DB.Exec(fmt.Sprintf(...), ...)
+          - pattern: $DB.QueryRow(fmt.Sprintf(...), ...)
+          - pattern: $DB.QueryContext($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.ExecContext($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.QueryRowContext($CTX, fmt.Sprintf(...), ...)
+          - pattern: $DB.Query("..." + $X, ...)
+          - pattern: $DB.Exec("..." + $X, ...)
+          - pattern: $DB.QueryRow("..." + $X, ...)
+
+  - id: arve.go.command-injection
+    languages: [go]
+    severity: ERROR
+    message: "Untrusted input passed to shell interpreter ('sh', 'bash') can allow arbitrary command execution."
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: command-injection
+      technology: [go]
+      arve_title: "Command Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command("sh", "-c", fmt.Sprintf(...))
+          - pattern: exec.Command("bash", "-c", fmt.Sprintf(...))
+          - pattern: exec.Command("sh", "-c", "..." + $CMD)
+          - pattern: exec.Command("bash", "-c", "..." + $CMD)
+          - pattern: exec.CommandContext($CTX, "sh", "-c", fmt.Sprintf(...))
+          - pattern: exec.CommandContext($CTX, "bash", "-c", fmt.Sprintf(...))
+
+  - id: arve.go.path-traversal
+    languages: [go]
+    severity: ERROR
+    message: "Unsanitized path passed to filesystem operations may allow path traversal outside the intended directory."
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      category: security
+      confidence: MEDIUM
+      provenance: arve
+      remediation_id: path-traversal
+      technology: [go]
+      arve_title: "Path Traversal Risk"
+    patterns:
+      - pattern-either:
+          - pattern: os.Open("..." + $VAR)
+          - pattern: os.ReadFile("..." + $VAR)
+          - pattern: ioutil.ReadFile("..." + $VAR)
+          - pattern: os.Create("..." + $VAR)
+
+  - id: arve.go.insecure-tls-verify-false
+    languages: [go]
+    severity: WARNING
+    message: "InsecureSkipVerify explicitly set to true disables TLS certificate validation and allows MitM attacks."
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A07:2021 - Identification and Authentication Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: insecure-tls
+      technology: [go]
+      arve_title: "Insecure TLS Configuration"
+    pattern: |
+      &tls.Config{
+        ...,
+        InsecureSkipVerify: true,
+        ...,
+      }

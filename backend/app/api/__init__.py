@@ -6,8 +6,10 @@ from app.api.github import router as github_router
 from app.api.repositories import router as repositories_router
 from app.api.ingestion import router as ingestion_router
 from app.api.scans import router as scans_router
+from app.api.health import router as health_router
 
 api_router = APIRouter()
+api_router.include_router(health_router)
 api_router.include_router(auth_router)
 api_router.include_router(github_router)
 api_router.include_router(projects_router)

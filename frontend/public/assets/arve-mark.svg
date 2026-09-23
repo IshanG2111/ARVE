@@ -1,8 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="140" height="44" viewBox="0 0 140 44">
-<g fill="none" stroke="currentColor" stroke-width="1.5">
-  <rect x="2" y="4" width="36" height="36"/>
-  <path d="M8 32V12h8c5 0 8 3 8 7s-3 7-8 7h-8m8-7 10 13"/>
-  <path d="M5 8h30M5 36h30M8 5v34M32 5v34" opacity=".45"/>
-</g>
-<text x="50" y="29" font-family="Arial, sans-serif" font-size="22" letter-spacing="6" fill="currentColor">ARVE</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+  <defs>
+    <linearGradient id="arveMark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0066ff" />
+      <stop offset="100%" stop-color="#0047e0" />
+    </linearGradient>
+  </defs>
+  <path
+    fill-rule="evenodd"
+    clip-rule="evenodd"
+    d="M16 3 L3.5 29 H9.5 L12.5 22.5 H19.5 L22.5 29 H28.5 L16 3 Z M16 10.5 L18.2 17 H13.8 L16 10.5 Z"
+    fill="url(#arveMark)"
+  />
 </svg>

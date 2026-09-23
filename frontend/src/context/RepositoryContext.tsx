@@ -71,8 +71,10 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const storedId = localStorage.getItem('arve_active_project_id');
       const matched = storedId ? projects.find((p) => p.id === storedId) : null;
       const targetId = matched ? matched.id : projects[0].id;
-      setSelectedId(targetId);
-      localStorage.setItem('arve_active_project_id', targetId);
+      if (selectedId !== targetId) {
+        setSelectedId(targetId);
+        localStorage.setItem('arve_active_project_id', targetId);
+      }
     }
   }, [repoParam, projects, selectedId]);
 

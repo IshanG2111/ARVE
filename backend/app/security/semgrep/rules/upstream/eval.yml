@@ -1,0 +1,19 @@
+rules:
+  - id: arve.upstream.javascript.eval-injection
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Dynamic code execution via eval() or Function() can allow arbitrary remote code execution."
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: upstream
+      remediation_id: code-injection
+      technology: [javascript, nodejs]
+      arve_title: "Code Injection (eval)"
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: window.eval($X)
+          - pattern: Function($X)(...)

@@ -22,8 +22,12 @@ from typing import Any
 import boto3
 from botocore.config import Config
 
+import logging
+
 from app.core.config import settings
 from app.scanner.exceptions import ScanOrchestrationError
+
+logger = logging.getLogger(__name__)
 
 
 class ScanArtifactStore:
@@ -39,6 +43,19 @@ class ScanArtifactStore:
         self.secret_access_key = settings.B2_SECRET_ACCESS_KEY
         self.prefix = self._safe_prefix(settings.B2_ARTIFACT_PREFIX)
         self.client = client
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(
+            self.client is not None
+            or (
+                self.bucket
+                and self.endpoint
+                and self.region
+                and self.access_key_id
+                and self.secret_access_key
+            )
+        )
 
     def _get_client(self) -> Any:
         if self.client is not None:
@@ -128,6 +145,12 @@ class ScanArtifactStore:
             return None
 
         object_prefix = self._object_prefix(scan_id, engine_name)
+
+        if not self.is_configured:
+            if settings.is_development:
+                logger.info("scan=%s engine=%s Backblaze B2 not configured; skipping artifact upload in dev mode", scan_id, engine_name)
+                return None
+            self._get_client()
 
         client = self._get_client()
         if not self.bucket:

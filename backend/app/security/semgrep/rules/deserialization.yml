@@ -1,0 +1,35 @@
+rules:
+  - id: arve.python.unsafe-deserialization-pickle
+    languages: [python]
+    severity: ERROR
+    message: "Deserializing untrusted data with pickle can execute arbitrary code."
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: unsafe-deserialization
+      technology: [python]
+      arve_title: "Unsafe Object Deserialization"
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: _pickle.loads(...)
+          - pattern: _pickle.load(...)
+
+  - id: arve.python.unsafe-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: "yaml.load without specifying SafeLoader allows arbitrary code execution during parsing."
+    metadata:
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: unsafe-deserialization
+      technology: [python]
+      arve_title: "Unsafe Object Deserialization"
+    pattern: yaml.load(...)

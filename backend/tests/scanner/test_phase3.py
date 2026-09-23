@@ -227,6 +227,7 @@ def test_scan_api_connects_to_completed_phase2_run(client_fixture, db, tmp_path,
     monkeypatch.setattr(config_module.settings, "SCAN_WORKSPACE_ROOT", str(tmp_path / "api-workspaces"))
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_GITLEAKS", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_SEMGREP", False)
 
     user = db.query(User).filter(User.id == project.user_id).one()
     token = create_access_token(user.id)
@@ -344,6 +345,8 @@ def test_phase3_test_engine_is_opt_in(db, monkeypatch):
 
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_TEST_ENGINE", False)
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_GITLEAKS", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_SEMGREP", False)
     assert build_default_registry().list() == []
 
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_TEST_ENGINE", True)
