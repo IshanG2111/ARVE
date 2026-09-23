@@ -389,7 +389,9 @@ def health_checks() -> None:
 
     if backend_ready:
         print("[OK] FastAPI is listening on http://localhost:8000")
-        if http_ready("http://localhost:8000/docs"):
+        if http_ready("http://localhost:8000/health"):
+            print("[OK] FastAPI health check responding: http://localhost:8000/health")
+        elif http_ready("http://localhost:8000/docs"):
             print("[OK] FastAPI docs responding: http://localhost:8000/docs")
     else:
         print("[WARN] FastAPI did not open port 8000 within the wait period.")

@@ -126,14 +126,16 @@ Canonical Security Findings API
 - Implements `ScannerEngine` protocol for Semgrep container execution.
 - Configures Semgrep CLI command: `semgrep scan --config /rules --json --output /output/sast/semgrep-results.json /code`.
 
-#### [NEW] `backend/app/security/sast/rules/`
+#### [NEW] `backend/app/security/semgrep/rules/`
 - Directory containing curated security rule configs:
-  - `rules/arve/injection.yaml` (SQLi, Command Injection, Code Injection)
-  - `rules/arve/web.yaml` (XSS, SSRF, Open Redirect, Path Traversal)
-  - `rules/arve/auth.yaml` (Insecure Auth, Missing Checks, Weak Sessions)
-  - `rules/arve/crypto.yaml` (Weak Hashing MD5/SHA1, Insecure Random, Hardcoded Keys)
-  - `rules/arve/dangerous_api.yaml` (eval, exec, os.system, subprocess misuse, pickle/yaml unsafe deserialization)
-  - `rules/arve/file_handling.yaml` (Arbitrary file read/write, path traversal in file ops)
+  - `rules/injection.yml` (SQLi, Command Injection)
+  - `rules/auth.yml` (Hardcoded Credentials, Insecure TLS)
+  - `rules/crypto.yml` (Weak Hashing MD5/SHA1)
+  - `rules/deserialization.yml` (pickle, unsafe yaml)
+  - `rules/filesystem.yml` (Path Traversal)
+  - `rules/go.yml` (Go SQLi, Command Injection, Path Traversal, Insecure TLS)
+  - `rules/php.yml` (PHP SQLi, Command Injection, eval RCE, Path Traversal)
+  - `rules/arve/taint/` (Deep dataflow and taint analysis rules)
 
 #### [NEW] `backend/app/security/sast/parser/semgrep_parser.py`
 - Parses raw Semgrep JSON results: extracting rule IDs, messages, file paths, line ranges, matched code lines, CWE mappings, and taint flow traces.

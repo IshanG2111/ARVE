@@ -45,6 +45,11 @@ def build_default_registry() -> "ScanEngineRegistry":
 
         registry.register(GitleaksEngine())
 
+    if getattr(settings, "SCANNER_ENABLE_SEMGREP", True):
+        from app.scanner.engines.semgrep import SemgrepEngine
+
+        registry.register(SemgrepEngine())
+
     return registry
 
 
@@ -261,17 +266,17 @@ class ScanExecutionService:
         # Scanner exit-code semantics:
         #
         # 0   = packages scanned, no findings
-        # 1   = packages scanned, findings detected
+        # 1   = findings detected (if artifact exists) / failure if artifact missing
         # 128 = no packages/package sources found
         #
-        # For ARVE these are all successful scanner executions. Artifact
-        # existence is handled separately and must not determine execution status.
-        if (
-                docker_result.exit_code in {0, 1, 128}
-                and status != EngineExecutionStatus.TIMEOUT
-        ):
-            status = EngineExecutionStatus.SUCCESS
-            error_message = None
+        # For ARVE, exit code 1 with a valid artifact indicates a successful scan with findings.
+        # Exit code 1 without an artifact indicates a fatal scanner runtime or configuration error.
+        if status != EngineExecutionStatus.TIMEOUT:
+            if docker_result.exit_code in {0, 128} or (docker_result.exit_code == 1 and artifact_path is not None):
+                status = EngineExecutionStatus.SUCCESS
+                error_message = None
+            elif docker_result.exit_code == 1 and artifact_path is None:
+                status = EngineExecutionStatus.FAILED
 
         return ScannerExecutionResult(
             engine_name=engine.name,
@@ -288,6 +293,9 @@ class ScanExecutionService:
         scan = self.db.query(Scan).filter(Scan.id == scan_id).first()
         if not scan:
             raise ScanValidationError("Scan not found")
+        if scan.status in {ScanStatus.COMPLETED.value, ScanStatus.PARTIAL.value, ScanStatus.FAILED.value, ScanStatus.CANCELLED.value}:
+            logger.info("scan=%s is already in terminal state %s, skipping execution", scan_id, scan.status)
+            return scan
 
         workspace = None
         try:
@@ -358,9 +366,9 @@ class ScanExecutionService:
                     if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
                         try:
                             from app.security.normalizer import FindingNormalizer
-                            from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper
+                            from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 
-                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper()])
+                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()])
                             artifact_candidates = []
                             engine_artifact = result.artifact_path
                             if engine_artifact:
@@ -369,6 +377,7 @@ class ScanExecutionService:
                                 [
                                     engine_dir / "osv.json",
                                     engine_dir / "gitleaks.json",
+                                    engine_dir / "semgrep.json",
                                     engine_dir / f"{engine.name}.json",
                                 ]
                             )

@@ -1,0 +1,12 @@
+{
+  "version": "1.90.0",
+  "results": [],
+  "errors": [],
+  "paths": {
+    "scanned": [
+      "/code/app/main.py",
+      "/code/app/utils.py"
+    ],
+    "skipped": []
+  }
+}

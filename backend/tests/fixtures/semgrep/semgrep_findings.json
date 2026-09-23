@@ -1,0 +1,169 @@
+{
+  "version": "1.90.0",
+  "results": [
+    {
+      "check_id": "arve.python.sql-injection",
+      "path": "/code/app/users.py",
+      "start": {
+        "line": 42,
+        "col": 5,
+        "offset": 1020
+      },
+      "end": {
+        "line": 42,
+        "col": 45,
+        "offset": 1060
+      },
+      "extra": {
+        "message": "User input concatenated directly into SQL query string.",
+        "severity": "ERROR",
+        "metadata": {
+          "cwe": [
+            "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+          ],
+          "owasp": [
+            "A03:2021 - Injection"
+          ],
+          "confidence": "HIGH",
+          "category": "security",
+          "technology": ["python", "sqlite"],
+          "references": [
+            "https://owasp.org/www-community/attacks/SQL_Injection"
+          ]
+        },
+        "lines": "cursor.execute(f\"SELECT * FROM users WHERE id = {user_id}\")",
+        "dataflow_trace": {
+          "taint_source": "request.args['id']",
+          "intermediate_vars": ["user_id", "query"],
+          "taint_sink": "cursor.execute"
+        },
+        "fix": "cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))"
+      }
+    },
+    {
+      "check_id": "arve.python.command-injection",
+      "path": "/code/app/system.py",
+      "start": {
+        "line": 18,
+        "col": 1,
+        "offset": 450
+      },
+      "end": {
+        "line": 18,
+        "col": 35,
+        "offset": 484
+      },
+      "extra": {
+        "message": "Untrusted input passed to os.system.",
+        "severity": "ERROR",
+        "metadata": {
+          "cwe": [
+            "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+          ],
+          "owasp": [
+            "A03:2021 - Injection"
+          ],
+          "confidence": "HIGH",
+          "category": "security",
+          "references": [
+            "https://cwe.mitre.org/data/definitions/78.html"
+          ]
+        },
+        "lines": "os.system(\"cat \" + filename)"
+      }
+    },
+    {
+      "check_id": "arve.javascript.xss",
+      "path": "/code/frontend/views/profile.js",
+      "start": {
+        "line": 12,
+        "col": 3,
+        "offset": 230
+      },
+      "end": {
+        "line": 12,
+        "col": 40,
+        "offset": 267
+      },
+      "extra": {
+        "message": "User-supplied query parameter rendered directly via res.send.",
+        "severity": "ERROR",
+        "metadata": {
+          "cwe": [
+            "CWE-79: Cross-site Scripting"
+          ],
+          "owasp": [
+            "A03:2021 - Injection"
+          ],
+          "confidence": "HIGH",
+          "technology": ["express", "javascript"]
+        },
+        "lines": "res.send(\"<h1>Hello \" + name + \"</h1>\");"
+      }
+    },
+    {
+      "check_id": "arve.python.insecure-tls-verify-false",
+      "path": "/code/app/client.py",
+      "start": {
+        "line": 30,
+        "col": 5,
+        "offset": 810
+      },
+      "end": {
+        "line": 30,
+        "col": 45,
+        "offset": 850
+      },
+      "extra": {
+        "message": "Certificate validation disabled with verify=False.",
+        "severity": "ERROR",
+        "metadata": {
+          "cwe": [
+            "CWE-295: Improper Certificate Validation"
+          ],
+          "owasp": [
+            "A02:2021 - Cryptographic Failures"
+          ],
+          "confidence": "HIGH"
+        },
+        "lines": "requests.get(url, verify=False)"
+      }
+    },
+    {
+      "check_id": "arve.python.weak-hash-md5",
+      "path": "/code/app/auth.py",
+      "start": {
+        "line": 64,
+        "col": 9,
+        "offset": 1450
+      },
+      "end": {
+        "line": 64,
+        "col": 35,
+        "offset": 1476
+      },
+      "extra": {
+        "message": "MD5 used for hashing.",
+        "severity": "WARNING",
+        "metadata": {
+          "cwe": [
+            "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+          ],
+          "confidence": "MEDIUM"
+        },
+        "lines": "hashlib.md5(password.encode()).hexdigest()"
+      }
+    }
+  ],
+  "errors": [],
+  "paths": {
+    "scanned": [
+      "/code/app/users.py",
+      "/code/app/system.py",
+      "/code/frontend/views/profile.js",
+      "/code/app/client.py",
+      "/code/app/auth.py"
+    ],
+    "skipped": []
+  }
+}

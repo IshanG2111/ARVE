@@ -611,7 +611,13 @@ export const FindingsPage: React.FC = () => {
                                         fontSize: '12px',
                                         color: f.fixed_version ? 'var(--accent)' : 'var(--muted)'
                                     }}>
-                                        {f.fixed_version ? `Upgrade to ${f.fixed_version}+` : 'Review dependency'}
+                                        {f.finding_type?.toLowerCase() === 'sast'
+                                            ? 'Apply code remediation'
+                                            : f.finding_type?.toLowerCase() === 'secret'
+                                            ? 'Rotate / Revoke credential'
+                                            : f.fixed_version
+                                            ? `Upgrade to ${f.fixed_version}+`
+                                            : 'Review dependency'}
                                     </td>
                                     <td>
                                         <StatusBadge status={f.status} size="sm"/>

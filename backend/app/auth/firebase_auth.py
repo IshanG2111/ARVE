@@ -2,6 +2,7 @@ import json
 import logging
 from typing import Any, Dict
 
+from cryptography.x509 import load_pem_x509_certificate
 import httpx
 import jwt
 
@@ -30,9 +31,9 @@ except Exception as exc:
     FIREBASE_ADMIN_AVAILABLE = False
 
 
-async def get_google_public_keys() -> Dict[str, str]:
+async def get_google_public_keys(force_refresh: bool = False) -> Dict[str, str]:
     global _GOOGLE_PUBLIC_KEYS
-    if not _GOOGLE_PUBLIC_KEYS:
+    if not _GOOGLE_PUBLIC_KEYS or force_refresh:
         url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url)
@@ -56,12 +57,28 @@ async def verify_firebase_token(id_token: str) -> Dict[str, Any]:
     if FIREBASE_ADMIN_AVAILABLE:
         try:
             decoded_token = fb_auth.verify_id_token(id_token)
+            identities = decoded_token.get("firebase", {}).get("identities", {})
+            github_identities = identities.get("github.com", [])
+            github_id = str(github_identities[0]) if github_identities else None
+            email = decoded_token.get("email")
+            if not email:
+                email_identities = identities.get("email", [])
+                if email_identities:
+                    email = str(email_identities[0])
+            username = (
+                decoded_token.get("screen_name")
+                or decoded_token.get("preferred_username")
+                or (email.split("@", 1)[0] if email else None)
+                or (f"gh_{github_id}" if github_id else None)
+                or f"user_{decoded_token.get('uid', '')[:8]}"
+            )
             return {
                 "uid": decoded_token.get("uid"),
-                "email": decoded_token.get("email"),
-                "name": decoded_token.get("name"),
+                "email": email,
+                "name": decoded_token.get("name") or username,
                 "picture": decoded_token.get("picture"),
-                "github_username": decoded_token.get("firebase", {}).get("identities", {}).get("github.com", [None])[0],
+                "github_username": username,
+                "github_id": github_id,
             }
         except Exception as exc:
             logger.debug("Firebase Admin verification failed: %s", exc)
@@ -75,12 +92,18 @@ async def verify_firebase_token(id_token: str) -> Dict[str, Any]:
         keys = await get_google_public_keys()
         cert_str = keys.get(kid)
         if not cert_str:
-            raise ValueError("Firebase signing key was not found")
+            keys = await get_google_public_keys(force_refresh=True)
+            cert_str = keys.get(kid)
+            if not cert_str:
+                raise ValueError(f"Firebase signing key '{kid}' was not found")
+
+        cert_obj = load_pem_x509_certificate(cert_str.encode("utf-8"))
+        public_key = cert_obj.public_key()
 
         project_id = settings.effective_firebase_project_id
         decoded = jwt.decode(
             id_token,
-            key=cert_str,
+            key=public_key,
             algorithms=["RS256"],
             audience=project_id if project_id else None,
             issuer=f"https://securetoken.google.com/{project_id}" if project_id else None,
@@ -92,12 +115,32 @@ async def verify_firebase_token(id_token: str) -> Dict[str, Any]:
             },
         )
 
+        identities = decoded.get("firebase", {}).get("identities", {})
+        github_identities = identities.get("github.com", [])
+        github_id = str(github_identities[0]) if github_identities else None
+
+        email = decoded.get("email")
+        if not email:
+            email_identities = identities.get("email", [])
+            if email_identities:
+                email = str(email_identities[0])
+
+        username = (
+            decoded.get("screen_name")
+            or decoded.get("preferred_username")
+            or (decoded.get("name") if decoded.get("name") and " " not in decoded.get("name") else None)
+            or (email.split("@", 1)[0] if email else None)
+            or (f"gh_{github_id}" if github_id else None)
+            or f"user_{decoded.get('sub', '')[:8]}"
+        )
+
         return {
             "uid": decoded.get("sub") or decoded.get("user_id"),
-            "email": decoded.get("email"),
-            "name": decoded.get("name"),
+            "email": email,
+            "name": decoded.get("name") or username,
             "picture": decoded.get("picture"),
-            "github_username": decoded.get("firebase", {}).get("identities", {}).get("github.com", [None])[0],
+            "github_username": username,
+            "github_id": github_id,
         }
     except Exception as exc:
         logger.error("Firebase token verification failed: %s", exc)

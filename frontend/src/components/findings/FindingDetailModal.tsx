@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -99,6 +99,32 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
   };
 
   const upgradeCommand = getUpgradeCommand();
+
+  const parsedRaw = useMemo<Record<string, any> | null>(() => {
+    if (!finding.raw_json) return null;
+    if (typeof finding.raw_json === 'object') return finding.raw_json as Record<string, any>;
+    try {
+      return JSON.parse(finding.raw_json) as Record<string, any>;
+    } catch {
+      return null;
+    }
+  }, [finding.raw_json]);
+
+  const remediation = parsedRaw?.remediation;
+  const exampleDiff: string | undefined = remediation?.example_diff;
+  const whyItMatters: string | undefined = remediation?.why_it_matters;
+  const recommendedAction: string | undefined = remediation?.recommended_action;
+  const vulnerableLines: string | undefined = parsedRaw?.lines;
+  const [copiedDiff, setCopiedDiff] = useState(false);
+
+  const handleCopyDiff = () => {
+    if (exampleDiff) {
+      navigator.clipboard.writeText(exampleDiff);
+      setCopiedDiff(true);
+      toast.success('Code remediation diff copied to clipboard.');
+      setTimeout(() => setCopiedDiff(false), 2000);
+    }
+  };
 
   const handleCopyCommand = () => {
     if (upgradeCommand) {
@@ -293,12 +319,58 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
                 <span>
                   Upgrade <strong style={{ color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>{finding.package_name}</strong> from version <span style={{ fontFamily: 'var(--font-code)', color: '#ef4444' }}>{finding.package_version || 'current'}</span> to <strong style={{ color: 'var(--accent)', fontFamily: 'var(--font-code)' }}>{finding.fixed_version}</strong> or higher.
                 </span>
+              ) : recommendedAction ? (
+                <span>{recommendedAction}</span>
               ) : finding.finding_type === 'secret' ? (
                 'Immediately revoke and rotate the exposed credential, purge it from git history, and store it in an environment secret manager.'
               ) : (
                 'Review the flagged code and apply necessary input validation or dependency security updates.'
               )}
             </div>
+
+            {/* Why This Matters Callout */}
+            {whyItMatters && (
+              <div
+                style={{
+                  padding: '9px 12px',
+                  background: 'rgba(234, 179, 8, 0.08)',
+                  border: '1px solid rgba(234, 179, 8, 0.22)',
+                  borderRadius: '6px',
+                  fontSize: '12px',
+                  color: '#eab308',
+                  lineHeight: 1.45,
+                }}
+              >
+                <strong style={{ color: '#facc15' }}>Security Impact: </strong>
+                {whyItMatters}
+              </div>
+            )}
+
+            {/* Flagged Code Snippet */}
+            {vulnerableLines && (
+              <div style={{ marginTop: '2px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginBottom: '5px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <FileCode size={12} color="var(--accent)" />
+                  <span>Flagged in <strong style={{ color: 'var(--primary)' }}>{finding.file_path}</strong>{finding.line_start ? ` (line ${finding.line_start})` : ''}:</span>
+                </div>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: '8px 12px',
+                    background: '#070a11',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontFamily: 'var(--font-code)',
+                    color: '#f87171',
+                    overflowX: 'auto',
+                    whiteSpace: 'pre',
+                  }}
+                >
+                  {vulnerableLines}
+                </pre>
+              </div>
+            )}
 
             {/* Quick 1-Click Upgrade Command */}
             {upgradeCommand && (
@@ -332,6 +404,94 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Dedicated Before/After Code Remediation Diff */}
+          {exampleDiff && (
+            <div
+              style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  padding: '10px 16px',
+                  background: 'var(--elevated)',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Code size={14} color="var(--accent)" />
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--primary)', fontFamily: 'var(--font-code)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Remediation Code Diff (Before / After)
+                  </span>
+                </div>
+                <button
+                  onClick={handleCopyDiff}
+                  className="btn btn-ghost"
+                  style={{ fontSize: '11px', padding: '2px 8px', gap: '4px', color: copiedDiff ? 'var(--success)' : 'var(--muted)' }}
+                  title="Copy remediation diff"
+                >
+                  {copiedDiff ? <Check size={12} /> : <Copy size={12} />}
+                  <span>{copiedDiff ? 'Copied' : 'Copy Diff'}</span>
+                </button>
+              </div>
+
+              <div
+                style={{
+                  padding: '12px 14px',
+                  background: '#070a11',
+                  fontFamily: 'var(--font-code)',
+                  fontSize: '12px',
+                  lineHeight: 1.65,
+                  overflowX: 'auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}
+              >
+                {exampleDiff.split('\n').map((line, idx) => {
+                  const isRemoved = line.startsWith('-');
+                  const isAdded = line.startsWith('+');
+                  return (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        background: isRemoved
+                          ? 'rgba(239, 68, 68, 0.12)'
+                          : isAdded
+                          ? 'rgba(34, 197, 94, 0.12)'
+                          : 'transparent',
+                        color: isRemoved ? '#f87171' : isAdded ? '#4ade80' : '#94a3b8',
+                      }}
+                    >
+                      <span
+                        style={{
+                          userSelect: 'none',
+                          fontWeight: 700,
+                          width: '12px',
+                          color: isRemoved ? '#ef4444' : isAdded ? '#22c55e' : 'transparent',
+                        }}
+                      >
+                        {isRemoved ? '−' : isAdded ? '+' : ' '}
+                      </span>
+                      <span style={{ whiteSpace: 'pre' }}>{line.replace(/^[-+]\s?/, '')}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Section 2: Version & Exposure Matrix */}
           {finding.package_name && (
