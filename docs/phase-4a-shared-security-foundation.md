@@ -2,7 +2,7 @@
 
 ## Overview
 
-Phase 4A.0 establishes the shared security foundation for ARVE. It guarantees that parallel development of **OSV-Scanner** (SCA) and **Gitleaks** (Secret Detection) proceeds without database migration conflicts, schema duplication, or inconsistent finding taxonomies.
+Phase 4A establishes the shared security foundation for ARVE. It guarantees that parallel development of **OSV-Scanner** (SCA), **Gitleaks** (Secret Detection), and **Semgrep** (SAST Code Security) proceeds without database migration conflicts, schema duplication, or inconsistent finding taxonomies.
 
 ---
 
@@ -15,16 +15,16 @@ Phase 4A.0 establishes the shared security foundation for ARVE. It guarantees th
                   Scan Orchestration (Phase 3 Celery Worker)
                                     |
              +----------------------+----------------------+
-             |                                             |
-             v                                             v
-     OSV-Scanner Runner                            Gitleaks Runner
-  (Dependency Vulnerabilities)                   (Hardcoded Secrets)
-             |                                             |
-             | raw JSON artifact                           | raw JSON artifact
-             v                                             v
-      OsvFindingMapper                             GitleaksFindingMapper
-      (FindingMapper)                                (FindingMapper)
-             |                                             |
+             |                      |                      |
+             v                      v                      v
+     OSV-Scanner Runner      Gitleaks Runner        Semgrep Runner
+(Dependency Vulnerabilities) (Hardcoded Secrets)   (SAST Code Security)
+             |                      |                      |
+             | raw JSON artifact    | raw JSON artifact    | raw JSON artifact
+             v                      v                      v
+      OsvFindingMapper      GitleaksFindingMapper  SemgrepFindingMapper
+      (FindingMapper)        (FindingMapper)        (FindingMapper)
+             |                      |                      |
              +----------------------+----------------------+
                                     |
                                     v
@@ -127,3 +127,31 @@ The fingerprint represents the **Finding Identity** rather than transient locati
 |---|---|---|
 | **OSV Developer** | `backend/app/scanner/engines/osv.py`<br>`backend/app/security/mappers/osv.py`<br>`backend/tests/security/test_osv_*.py`<br>`backend/tests/fixtures/osv/*` | `backend/alembic/versions/*`<br>`backend/app/models/models.py`<br>`backend/app/security/models.py`<br>`backend/app/security/severity.py`<br>`backend/app/security/fingerprint.py`<br>`backend/app/security/mappers/base.py` |
 | **Gitleaks Developer** | `backend/app/scanner/engines/gitleaks.py`<br>`backend/app/security/mappers/gitleaks.py`<br>`backend/tests/security/test_gitleaks_*.py`<br>`backend/tests/fixtures/gitleaks/*` | `backend/alembic/versions/*`<br>`backend/app/models/models.py`<br>`backend/app/security/models.py`<br>`backend/app/security/severity.py`<br>`backend/app/security/fingerprint.py`<br>`backend/app/security/mappers/base.py` |
+| **Semgrep Developer** | `backend/app/scanner/engines/semgrep.py`<br>`backend/app/security/mappers/semgrep.py`<br>`backend/app/security/semgrep/*`<br>`backend/tests/security/test_semgrep_*.py`<br>`backend/tests/fixtures/semgrep/*` | `backend/alembic/versions/*`<br>`backend/app/models/models.py`<br>`backend/app/security/models.py`<br>`backend/app/security/severity.py`<br>`backend/app/security/fingerprint.py`<br>`backend/app/security/mappers/base.py` |
+
+---
+
+## 7. Production Celery + Redis Asynchronous Queueing
+
+ARVE scans run asynchronously via Celery using Redis as the message broker (`SCAN_QUEUE_BACKEND=celery`):
+
+- **Broker**: `redis://localhost:6379/0` (configured with AOF persistence, `--maxmemory 512mb`, and `--maxmemory-policy noeviction`).
+- **Fair Dispatching**: `worker_prefetch_multiplier = 1` ensures no single worker hoards heavy multi-container scan jobs.
+- **Reliable Acknowledgements**: `task_acks_late = True` and `task_reject_on_worker_lost = True` ensure crashed workers return tasks to the queue.
+- **Scan Idempotency**: `ParallelSecurityScanService` and `ScanExecutionService` verify scan state before execution. Duplicate or replayed Celery tasks for terminal scans (`COMPLETED`, `PARTIAL`, `FAILED`, `CANCELLED`) safely no-op without corrupting the state machine.
+- **Health Observability**: `/health` and `/api/health` provide active database, Redis, and Celery worker connectivity probes.
+
+---
+
+## 8. Docker Security & Container Isolation Guarantees
+
+All security engines run in sandboxed Docker containers governed by strict isolation contracts:
+
+| Security Control | Implementation | Purpose |
+|---|---|---|
+| **Non-Root User** | `--user 1000:1000` | Prevents container processes from acquiring host root permissions. |
+| **Read-Only Code Mount** | `--mount type=bind,source=<workspace>,target=/workspace,readonly` | Guarantees scanner engines cannot alter or corrupt repository source code. |
+| **Ephemeral Memory** | `--tmpfs /tmp:rw` with `HOME=/tmp` | Gives Semgrep/OSV a writable scratchpad in RAM for caches and telemetry without touching disk. |
+| **Network Air-Gap** | `--network=none` (Semgrep, Gitleaks) | Eliminates outbound telemetry leaks or remote code fetch during code analysis. |
+| **Air-Gapped Rules** | `--mount type=bind,source=<rules_dir>,target=/rules,readonly` | Pre-bundled offline rule catalog mounted directly at `/rules:ro`. |
+

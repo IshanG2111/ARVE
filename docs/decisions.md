@@ -916,3 +916,331 @@ This makes the multi-engine pipeline **fault-tolerant by design rather than
 all-or-nothing**.
 
 ---
+
+## ADR-032: Semgrep SAST Integration and Canonical Normalization Boundary
+
+### Context
+
+Semgrep performs static application security testing (SAST) using pattern matching
+and taint/dataflow analysis on application source code. Its native JSON artifact
+contains Semgrep-specific structures (`check_id`, `extra.lines`, `extra.metadata`,
+`metavars`, `dataflow_trace`).
+
+Allowing raw Semgrep structures to propagate into ARVE's database or API would
+violate the canonical security boundary established in Phase 4A and create
+engine-specific database contracts.
+
+### Decision
+
+Isolate Semgrep behind `SemgrepEngine` and `SemgrepFindingMapper`.
+
+```text
+Repository Snapshot (/code)
+            ↓
+  Semgrep CLI Docker Container
+            ↓
+Raw semgrep.json Artifact (/output)
+            ↓
+   Defensive Semgrep Parser
+            ↓
+    SemgrepResult Models
+            ↓
+    Semgrep Finding Mapper
+            ↓
+     NormalizedFinding (type="sast")
+            ↓
+ PostgreSQL (security_findings)
+```
+
+1. **No Semgrep Database Tables:** All Semgrep findings persist into the unified
+   `security_findings` table as canonical `NormalizedFinding` records with
+   `finding_type="sast"`.
+2. **Defensive Parsing:** `parse_semgrep_output()` handles malformed JSON, missing
+   optional fields, and line boundary anomalies without failing the engine pipeline.
+3. **Deterministic Identity:** Fingerprints are computed via
+   `SHA256(engine | sast | rule_id | file_path)`. Transient line numbers and
+   scan IDs are strictly excluded so findings maintain persistent identity
+   across successive scans and line-shifts.
+4. **Preserved Engine Metadata:** Technical details (rule ID, CWE, OWASP, code
+   lines, dataflow trace, and suggested fixes) are retained in `raw_json` for
+   deep-dive exploration without polluting top-level columns.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Boundary Integrity:** ARVE core, database queries, attack graph generation,
+  and frontend viewers consume only `NormalizedFinding`.
+* **Zero Schema Migrations:** Reuses the existing `security_findings` schema
+  without migration risk or database schema conflicts.
+* **Stable Tracking:** Code edits above a vulnerability do not alter the
+  underlying fingerprint or reset finding lifecycle state.
+
+---
+
+## ADR-033: SAST Taint & Pattern Rule Strategy and Decoupled Remediation Layer
+
+### Context
+
+Raw SAST rule IDs (e.g. `arve.python.sql-injection` or `python.lang.security.audit.formatted-sql-query`)
+make poor user-facing titles and do not help developers understand how to fix
+the vulnerability. Furthermore, coupling remediation advice directly inside rule
+definitions creates duplication and makes UX updates difficult.
+
+### Decision
+
+Decouple vulnerability detection from remediation advice by implementing a
+centralized remediation catalog (`app.security.semgrep.remediation`):
+
+1. **Standard Security Coverage:** Bundled rule profiles in
+   `app/security/semgrep/rules/` cover core vulnerability families:
+   * **Injection:** SQL injection, command injection, XSS, SSRF, code injection.
+   * **Filesystem:** Path traversal, arbitrary file access.
+   * **Cryptography:** Broken hashing algorithms (MD5, SHA-1), weak ciphers.
+   * **Transport:** Insecure TLS certificate verification (`verify=False`).
+   * **Serialization:** Unsafe object deserialization (pickle, YAML unsafe loader).
+   * **Authentication:** Hardcoded secrets and credential tokens.
+2. **Three-Level Remediation UX:**
+   * **Level 1 (Title & Summary):** Concise plain-language explanation of what happened.
+   * **Level 2 (Action & Diff):** Concrete recommended fix with a before/after diff example.
+   * **Level 3 (Technical Details):** Expandable engine metadata, CWE, OWASP, and dataflow trace.
+3. **Safe Autofix Policy:** Automatic modification of repositories is out of
+   scope for initial scanning. ARVE presents recommended patches for human
+   review rather than blindly applying code alterations.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Developer Experience:** Developers immediately see actionable steps rather
+  than cryptic scanner identifiers.
+* **Separation of Concerns:** Security rules focus strictly on high-fidelity
+  detection, while the remediation layer manages human-readable guidance.
+* **Safety:** Presenting reviewable diffs prevents accidental code corruption
+  caused by automated refactoring.
+
+---
+
+## ADR-034: Multi-Engine Tri-Scanner Orchestration (OSV, Gitleaks, Semgrep)
+
+### Context
+
+With the introduction of Semgrep, ARVE operates three foundational security engines:
+* **OSV-Scanner:** Software Composition Analysis (SCA) & dependency vulnerabilities.
+* **Gitleaks:** Secret detection & credential leak prevention.
+* **Semgrep:** Static Application Security Testing (SAST) & code patterns.
+
+Each scanner has different runtime characteristics, network requirements, and
+exit code semantics.
+
+### Decision
+
+Support both sequential orchestration (`ScanExecutionService`) and concurrent
+multi-worker orchestration (`ParallelSecurityScanService`) across all three engines.
+
+```text
+               Phase 2 Ingested Snapshot
+                           ↓
+             Scan Orchestration Service
+                           ↓
+     +---------------------+---------------------+
+     |                     |                     |
+     v                     v                     v
+OSV-Scanner            Gitleaks               Semgrep
+   (SCA)               (Secrets)              (SAST)
+     |                     |                     |
+     v                     v                     v
+OsvFindingMapper     GitleaksMapper        SemgrepMapper
+     |                     |                     |
+     +---------------------+---------------------+
+                           ↓
+                   FindingNormalizer
+                           ↓
+               PostgreSQL / API / UI
+```
+
+1. **Independent Engine Toggles:** Each engine is controlled via environment
+   configuration (`SCANNER_ENABLE_OSV`, `SCANNER_ENABLE_GITLEAKS`, `SCANNER_ENABLE_SEMGREP`).
+2. **Contract-Aware Exit Codes:**
+   * Exit `0`: Scan completed, no findings.
+   * Exit `1` with valid output artifact: Scan completed, findings detected.
+   * Exit `1` without output artifact: Scanner failure / configuration error.
+   * Exit `128`: Scanner-specific clean exit (e.g. no dependency files found).
+3. **Network Isolation:** SAST and secret scanning run under `--network=none` by
+   default; OSV uses bridge networking for vulnerability database queries.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Comprehensive Posture:** A single scan covers dependencies, secrets, and
+  code flaws in one unified pipeline.
+* **Resilience:** If one engine fails or times out, the other two continue and
+  their findings are persisted under `PARTIAL` scan status.
+* **Modularity:** New scanners (e.g. Trivy or ZAP in future phases) plug into
+  the identical registry, runner, and normalization contracts.
+
+---
+
+## ADR-035: Production Celery + Redis Asynchronous Task Pipeline & Queue Hardening
+
+### Context
+
+ARVE security scans execute multiple parallel Docker containers (OSV, Gitleaks, Semgrep) and process comprehensive repository snapshots. In earlier phases or basic configurations, background tasks ran in-process via FastAPI's `BackgroundTasks`. This presented production scalability limits:
+1. Multi-worker uvicorn setups or server restarts could drop active scans.
+2. In-process execution coupled web API memory and concurrency with heavy scanner execution.
+3. Sudden process exits left scans permanently stuck in `QUEUED` or `SCANNING` states.
+
+### Decision
+
+Establish Celery with Redis as the primary production asynchronous execution engine (`SCAN_QUEUE_BACKEND=celery`):
+
+1. **Redis Broker Configuration:**
+   * Uses Redis 7 on `redis://localhost:6379/0` (with AOF append-only persistence).
+   * Configured `--maxmemory 512mb` and `--maxmemory-policy noeviction` so Celery task queues and task metadata are never silently evicted under memory pressure.
+2. **Celery Worker Configuration (`app.celery_app`):**
+   * `task_acks_late=True`: Tasks are acknowledged only after completion or handled failure. If a worker crashes or is terminated by the OS, the message returns to Redis.
+   * `task_reject_on_worker_lost=True`: Guarantees task requeueing or failure capture if child worker processes crash unexpectedly.
+   * `worker_prefetch_multiplier=1`: Ensures fair task distribution across workers, preventing any single worker from hoarding multiple heavy multi-container jobs.
+   * `broker_connection_retry_on_startup=True`: Prevents worker crashes if Redis is briefly starting up.
+   * `broker_transport_options={"visibility_timeout": 3600}`: 1-hour visibility timeout prevents Celery from re-delivering scans that are legitimately executing within the 10-minute global scan timeout.
+   * `result_expires=86400`: Cleans up Redis result keys after 24 hours to eliminate Redis key bloat.
+3. **Idempotency & Replay Protection:**
+   * Both `ParallelSecurityScanService` and `ScanExecutionService` check scan status prior to execution. If a late or replayed Celery message arrives for a scan already in `COMPLETED`, `PARTIAL`, `FAILED`, or `CANCELLED`, the worker gracefully returns the scan rather than throwing an invalid state transition exception (`ScanStateTransitionError`).
+4. **Platform Compatibility:**
+   * Windows development uses `--pool=solo` (or `--pool=threads`) to navigate Windows process spawning constraints.
+   * Linux/Docker production environments support standard multi-process concurrency (`--concurrency=N`).
+
+### AI Reasoning & Trade-off Analysis
+
+* **Worker Isolation:** Offloading scan jobs to Celery isolates the FastAPI web server from CPU and memory spikes during intensive SAST runs.
+* **Resilience:** Unhandled worker crashes no longer destroy pending jobs; late acks and Redis persistence provide strong delivery guarantees.
+* **Backpressure Management:** Fair queuing (`prefetch=1`) ensures multiple scanning jobs are balanced cleanly across available container execution capacity.
+
+---
+
+## ADR-036: Production Health & Observability Endpoint (`/health` & `/api/health`)
+
+### Context
+
+Container orchestrators (Kubernetes, AWS ECS, Docker Compose) and reverse proxies require automated liveness and readiness probes. Simple HTTP ping endpoints often mask underlying infrastructure failures (such as severed database connections, dead Redis instances, or unresponsive Celery workers).
+
+### Decision
+
+Implement a unified health check endpoint available at both `/health` (for load balancers/orchestrators) and `/api/health` (within the API namespace):
+
+1. **Service Verification Probes:**
+   * **Database:** Executes active `SELECT 1` query through SQLAlchemy session pool.
+   * **Redis Broker:** Performs a live socket ping against `settings.REDIS_URL`.
+   * **Celery Worker Pool:** Runs an inspector ping (`celery_app.control.inspect().ping()`) with a 1.5s timeout to report active worker node names and concurrency.
+2. **Status Codes:**
+   * Returns HTTP `200 OK` with JSON payload when all critical services are healthy.
+   * Returns HTTP `503 Service Unavailable` with error details if database or Redis broker fails.
+3. **Automation & Developer Tooling:**
+   * Integrated into `run.py` to gate startup checks before declaring service readiness.
+   * Documented in `HOW_TO_RUN.md` for standard deployment smoke testing.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Early Detection:** Outages in the background queuing layer or database pool are surfaced immediately before users trigger failed scans.
+* **Standardization:** Conforms to modern cloud-native deployment patterns across both development and production environments.
+
+---
+
+## ADR-037: Semgrep Container Hardening, Ephemeral Mounts & Offline Rules
+
+### Context
+
+Executing `semgrep/semgrep:1.90.0` inside isolated Docker containers with non-root privileges (`1000:1000`), read-only source mounts, and `--network=none` exposed three runtime constraints:
+1. Semgrep attempted to write telemetry, metrics, and user configuration to `/home/semgrep/.semgrep`, throwing `OSError: [Errno 30] Read-only file system`.
+2. Semgrep Docker image entrypoint is empty (`Entrypoint: []`), causing command executions without the explicit `semgrep` binary to fail.
+3. Passing `--config auto` under `--network=none` caused Semgrep to attempt outbound network queries to the Semgrep Registry, hanging indefinitely until timeout.
+
+### Decision
+
+Harden the Docker runner and Semgrep engine configuration:
+
+1. **Ephemeral User Storage:** Mount an in-memory tmpfs volume (`--tmpfs /tmp:rw`) and set environment variable `HOME=/tmp`. Semgrep writes transient caches and metrics to `/tmp/.semgrep` without touching the read-only host or workspace filesystems.
+2. **Explicit CLI Invocation:** Command structure explicitly prefixes `["semgrep", "scan", ...]`.
+3. **Bundled Rule Mounting:** ARVE mounts its pre-bundled, high-fidelity security rule catalog at `/rules:ro`. When offline or `--network=none` is enforced, the runner automatically targets `/rules` rather than attempting outbound registry lookups.
+4. **Graceful Artifact Fallback:** In development mode without Backblaze B2 cloud storage credentials, artifact uploads log a warning and complete locally rather than aborting the scan.
+
+### AI Reasoning & Trade-off Analysis
+
+* **True Air-Gapped Security:** Code is analyzed completely offline without leaking snippets or metadata over the internet.
+* **Immutability:** Source code repositories remain mounted strictly read-only (`:ro`), ensuring scanner containers cannot modify or corrupt the repository files.
+
+---
+
+## ADR-038: Separation of SAST (Source Code) vs DAST (Live Deployment Verification)
+
+### Context
+
+Users and developers frequently conflate static code scanners (like Semgrep) with dynamic application security testing (DAST) or live URL scanning. A clear boundary is required between repository snapshot analysis and deployment verification targets.
+
+### Decision
+
+Maintain a strict separation of concerns between code-level analysis and target domain verification:
+
+1. **Static Analysis Layer (Semgrep, Gitleaks, OSV):**
+   * Operates strictly on repository files, commits, and ASTs.
+   * Runs in sandboxed Docker containers without knowledge of deployment URLs or internet connectivity.
+   * Pinpoints exact code lines, functions, package lockfiles, and git commit history.
+2. **Target Domain Layer (`TargetWebsite` / Live Deployed URL):**
+   * Operates on external hostnames and live web endpoints.
+   * **Cryptographic Ownership Enforcement:** Requires the deployment owner to host an ARVE verification token at `/.well-known/arve-verification.txt` before any live network probes or DAST security checks are permitted.
+   * **SSRF Prevention:** Restricts targets to public, valid non-loopback domains to prevent internal network scanning.
+3. **Unified Intelligence:**
+   * ARVE links the static code findings with dynamic domain verification so teams can prove whether a code-level vulnerability is exposed in production.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Legal & Ethical Safety:** Strict domain ownership verification guarantees ARVE never scans or attacks unauthorized third-party infrastructure.
+* **Clarity of Findings:** Static analysis identifies the root cause in code, while dynamic verification determines real-world reachability.
+
+---
+
+## ADR-039: Polyglot Semgrep Rulepack Extension (Go & PHP Security Rules)
+
+### Context
+
+While ARVE initially targeted JavaScript/TypeScript and Python codebases, modern backend ecosystems heavily utilize Go (microservices, high-throughput APIs) and PHP (web applications, WordPress, Laravel). To maintain comprehensive static security coverage without introducing new scanner dependencies, ARVE's Semgrep engine was extended to support Go and PHP.
+
+### Decision
+
+1. **Curated High-Fidelity Rule Definitions:**
+   * **Go (`backend/app/security/semgrep/rules/go.yml`):**
+     - `arve.go.sql-injection`: Catches unparameterized queries with `fmt.Sprintf` or string concatenation across `db.Query`, `db.Exec`, `db.QueryRow`.
+     - `arve.go.command-injection`: Flags dangerous shell invocations via `exec.Command("sh", "-c", ...)` with dynamic input.
+     - `arve.go.path-traversal`: Flags unvalidated path construction in `os.Open`, `os.ReadFile`, `ioutil.ReadFile`.
+     - `arve.go.insecure-tls-verify-false`: Detects `InsecureSkipVerify: true` in `&tls.Config`.
+   * **PHP (`backend/app/security/semgrep/rules/php.yml`):**
+     - `arve.php.sql-injection`: Detects string concatenated queries in `$db->query()`, `mysqli_query()`.
+     - `arve.php.command-injection`: Flags unsanitized input to `system()`, `exec()`, `shell_exec()`, `passthru()`.
+     - `arve.php.eval-injection`: Flags dynamic execution via `eval()`.
+     - `arve.php.path-traversal`: Detects dynamic file inclusion in `include`, `require`, and `file_get_contents`.
+2. **Schema & Taxonomy Compliance:**
+   * Every rule conforms to the ARVE naming convention (`arve.<lang>.<vulnerability-id>`), includes CWE/OWASP tags, specifies explicit confidence ratings, and maps to canonical `remediation_id` entries in the remediation catalog.
+3. **Automated Manifest Synchronization:**
+   * `rulepack-manifest.json` tracks the full polyglot catalog (Python, JS/TS, Go, PHP) across standard, extended, and CI scan profiles.
+
+### AI Reasoning & Trade-off Analysis
+
+* **Zero Additional Overhead:** Leverages existing Dockerized Semgrep infrastructure without adding extra container runners.
+* **Standardized Remediation:** Go and PHP findings immediately benefit from ARVE's unified 3-level developer remediation guidance and code diffs.
+
+---
+
+## ADR-040: CodeQL Integration & Future Engine Architecture Specification
+
+### Context
+
+Semgrep provides fast, lightweight pattern-matching SAST. For deep inter-procedural dataflow, taint tracking across complex abstraction layers, and compiler-level AST analysis, GitHub CodeQL represents the industry standard deep SAST engine. A standardized integration contract is required to plug CodeQL seamlessly into ARVE's multi-engine pipeline.
+
+### Decision
+
+1. **Pluggable Scanner Protocol:**
+   * Implement `CodeqlEngine` conforming to `ScannerEngine` protocol (`name = "codeql"`, `build_command`, `artifact_path`).
+   * Pinned Docker image: `mcr.microsoft.com/cstgit/codeql-container:latest` (or custom ARVE CodeQL image).
+2. **Standard SARIF 2.1.0 Ingestion:**
+   * CodeQL outputs standard SARIF 2.1.0 (`codeql.sarif`).
+   * `CodeqlFindingMapper` parses runs, results, rule metadata, and locations into canonical `NormalizedFinding` instances.
+3. **Deterministic Finding Identity:**
+   * CodeQL findings are deduplicated using ARVE's line-shift resilient SHA-256 fingerprinting:
+     `SHA-256(engine | "sast" | rule_id | file_path)`
+4. **Offline Isolation:**
+   * All QL query packs must be pre-bundled into the container image to maintain ARVE's strict air-gapped `--network=none` execution policy.

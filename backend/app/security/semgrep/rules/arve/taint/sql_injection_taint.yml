@@ -1,0 +1,30 @@
+rules:
+  - id: arve.python.sql-injection-taint
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: "Untrusted input flows directly into database query execution without parameterization."
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: sql-injection
+      technology: [python, flask, fastapi, django]
+      arve_title: "SQL Injection Risk (Taint Flow)"
+    pattern-sources:
+      - pattern: flask.request.args.get(...)
+      - pattern: flask.request.form[...]
+      - pattern: flask.request.values[...]
+      - pattern: request.GET[...]
+      - pattern: request.POST[...]
+      - pattern: request.query_params[...]
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: float(...)
+      - pattern: uuid.UUID(...)
+    pattern-sinks:
+      - pattern: $CURSOR.execute(...)
+      - pattern: $DB.session.execute(...)
+      - pattern: $CONNECTION.execute(...)

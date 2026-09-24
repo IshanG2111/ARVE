@@ -34,23 +34,31 @@ async def firebase_login(
     if not firebase_uid:
         raise HTTPException(status_code=401, detail="Firebase token did not contain a user ID")
 
+    github_id = fb_data.get("github_id")
+    username = fb_data.get("github_username")
+
     email = fb_data.get("email")
     if not email:
-        raise HTTPException(status_code=401, detail="Firebase token did not contain an email")
+        username_hint = username or github_id or firebase_uid
+        email = f"{username_hint}@users.noreply.github.com"
 
-    name = fb_data.get("name") or "Firebase User"
+    name = fb_data.get("name") or username or "Firebase User"
     avatar = fb_data.get("picture")
-    username = fb_data.get("github_username") or email.split("@", 1)[0]
-    github_id = fb_data.get("github_id")
+    if not username:
+        username = email.split("@", 1)[0]
 
-    user = db.query(User).filter(
-        (User.firebase_uid == firebase_uid) | (User.email == email)
-    ).first()
+    user = None
+    if firebase_uid:
+        user = db.query(User).filter(User.firebase_uid == firebase_uid).first()
+    if not user and github_id:
+        user = db.query(User).filter(User.github_id == str(github_id)).first()
+    if not user and email:
+        user = db.query(User).filter(User.email == email).first()
 
     if not user:
         user = User(
             firebase_uid=firebase_uid,
-            github_id=github_id,
+            github_id=str(github_id) if github_id else None,
             email=email,
             full_name=name,
             username=username,
@@ -63,11 +71,11 @@ async def firebase_login(
     else:
         user.firebase_uid = firebase_uid
         if github_id:
-            user.github_id = github_id
+            user.github_id = str(github_id)
         if avatar:
             user.avatar_url = avatar
             user.github_avatar = avatar
-        if username:
+        if username and not user.username:
             user.username = username
             user.github_login = username
         if payload.github_access_token:

@@ -25,5 +25,8 @@ celery_app.conf.update(
     task_soft_time_limit=settings.SCANNER_GLOBAL_TIMEOUT_SECONDS + 30,
     task_always_eager=settings.CELERY_TASK_ALWAYS_EAGER,
     task_eager_propagates=settings.CELERY_TASK_EAGER_PROPAGATES,
+    broker_connection_retry_on_startup=True,
+    broker_transport_options={"visibility_timeout": 3600},
+    result_expires=86400,
     include=["app.scanner.tasks"],
 )

@@ -57,6 +57,8 @@ class TestOsvRegistryIntegration:
     def test_registry_includes_osv_when_enabled(self, monkeypatch):
         monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", True)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_TEST_ENGINE", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
 
         registry = build_default_registry()
         engines = registry.list()
@@ -67,6 +69,8 @@ class TestOsvRegistryIntegration:
     def test_registry_excludes_osv_when_disabled(self, monkeypatch):
         monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", False)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_TEST_ENGINE", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
 
         registry = build_default_registry()
         engines = registry.list()

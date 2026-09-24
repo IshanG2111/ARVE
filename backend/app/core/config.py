@@ -54,8 +54,13 @@ class Settings(BaseSettings):
     SCANNER_OSV_IMAGE: str = "ghcr.io/google/osv-scanner:v1.9.2"
     SCANNER_ENABLE_GITLEAKS: bool = True
     SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/gitleaks/gitleaks:v8.24.2"
+    SCANNER_ENABLE_SEMGREP: bool = True
+    SCANNER_SEMGREP_IMAGE: str = "semgrep/semgrep:1.90.0"
+    SCANNER_SEMGREP_CONFIG: str = "auto"
+    SCANNER_SEMGREP_RULES_PATH: Optional[str] = None
     SCANNER_NETWORK_MODE: str = "none"
     SCANNER_OSV_NETWORK: str = "bridge"
+    SCANNER_SEMGREP_NETWORK: str = "none"
 
     B2_ENDPOINT: Optional[str] = None
     B2_REGION: Optional[str] = None

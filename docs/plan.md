@@ -547,10 +547,17 @@ User-controlled ID reaches a database
 lookup without an ownership check.
 ```
 
+### Implemented Engines (Phase 4A)
+- **OSV-Scanner** (Dependency / SCA vulnerabilities)
+- **Gitleaks** (Hardcoded credentials & secret scanning with redaction)
+- **Semgrep** (SAST code patterns, injection, taint flows, weak cryptography, insecure TLS)
+
+All three scanners normalize into the unified `NormalizedFinding` contract and persist to `security_findings`.
+
 ## Deliverable
 
 ARVE scans a repository and produces reliable, structured findings with
-source-code evidence.
+source-code evidence across dependencies, secrets, and static application code.
 
 ------------------------------------------------------------------------
 

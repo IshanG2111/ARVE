@@ -59,7 +59,13 @@ class DockerRunner:
         engine_command: Sequence[str],
     ) -> list[str]:
         container_name = self._container_name(context.scan_id, engine_name)
-        network = getattr(settings, "SCANNER_OSV_NETWORK", "bridge") if engine_name == "osv" else getattr(settings, "SCANNER_NETWORK_MODE", "none")
+        if engine_name == "osv":
+            network = getattr(settings, "SCANNER_OSV_NETWORK", "bridge")
+        elif engine_name == "semgrep":
+            network = getattr(settings, "SCANNER_SEMGREP_NETWORK", "none")
+        else:
+            network = getattr(settings, "SCANNER_NETWORK_MODE", "none")
+
         command = [
             self.docker_binary,
             "run",
@@ -68,6 +74,8 @@ class DockerRunner:
             container_name,
             f"--network={network}",
             "--read-only",
+            "--tmpfs",
+            "/tmp:rw",
             "--memory",
             settings.SCANNER_MEMORY_LIMIT,
             "--cpus",
@@ -79,7 +87,17 @@ class DockerRunner:
             "--mount",
             f"type=bind,source={context.output_path.resolve()},target=/output",
         ]
-        for key, value in sorted(context.environment.items()):
+        if engine_name == "semgrep":
+            from app.security.semgrep.rules import get_default_rules_directory
+
+            rules_dir = get_default_rules_directory()
+            if rules_dir.exists():
+                command.extend([
+                    "--mount",
+                    f"type=bind,source={rules_dir.resolve()},target=/rules,readonly",
+                ])
+        merged_env = {"HOME": "/tmp", **context.environment}
+        for key, value in sorted(merged_env.items()):
             command.extend(["--env", f"{key}={value}"])
         command.extend([image, *engine_command])
         return command

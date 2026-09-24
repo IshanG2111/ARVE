@@ -39,54 +39,37 @@ export const LandingPage: React.FC = () => {
 
   return (
     <div
-      className="landing-page"
       style={{
         position: 'relative',
         minHeight: '100vh',
+        background: 'var(--bg)',
+        color: 'var(--primary)',
+        overflowX: 'hidden',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
-        overflow: 'hidden',
       }}
     >
-      <HalftoneBackground interactive={true} showHero={true} />
+      <HalftoneBackground />
 
       {/* ── Phase 1: Center Showcase Reveal Overlay ── */}
       <AnimatePresence>
         {showIntro && (
           <motion.div
-            key="intro-showcase"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, scale: 0.96, filter: 'blur(8px)' }}
+            key="intro"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: 'fixed',
               inset: 0,
               zIndex: 100,
+              background: 'var(--bg)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              background: 'var(--bg)',
-              pointerEvents: 'none',
             }}
           >
-            <motion.div
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1.2, opacity: 0.6 }}
-              exit={{ opacity: 0, scale: 1.4 }}
-              transition={{ duration: 1.1, ease: 'easeOut' }}
-              style={{
-                position: 'absolute',
-                width: '320px',
-                height: '320px',
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(0, 82, 255, 0.18), transparent 70%)',
-                filter: 'blur(30px)',
-              }}
-            />
-
             <motion.div
               initial={{ scale: 0.88, opacity: 0, letterSpacing: '0.2em' }}
               animate={{ scale: 1, opacity: 1, letterSpacing: '0.08em' }}

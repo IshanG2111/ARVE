@@ -1,0 +1,54 @@
+rules:
+  - id: arve.python.weak-hash-md5
+    languages: [python]
+    severity: WARNING
+    message: "MD5 is a cryptographically broken hashing algorithm vulnerable to collision attacks."
+    metadata:
+      cwe: ["CWE-327: Use of a Broken or Risky Cryptographic Algorithm"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: weak-crypto
+      technology: [python]
+      arve_title: "Weak Cryptographic Algorithm"
+    pattern: hashlib.md5(...)
+
+  - id: arve.python.weak-hash-sha1
+    languages: [python]
+    severity: WARNING
+    message: "SHA-1 is a cryptographically weak hashing algorithm vulnerable to collision attacks."
+    metadata:
+      cwe: ["CWE-328: Use of Weak Hash"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: weak-crypto
+      technology: [python]
+      arve_title: "Weak Cryptographic Algorithm"
+    pattern: hashlib.sha1(...)
+
+  - id: arve.python.insecure-tls-verify-false
+    languages: [python]
+    severity: ERROR
+    message: "Disabling TLS certificate verification (verify=False) exposes the application to machine-in-the-middle attacks."
+    metadata:
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: insecure-tls
+      technology: [python]
+      arve_title: "Insecure TLS Configuration"
+    patterns:
+      - pattern-either:
+          - pattern: requests.get(..., verify=False, ...)
+          - pattern: requests.post(..., verify=False, ...)
+          - pattern: requests.put(..., verify=False, ...)
+          - pattern: requests.delete(..., verify=False, ...)
+          - pattern: requests.request(..., verify=False, ...)
+          - pattern: httpx.get(..., verify=False, ...)
+          - pattern: httpx.post(..., verify=False, ...)
+          - pattern: httpx.Client(..., verify=False, ...)

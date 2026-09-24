@@ -1,0 +1,78 @@
+rules:
+  - id: arve.php.sql-injection
+    languages: [php]
+    severity: ERROR
+    message: "Detected database query formatted with dynamic user input or string concatenation. Use PDO prepared statements with parameter binding."
+    metadata:
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: sql-injection
+      technology: [php]
+      arve_title: "SQL Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: $DB->query("..." . $VAR)
+          - pattern: $DB->query("... $VAR ...")
+          - pattern: $DB->exec("..." . $VAR)
+          - pattern: mysqli_query($CONN, "..." . $VAR)
+          - pattern: mysqli_query($CONN, "... $VAR ...")
+
+  - id: arve.php.command-injection
+    languages: [php]
+    severity: ERROR
+    message: "Untrusted input passed to system, exec, or shell_exec functions can allow arbitrary command execution."
+    metadata:
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: command-injection
+      technology: [php]
+      arve_title: "Command Injection Risk"
+    patterns:
+      - pattern-either:
+          - pattern: system("..." . $CMD, ...)
+          - pattern: exec("..." . $CMD, ...)
+          - pattern: shell_exec("..." . $CMD)
+          - pattern: passthru("..." . $CMD, ...)
+          - pattern: popen("..." . $CMD, ...)
+
+  - id: arve.php.eval-injection
+    languages: [php]
+    severity: ERROR
+    message: "Using eval() executes arbitrary PHP code dynamically, creating critical remote code execution risks."
+    metadata:
+      cwe: ["CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"]
+      owasp: ["A03:2021 - Injection"]
+      category: security
+      confidence: HIGH
+      provenance: arve
+      remediation_id: code-injection
+      technology: [php]
+      arve_title: "Arbitrary Code Execution Risk"
+    pattern: eval(...)
+
+  - id: arve.php.path-traversal
+    languages: [php]
+    severity: ERROR
+    message: "Unsanitized path passed to file inclusion (include, require) or file read operations permits path traversal."
+    metadata:
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      category: security
+      confidence: MEDIUM
+      provenance: arve
+      remediation_id: path-traversal
+      technology: [php]
+      arve_title: "Path Traversal Risk"
+    patterns:
+      - pattern-either:
+          - pattern: include("..." . $PATH)
+          - pattern: require("..." . $PATH)
+          - pattern: include_once("..." . $PATH)
+          - pattern: require_once("..." . $PATH)
+          - pattern: file_get_contents("..." . $PATH)

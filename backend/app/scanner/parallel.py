@@ -13,7 +13,7 @@ from app.scanner.exceptions import ScanOrchestrationError, ScanValidationError, 
 from app.scanner.interfaces import EngineExecutionStatus, ScannerExecutionResult
 from app.scanner.service import ScanExecutionService, build_default_registry
 from app.scanner.state_machine import ScanStateMachine, ScanStatus
-from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper
+from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 from app.security.normalizer import FindingNormalizer
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,9 @@ class ParallelSecurityScanService(ScanExecutionService):
         scan = self.db.query(Scan).filter(Scan.id == scan_id).first()
         if not scan:
             raise ScanValidationError("Scan not found")
+        if scan.status in {ScanStatus.COMPLETED.value, ScanStatus.PARTIAL.value, ScanStatus.FAILED.value, ScanStatus.CANCELLED.value}:
+            logger.info("scan=%s is already in terminal state %s, skipping execution", scan_id, scan.status)
+            return scan
 
         workspace = None
         try:
@@ -71,7 +74,7 @@ class ParallelSecurityScanService(ScanExecutionService):
             deadline = time.monotonic() + settings.SCANNER_GLOBAL_TIMEOUT_SECONDS
             results: dict[str, ScannerExecutionResult] = {}
             all_db_findings = []
-            mappers = [OsvFindingMapper(), GitleaksFindingMapper()]
+            mappers = [OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()]
             normalizer = FindingNormalizer(mappers)
 
             def run_one(engine):
@@ -252,12 +255,16 @@ class ParallelSecurityScanService(ScanExecutionService):
 
 
 def build_security_registry():
-    """Build the Phase 4A OSV + Gitleaks registry."""
+    """Build the Phase 4 security registry (OSV + Gitleaks + Semgrep)."""
     registry = build_default_registry()
-    # build_default_registry may already contain OSV.
-    if settings.SCANNER_ENABLE_GITLEAKS:
+    if getattr(settings, "SCANNER_ENABLE_GITLEAKS", True):
         from app.scanner.engines.gitleaks import GitleaksEngine
 
         if not any(engine.name == "gitleaks" for engine in registry.list()):
             registry.register(GitleaksEngine())
+    if getattr(settings, "SCANNER_ENABLE_SEMGREP", True):
+        from app.scanner.engines.semgrep import SemgrepEngine
+
+        if not any(engine.name == "semgrep" for engine in registry.list()):
+            registry.register(SemgrepEngine())
     return registry

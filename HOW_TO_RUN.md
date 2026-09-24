@@ -212,6 +212,29 @@ Leave this terminal running.
 
 ---
 
+# 9. Verify System & Celery Health
+
+Check health endpoint from any terminal:
+
+```cmd
+curl http://localhost:8000/health
+```
+
+Expected output:
+```json
+{
+  "status": "healthy",
+  "queue_backend": "celery",
+  "services": {
+    "database": {"status": "ok"},
+    "redis": {"status": "ok"},
+    "celery": {"status": "ok", "active_workers": 1, "workers": ["celery@..."]}
+  }
+}
+```
+
+---
+
 # 10. Start Frontend
 
 Open **Terminal 3**.
