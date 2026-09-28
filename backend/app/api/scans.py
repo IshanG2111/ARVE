@@ -253,7 +253,15 @@ def get_engine_artifact(
                 try:
                     resp = client.get_object(Bucket=store.bucket, Key=object_key)
                     content = resp["Body"].read().decode("utf-8")
-                    return json.loads(content)
+                    try:
+                        return json.loads(content)
+                    except json.JSONDecodeError as exc:
+                        raise HTTPException(
+                            status_code=502,
+                            detail=f"Stored {engine_name} artifact is not valid JSON/SARIF: {exc}",
+                        ) from exc
+                except HTTPException:
+                    raise
                 except Exception:
                     continue
         except Exception as exc:
