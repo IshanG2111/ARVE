@@ -36,16 +36,16 @@ def test_build_command(context):
     command = list(SemgrepEngine().build_command(context))
     assert command[0] == "semgrep"
     assert command[1] == "scan"
-    assert "--json" in command
+    assert "--sarif" in command
     assert "--output" in command
-    assert "/output/semgrep.json" in command
+    assert "/output/semgrep.sarif" in command
     assert "--metrics=off" in command
     assert "--disable-version-check" in command
     assert "/code" in command
 
 
 def test_artifact_path(context):
-    assert SemgrepEngine().artifact_path(context) == context.output_path / "semgrep.json"
+    assert SemgrepEngine().artifact_path(context) == context.output_path / "semgrep.sarif"
 
 
 def test_registry_includes_semgrep_when_enabled(monkeypatch):
@@ -74,9 +74,9 @@ def test_registry_excludes_semgrep_when_disabled(monkeypatch):
 
 def test_exit_code_zero_with_artifact_is_success(context):
     engine = SemgrepEngine()
-    artifact = context.output_path / "semgrep" / "semgrep.json"
+    artifact = context.output_path / "semgrep" / "semgrep.sarif"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text('{"results": []}', encoding="utf-8")
+    artifact.write_text('{"version": "2.1.0", "runs": []}', encoding="utf-8")
 
     runner = MagicMock()
     runner.run.return_value = DockerRunResult(
@@ -102,7 +102,7 @@ def test_exit_code_one_with_artifact_is_success(context):
     engine = SemgrepEngine()
     artifact = context.output_path / "semgrep" / "semgrep.json"
     artifact.parent.mkdir(parents=True, exist_ok=True)
-    artifact.write_text('{"results": [{"check_id": "test"}]}', encoding="utf-8")
+    artifact.write_text('{"version": "2.1.0", "runs": []}', encoding="utf-8")
 
     runner = MagicMock()
     runner.run.return_value = DockerRunResult(
