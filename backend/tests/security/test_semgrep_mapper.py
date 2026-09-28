@@ -86,6 +86,27 @@ def test_map_findings_artifact():
     assert crypto.cwe == "CWE-327"
 
 
+def test_map_sarif_artifact():
+    raw = (FIXTURES_DIR / "semgrep_findings.sarif").read_text(encoding="utf-8")
+    mapper = SemgrepFindingMapper()
+    findings = mapper.map_artifact(raw)
+    assert len(findings) == 1
+
+    finding = findings[0]
+    assert finding.engine == "semgrep"
+    assert finding.finding_type == FindingType.SAST.value
+    assert finding.title == "SQL Injection Risk"
+    assert finding.severity == FindingSeverity.HIGH
+    assert finding.confidence == FindingConfidence.HIGH
+    assert finding.file_path == "app/users.py"
+    assert finding.line_start == 42
+    assert finding.line_end == 42
+    assert finding.rule_id == "arve.python.sql-injection"
+    assert finding.cwe == "CWE-89"
+    assert finding.raw_json["rule_id"] == "arve.python.sql-injection"
+    assert finding.raw_json["engine_version"] == "1.90.0"
+
+
 def test_map_malformed_json():
     raw = (FIXTURES_DIR / "semgrep_malformed.json").read_text(encoding="utf-8")
     mapper = SemgrepFindingMapper()
