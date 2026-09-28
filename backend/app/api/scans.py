@@ -236,10 +236,6 @@ def get_engine_artifact(
             expected_names = (
                 f"{engine_name}.sarif",
                 f"{engine_name}.json",
-                "semgrep.sarif",
-                "semgrep.json",
-                "osv.json",
-                "gitleaks.json",
             )
             prefix = f"{store.prefix}/{scan.id}/{engine_name}/"
             candidate_keys = [
