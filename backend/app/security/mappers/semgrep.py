@@ -1,6 +1,7 @@
-"""Semgrep SAST JSON -> ARVE canonical NormalizedFinding mapper."""
+"""Semgrep SAST SARIF/JSON -> ARVE canonical NormalizedFinding mapper."""
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any, Optional
@@ -14,7 +15,7 @@ from app.security.models import (
     FindingType,
     NormalizedFinding,
 )
-from app.security.semgrep.parser import parse_semgrep_output
+from app.security.semgrep.parser import parse_semgrep_output, parse_semgrep_sarif
 from app.security.semgrep.remediation import lookup_remediation
 from app.security.semgrep.rules import get_rulepack_version
 from app.security.severity import normalize_severity
@@ -53,7 +54,7 @@ def extract_primary_cwe(cwes: list[str]) -> Optional[str]:
 
 
 class SemgrepFindingMapper(FindingMapper):
-    """Maps native Semgrep JSON output into ARVE canonical NormalizedFinding objects."""
+    """Maps native Semgrep SARIF (and legacy JSON) output into ARVE canonical NormalizedFinding objects."""
 
     @property
     def engine_name(self) -> str:
@@ -65,7 +66,23 @@ class SemgrepFindingMapper(FindingMapper):
         context: Optional[dict[str, Any]] = None,
     ) -> list[NormalizedFinding]:
         """Parse raw Semgrep output and return normalized ARVE security findings."""
-        semgrep_output = parse_semgrep_output(raw_content)
+        # Persisted ARVE Semgrep artifacts are SARIF. Keep native JSON
+        # parsing for existing fixtures/backward compatibility.
+        is_sarif = False
+        if isinstance(raw_content, dict):
+            is_sarif = isinstance(raw_content.get("runs"), list)
+        elif isinstance(raw_content, str):
+            try:
+                parsed_probe = json.loads(raw_content)
+                is_sarif = isinstance(parsed_probe, dict) and isinstance(parsed_probe.get("runs"), list)
+            except Exception:
+                is_sarif = False
+
+        semgrep_output = (
+            parse_semgrep_sarif(raw_content)
+            if is_sarif
+            else parse_semgrep_output(raw_content)
+        )
         if not semgrep_output.results:
             return []
 

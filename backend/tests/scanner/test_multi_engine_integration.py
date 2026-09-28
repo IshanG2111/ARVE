@@ -56,12 +56,17 @@ def test_multi_engine_normalization_pipeline():
     assert all(f.engine == "gitleaks" for f in gitleaks_norm)
     assert all(f.finding_type == FindingType.SECRET.value for f in gitleaks_norm)
 
-    # 3. Semgrep Artifact
-    semgrep_raw = (FIXTURES_DIR / "semgrep" / "semgrep_findings.json").read_text(encoding="utf-8")
+    # 3. Semgrep SARIF Artifact
+    semgrep_raw = (FIXTURES_DIR / "semgrep" / "semgrep_findings.sarif").read_text(encoding="utf-8")
     semgrep_norm = normalizer.normalize_artifact("semgrep", semgrep_raw)
-    assert len(semgrep_norm) == 5
+    assert len(semgrep_norm) == 1
     assert all(f.engine == "semgrep" for f in semgrep_norm)
     assert all(f.finding_type == FindingType.SAST.value for f in semgrep_norm)
+
+    # Backward compatibility: the legacy native Semgrep JSON parser remains usable.
+    semgrep_legacy_raw = (FIXTURES_DIR / "semgrep" / "semgrep_findings.json").read_text(encoding="utf-8")
+    semgrep_legacy_norm = normalizer.normalize_artifact("semgrep", semgrep_legacy_raw)
+    assert len(semgrep_legacy_norm) == 5
 
     # Combined database model conversion
     all_findings = osv_norm + gitleaks_norm + semgrep_norm

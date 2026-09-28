@@ -42,9 +42,9 @@ class SemgrepEngine:
         return [
             "semgrep",
             "scan",
-            "--json",
+            "--sarif",
             "--output",
-            "/output/semgrep.json",
+            "/output/semgrep.sarif",
             "--metrics=off",
             "--disable-version-check",
             "--quiet",
@@ -54,8 +54,8 @@ class SemgrepEngine:
         ]
 
     def artifact_path(self, context: ScannerExecutionContext) -> Path:
-        """Return the expected raw Semgrep JSON artifact path on the host."""
-        return context.output_path / "semgrep.json"
+        """Return the expected raw Semgrep SARIF artifact path on the host."""
+        return context.output_path / "semgrep.sarif"
 
 
 # Verify static protocol compliance

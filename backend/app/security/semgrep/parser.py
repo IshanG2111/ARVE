@@ -135,6 +135,9 @@ def parse_semgrep_output(raw_content: Union[str, dict[str, Any], list[Any], None
             logger.warning("Failed to parse Semgrep output as JSON: %s", exc)
             return SemgrepOutput(errors=[{"message": f"Malformed JSON: {exc}"}])
 
+    if isinstance(data, dict) and isinstance(data.get("runs"), list):
+        return parse_semgrep_sarif(data)
+
     if isinstance(data, list):
         # Alternate/older Semgrep format: list of matches directly
         raw_results = data
@@ -216,3 +219,155 @@ def parse_semgrep_output(raw_content: Union[str, dict[str, Any], list[Any], None
         paths_skipped=skipped_paths,
         version=version,
     )
+
+
+def _sarif_level_to_severity(level: Any) -> str:
+    """Map SARIF result levels to Semgrep severity vocabulary."""
+    normalized = str(level or "warning").strip().lower()
+    return {"error": "ERROR", "warning": "WARNING", "note": "INFO", "none": "INFO"}.get(
+        normalized, "WARNING"
+    )
+
+
+def parse_semgrep_sarif(raw_content: Union[str, dict[str, Any], None]) -> SemgrepOutput:
+    """Parse Semgrep SARIF 2.1.0 output into the internal SemgrepOutput model."""
+    if raw_content is None:
+        return SemgrepOutput()
+
+    data: Any = raw_content
+    if isinstance(raw_content, str):
+        cleaned = raw_content.strip()
+        if not cleaned:
+            return SemgrepOutput()
+        try:
+            data = json.loads(cleaned)
+        except Exception as exc:
+            logger.warning("Failed to parse Semgrep SARIF as JSON: %s", exc)
+            return SemgrepOutput(errors=[{"message": f"Malformed SARIF JSON: {exc}"}])
+
+    if not isinstance(data, dict):
+        return SemgrepOutput(errors=[{"message": "Semgrep SARIF root must be a JSON object"}])
+
+    runs = data.get("runs")
+    if not isinstance(runs, list):
+        return SemgrepOutput(errors=[{"message": "Semgrep SARIF is missing a runs array"}])
+
+    results: list[SemgrepResult] = []
+    version = None
+
+    for run in runs:
+        if not isinstance(run, dict):
+            continue
+
+        tool = run.get("tool") if isinstance(run.get("tool"), dict) else {}
+        driver = tool.get("driver") if isinstance(tool.get("driver"), dict) else {}
+        if version is None and driver.get("version"):
+            version = str(driver["version"])
+
+        rule_metadata: dict[str, dict[str, Any]] = {}
+        rules = driver.get("rules")
+        if isinstance(rules, list):
+            for rule in rules:
+                if not isinstance(rule, dict):
+                    continue
+                rule_id = str(rule.get("id") or "").strip()
+                if not rule_id:
+                    continue
+                props = rule.get("properties") if isinstance(rule.get("properties"), dict) else {}
+                metadata = props.get("metadata") if isinstance(props.get("metadata"), dict) else {}
+                merged = dict(metadata)
+                for key, value in props.items():
+                    if key != "metadata" and key not in merged:
+                        merged[key] = value
+                help_uri = rule.get("helpUri")
+                if help_uri:
+                    refs = merged.get("references")
+                    if not refs:
+                        merged["references"] = [str(help_uri)]
+                rule_metadata[rule_id] = merged
+
+        raw_results = run.get("results")
+        if not isinstance(raw_results, list):
+            continue
+
+        for result in raw_results:
+            if not isinstance(result, dict):
+                continue
+
+            rule_id = str(result.get("ruleId") or "semgrep.unknown").strip()
+            props = result.get("properties") if isinstance(result.get("properties"), dict) else {}
+            metadata = dict(rule_metadata.get(rule_id, {}))
+            result_metadata = props.get("metadata")
+            if isinstance(result_metadata, dict):
+                metadata.update(result_metadata)
+            for key, value in props.items():
+                if key != "metadata" and key not in metadata:
+                    metadata[key] = value
+
+            message_obj = result.get("message")
+            if isinstance(message_obj, dict):
+                message = str(message_obj.get("text") or "Semgrep finding").strip()
+            else:
+                message = str(message_obj or "Semgrep finding").strip()
+
+            locations = result.get("locations")
+            location = locations[0] if isinstance(locations, list) and locations else {}
+            physical = location.get("physicalLocation") if isinstance(location, dict) else {}
+            artifact_location = (
+                physical.get("artifactLocation")
+                if isinstance(physical, dict)
+                else {}
+            )
+            region = physical.get("region") if isinstance(physical, dict) else {}
+
+            path = str(
+                artifact_location.get("uri")
+                or artifact_location.get("uriBaseId")
+                or ""
+            ).strip()
+
+            try:
+                start_line = int(region.get("startLine", 1))
+            except (TypeError, ValueError):
+                start_line = 1
+            try:
+                end_line = int(region.get("endLine", start_line))
+            except (TypeError, ValueError):
+                end_line = start_line
+            start_line = max(1, start_line)
+            end_line = max(start_line, end_line)
+
+            sarif_metadata = _parse_metadata(metadata)
+            result_semgrep = props.get("semgrep") if isinstance(props.get("semgrep"), dict) else {}
+
+            lines = props.get("lines")
+            lines = str(lines) if lines is not None else None
+            fix = result_semgrep.get("fix")
+            fix = str(fix) if fix is not None else None
+            dataflow_trace = result_semgrep.get("dataflow_trace")
+            dataflow_trace = dataflow_trace if isinstance(dataflow_trace, dict) else None
+
+            results.append(
+                SemgrepResult(
+                    check_id=rule_id,
+                    path=path,
+                    start=SemgrepLocation(
+                        line=start_line,
+                        col=region.get("startColumn") if isinstance(region, dict) else None,
+                    ),
+                    end=SemgrepLocation(
+                        line=end_line,
+                        col=region.get("endColumn") if isinstance(region, dict) else None,
+                    ),
+                    message=message,
+                    severity=_sarif_level_to_severity(result.get("level")),
+                    metadata=sarif_metadata,
+                    lines=lines,
+                    dataflow_trace=dataflow_trace,
+                    fix=fix,
+                    metavars={},
+                    raw=result,
+                )
+            )
+
+    return SemgrepOutput(results=results, version=version)

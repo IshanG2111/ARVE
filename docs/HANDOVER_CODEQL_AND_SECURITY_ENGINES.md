@@ -20,7 +20,7 @@ Repository Snapshot (Phase 2 Cloned Workspace)
 Semgrep Engine   OSV Engine     Gitleaks Engine     [CodeQL Engine]      [Future Engine]
 (Lightweight)       (SCA)           (Secrets)         (Deep SAST)
   │                  │                  │                  │
-  │ semgrep.json     │ osv.json         │ gitleaks.json    │ codeql.sarif
+  │ semgrep.sarif    │ osv.json         │ gitleaks.json    │ codeql.sarif
   ▼                  ▼                  ▼                  ▼
 SemgrepMapper     OsvMapper       GitleaksMapper     [CodeqlMapper]
   │                  │                  │                  │

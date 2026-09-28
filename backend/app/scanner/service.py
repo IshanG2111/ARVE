@@ -369,20 +369,20 @@ class ScanExecutionService:
                             from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 
                             normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()])
-                            artifact_candidates = []
                             engine_artifact = result.artifact_path
-                            if engine_artifact:
-                                artifact_candidates.append(engine_artifact)
-                            artifact_candidates.extend(
+                            candidates = (
+                                [engine_artifact] if engine_artifact else []
+                            )
+                            # Fallback names are retained for engines whose artifact
+                            # path is not available in older runs/tests.
+                            candidates.extend(
                                 [
-                                    engine_dir / "osv.json",
-                                    engine_dir / "gitleaks.json",
-                                    engine_dir / "semgrep.json",
+                                    engine_dir / f"{engine.name}.sarif",
                                     engine_dir / f"{engine.name}.json",
                                 ]
                             )
-                            for cand in artifact_candidates:
-                                if cand.exists() and cand.stat().st_size > 0:
+                            for cand in candidates:
+                                if cand and cand.exists() and cand.stat().st_size > 0:
                                     raw_text = cand.read_text(encoding="utf-8")
                                     norm_findings = normalizer.normalize_artifact(engine.name, raw_text)
                                     db_findings = FindingNormalizer.to_db_models(

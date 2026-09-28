@@ -138,7 +138,9 @@ class ScanArtifactStore:
         """Upload every output file and return its B2 object prefix.
 
         The source is the temporary Docker output directory. Nothing under
-        B2 is made public. The caller owns temporary workspace cleanup.
+        B2 is made public. Native scanner artifacts are preserved exactly as
+        produced by each engine (for example, Semgrep SARIF or OSV JSON).
+        The caller owns temporary workspace cleanup.
         """
         files = self._iter_files(output_dir)
         if not files:

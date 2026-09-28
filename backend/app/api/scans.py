@@ -232,12 +232,36 @@ def get_engine_artifact(
         try:
             store = ScanArtifactStore()
             client = store._get_client()
-            for cand_filename in (f"{engine_name}.json", "osv.json"):
-                object_key = f"{store.prefix}/{scan.id}/{engine_name}/{cand_filename}"
+            # Resolve the actual persisted object key instead of assuming JSON.
+            expected_names = (
+                f"{engine_name}.sarif",
+                f"{engine_name}.json",
+            )
+            prefix = f"{store.prefix}/{scan.id}/{engine_name}/"
+            candidate_keys = [
+                key for key in store.list_scan_artifacts(scan.id)
+                if key.startswith(prefix)
+            ]
+            ordered_keys = sorted(
+                candidate_keys,
+                key=lambda key: (
+                    0 if key.rsplit("/", 1)[-1] in expected_names else 1,
+                    key,
+                ),
+            )
+            for object_key in ordered_keys:
                 try:
                     resp = client.get_object(Bucket=store.bucket, Key=object_key)
                     content = resp["Body"].read().decode("utf-8")
-                    return json.loads(content)
+                    try:
+                        return json.loads(content)
+                    except json.JSONDecodeError as exc:
+                        raise HTTPException(
+                            status_code=502,
+                            detail=f"Stored {engine_name} artifact is not valid JSON/SARIF: {exc}",
+                        ) from exc
+                except HTTPException:
+                    raise
                 except Exception:
                     continue
         except Exception as exc:
