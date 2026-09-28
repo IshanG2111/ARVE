@@ -496,7 +496,9 @@ export const AnalysisPage: React.FC = () => {
                               {s.progress_percent}%
                             </td>
                             <td style={{ color: 'var(--muted)', fontSize: '11.5px' }}>
-                              {new Date(s.created_at || s.started_at || Date.now()).toLocaleString(undefined, {
+                              {new Date(
+                                  `${s.created_at || s.started_at || new Date().toISOString()}Z`
+                              ).toLocaleString(undefined, {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
@@ -581,7 +583,7 @@ export const AnalysisPage: React.FC = () => {
                             <td style={{ fontFamily: 'var(--font-code)', fontWeight: 600 }}>{r.files_ingested}</td>
                             <td style={{ fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>{r.files_skipped}</td>
                             <td style={{ color: 'var(--muted)', fontSize: '11.5px' }}>
-                              {new Date(r.started_at).toLocaleString(undefined, {
+                              {new Date(`${r.started_at}Z`).toLocaleString(undefined, {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
