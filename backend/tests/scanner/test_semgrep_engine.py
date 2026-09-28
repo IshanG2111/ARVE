@@ -100,7 +100,7 @@ def test_exit_code_zero_with_artifact_is_success(context):
 
 def test_exit_code_one_with_artifact_is_success(context):
     engine = SemgrepEngine()
-    artifact = context.output_path / "semgrep" / "semgrep.json"
+    artifact = context.output_path / "semgrep" / "semgrep.sarif"
     artifact.parent.mkdir(parents=True, exist_ok=True)
     artifact.write_text('{"version": "2.1.0", "runs": []}', encoding="utf-8")
 
