@@ -379,6 +379,7 @@ class ScanExecutionService:
                                     engine_dir / "gitleaks.json",
                                     engine_dir / "semgrep.sarif",
                                     engine_dir / "semgrep.json",
+                                    engine_dir / f"{engine.name}.sarif",
                                     engine_dir / f"{engine.name}.json",
                                 ]
                             )
