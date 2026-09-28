@@ -42,9 +42,9 @@ class SemgrepEngine:
         return [
             "semgrep",
             "scan",
-            "--json",
+            "--sarif",
             "--output",
-            "/output/semgrep.json",
+            "/output/semgrep.sarif",
             "--metrics=off",
             "--disable-version-check",
             "--quiet",
