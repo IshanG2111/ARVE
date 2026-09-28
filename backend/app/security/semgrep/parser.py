@@ -135,6 +135,9 @@ def parse_semgrep_output(raw_content: Union[str, dict[str, Any], list[Any], None
             logger.warning("Failed to parse Semgrep output as JSON: %s", exc)
             return SemgrepOutput(errors=[{"message": f"Malformed JSON: {exc}"}])
 
+    if isinstance(data, dict) and isinstance(data.get("runs"), list):
+        return parse_semgrep_sarif(data)
+
     if isinstance(data, list):
         # Alternate/older Semgrep format: list of matches directly
         raw_results = data
