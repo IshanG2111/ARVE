@@ -576,13 +576,15 @@ Large video assets (`.mp4`, `.mov`) and image files (`.gif`, `.png`, `.jpg`) pre
 ## ADR-025: Ephemeral Scan Workspaces with Direct Backblaze B2 S3 Upload
 
 ### Context
-Docker containers executing scanner engines generate large raw JSON output artifacts (e.g., `osv.json`, `gitleaks.json`, `semgrep.json`). Retaining these temporary output directories indefinitely on the local container filesystem risks exhausting disk capacity during high-throughput scanning.
+Docker containers executing scanner engines generate raw security artifacts (OSV JSON, Gitleaks JSON, and Semgrep SARIF). These artifacts are written to temporary engine output directories and must not remain on the local worker after successful persistence.
 
 ### Decision
-1. When a scanner completes, `ScanArtifactStore.persist_output()` immediately uploads the JSON artifact to Backblaze B2 cloud storage via its S3-compatible API under `b2://arve-scan-artifacts/scans/{scan_id}/{engine_name}/{filename}`.
-2. The database stores the persistent cloud URI in `scan_engine_runs.artifact_reference`.
-3. The local temporary scratch directory is immediately and safely destroyed (`shutil.rmtree`).
-4. `GET /api/scans/{scan_id}/engines/{engine_name}/artifact` serves the raw JSON directly from Backblaze B2 to the frontend.
+1. When a scanner completes, `ScanArtifactStore.persist_output()` uploads the engine artifact to Backblaze B2 through its S3-compatible API under `b2://arve-scan-artifacts/scans/{scan_id}/{engine_name}/{filename}`.
+2. Semgrep produces `semgrep.sarif`; OSV and Gitleaks continue to produce their native JSON artifacts.
+3. The database stores the persistent cloud URI prefix in `scan_engine_runs.artifact_reference`.
+4. The local temporary scanner output is destroyed after successful upload.
+5. `GET /api/scans/{scan_id}/engines/{engine_name}/artifact` resolves the persisted object key and returns JSON/SARIF artifact content to the authorized frontend.
+
 
 ### AI Reasoning & Trade-off Analysis
 - **Storage Scalability**: Centralized, cost-effective immutable cloud storage without disk leaks on scanner host nodes.
