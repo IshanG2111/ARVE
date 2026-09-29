@@ -1271,3 +1271,120 @@ engines.
     result remains usable while the scan can continue with the other engines.
 
 ---
+
+## ADR-041: Pluggable CodeQL Engine
+
+### Context  
+This keeps CodeQL independent from the orchestration layer while allowing it to use the same execution, artifact, normalization, and persistence pipeline as the other security engines.
+
+### Decision
+Implement CodeQL as a dedicated `CodeqlEngine` that follows ARVE's common `ScannerEngine` contract.
+
+### Why
+This approach allows for a more modular and maintainable architecture, where the CodeQL engine can be easily updated or replaced without affecting the rest of the system.
+
+---
+
+## ADR-042: Pinned and Verified CodeQL Container
+
+### Context
+This ensures that the CodeQL container is consistent and secure across different environments.
+
+### Decision
+Use a dedicated `arve-codeql:2.27.1` Docker image built from `docker/codeql/Dockerfile`, with the CodeQL Bundle downloaded using a pinned SHA-256 checksum.
+
+### Why
+Pinning the CodeQL version and bundle ensures that the container is consistent and secure across different environments, reducing the risk of unexpected behavior or security vulnerabilities.
+
+---
+
+## ADR-043: Multi-Language Support with Automatic Detection
+
+### Context
+Support for multiple programming languages is essential for a comprehensive security analysis.
+
+### Decision
+Support JavaScript/TypeScript, Java, Python, and Go. The CodeQL wrapper detects which supported languages are actually present in the Phase 2 repository snapshot and analyzes only those languages.
+
+### Why
+This approach allows for a more comprehensive security analysis by supporting multiple programming languages and automatically detecting which languages are present in the repository.
+
+---
+
+## ADR-044: Isolated Database per Language
+
+### Context
+Isolating CodeQL databases by language is crucial for maintaining the integrity and accuracy of the security analysis.
+
+### Decision:  
+Create a separate temporary CodeQL database for each detected language under `/tmp/codeql-db`.
+
+### Why:  
+Language-specific databases keep analysis isolated and prevent one language's database or build process from interfering with another. These databases remain temporary and are never exposed through the scanner output mount.
+
+---
+
+## ADR-045: 5. Native SARIF Output and Merging
+
+### Context
+Producing native SARIF output and merging results is essential for a standardized and consistent security analysis.
+
+### Decision
+Each CodeQL language analysis produces native SARIF 2.1.0 output. The wrapper merges the successful language results into a single:
+
+`/output/codeql.sarif`
+
+### Why  
+SARIF provides a standard security-result format while the merged artifact gives ARVE one consistent CodeQL artifact to persist and process.
+
+---
+
+## ADR-046: 6. Offline CodeQL Execution
+
+### Context
+Running CodeQL in an offline environment is crucial for maintaining security and preventing data leakage.
+
+### Decision  
+Run CodeQL with Docker network isolation (`--network=none`). CodeQL query packs are bundled inside the pinned Docker image and runtime query downloads are disabled.
+
+### Why  
+CodeQL does not need external network access during scanning. This improves security, makes execution deterministic, and prevents repository or scan information from being unnecessarily exposed to external services.
+
+---
+
+## ADR-047: 7. ARVE Canonical Finding Normalization
+
+### Context
+Normalizing security findings into a canonical format is essential for consistent analysis and reporting.
+
+### Decision
+Use `CodeqlFindingMapper` to convert CodeQL SARIF results into ARVE's shared `NormalizedFinding` contract.
+
+The mapper extracts relevant:
+
+- Rule metadata
+- Security severity
+- Confidence
+- Source locations
+- CWE/OWASP information
+- Technical CodeQL metadata
+
+### Why
+CodeQL-specific output remains isolated at the mapper boundary while the rest of ARVE can consume findings through the same canonical security model used by OSV, Gitleaks, and Semgrep.
+
+---
+
+## ADR-048: 8. Parallel Execution with Failure Isolation
+
+### Context
+Executing multiple security scanners in parallel can significantly reduce the overall scan time, but it's important to ensure that a failure in one scanner doesn't compromise the results of others.
+
+### Decision
+Execute CodeQL in parallel with OSV-Scanner, Gitleaks, and Semgrep through `ParallelSecurityScanService`.
+
+If CodeQL fails or times out, the overall scan becomes `PARTIAL` rather than discarding successful results from the other engines. If CodeQL produces usable SARIF for at least one detected language despite a language-level failure, ARVE preserves and normalizes that artifact.
+
+### Why
+CodeQL is significantly more computationally expensive than some other scanners. Parallel execution reduces total scan latency, while per-engine failure isolation ensures one scanner cannot invalidate the entire security scan.
+
+---
