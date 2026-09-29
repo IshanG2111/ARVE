@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     SCANNER_ENABLE_GITLEAKS: bool = True
     SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/gitleaks/gitleaks:v8.24.2"
     SCANNER_ENABLE_SEMGREP: bool = True
+    SCANNER_ENABLE_CODEQL: bool = True
+    SCANNER_CODEQL_IMAGE: str = "arve-codeql:2.27.1"
+    SCANNER_CODEQL_QUERY_SUITE: str = "security-extended"
     SCANNER_SEMGREP_IMAGE: str = "semgrep/semgrep:1.90.0"
     SCANNER_SEMGREP_CONFIG: str = "auto"
     SCANNER_SEMGREP_RULES_PATH: Optional[str] = None
