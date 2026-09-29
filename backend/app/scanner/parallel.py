@@ -118,9 +118,22 @@ class ParallelSecurityScanService(ScanExecutionService):
                     results[engine.name] = result
                     engine_dir = workspace.output / self._safe_engine_name(engine.name)
 
-                    if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
+                    # A CodeQL run can return exit code 1 when one detected
+                    # language failed but another produced a usable merged SARIF.
+                    # Preserve and normalize/persist that artifact before marking
+                    # the engine run failed, so successful language results are not lost.
+                    if engine_dir.exists():
                         artifact_path = result.artifact_path
-                        if artifact_path and artifact_path.exists() and artifact_path.stat().st_size > 0:
+                        has_artifact = bool(
+                            artifact_path
+                            and artifact_path.exists()
+                            and artifact_path.stat().st_size > 0
+                        )
+
+                        if has_artifact and (
+                            result.status == EngineExecutionStatus.SUCCESS
+                            or engine.name == "codeql"
+                        ):
                             try:
                                 raw_text = artifact_path.read_text(encoding="utf-8")
                                 normalized = normalizer.normalize_artifact(
@@ -143,32 +156,41 @@ class ParallelSecurityScanService(ScanExecutionService):
                                     exc,
                                 )
 
-                        try:
-                            persisted = self.artifact_store.persist_output(scan_id_value, engine.name, engine_dir)
-                            if persisted:
+                        should_persist = has_artifact and (
+                            result.status == EngineExecutionStatus.SUCCESS
+                            or engine.name == "codeql"
+                        )
+                        if should_persist:
+                            try:
+                                persisted = self.artifact_store.persist_output(
+                                    scan_id_value,
+                                    engine.name,
+                                    engine_dir,
+                                )
+                                if persisted:
+                                    result = ScannerExecutionResult(
+                                        engine_name=result.engine_name,
+                                        status=result.status,
+                                        exit_code=result.exit_code,
+                                        duration_ms=result.duration_ms,
+                                        artifact_path=None,
+                                        artifact_reference=persisted,
+                                        stdout=result.stdout,
+                                        stderr=result.stderr,
+                                        error_message=result.error_message,
+                                    )
+                                    results[engine.name] = result
+                            except Exception as exc:
                                 result = ScannerExecutionResult(
-                                    engine_name=result.engine_name,
-                                    status=result.status,
+                                    engine_name=engine.name,
+                                    status=EngineExecutionStatus.FAILED,
                                     exit_code=result.exit_code,
                                     duration_ms=result.duration_ms,
-                                    artifact_path=None,
-                                    artifact_reference=persisted,
                                     stdout=result.stdout,
                                     stderr=result.stderr,
-                                    error_message=result.error_message,
+                                    error_message=f"Failed to persist scanner artifact: {exc}",
                                 )
                                 results[engine.name] = result
-                        except Exception as exc:
-                            result = ScannerExecutionResult(
-                                engine_name=engine.name,
-                                status=EngineExecutionStatus.FAILED,
-                                exit_code=result.exit_code,
-                                duration_ms=result.duration_ms,
-                                stdout=result.stdout,
-                                stderr=result.stderr,
-                                error_message=str(exc),
-                            )
-                            results[engine.name] = result
 
                     self._finish_engine_run(engine_runs[engine.name], result)
                     completed_count = len(results)
