@@ -348,6 +348,7 @@ def test_phase3_test_engine_is_opt_in(db, monkeypatch):
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_OSV", False)
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_GITLEAKS", False)
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_SEMGREP", False)
+    monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_CODEQL", False)
     assert build_default_registry().list() == []
 
     monkeypatch.setattr(config_module.settings, "SCANNER_ENABLE_TEST_ENGINE", True)
