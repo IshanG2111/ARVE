@@ -407,7 +407,7 @@ export const AnalysisPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
               <span>Progress: {latestScan.progress_percent}%</span>
               <span>Commit: {latestScan.commit_sha ? latestScan.commit_sha.slice(0, 7) : 'Snapshot'}</span>
-              <span>Engines: OSV, GitLeaks, Semgrep, CodeQL</span>
+              <span>Engines: OSV, Gitleaks, Semgrep, CodeQL</span>
             </div>
           </div>
         )}
