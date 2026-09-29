@@ -163,9 +163,7 @@ def build_codeql_scanner() -> None:
         cwd=ROOT,
     )
 
-    print("
-[OK] CodeQL scanner image build completed.")
-
+    print("\n[OK] CodeQL scanner image build completed.")
 
 def backend_dependencies() -> None:
     # Runs from ARVE/backend.
