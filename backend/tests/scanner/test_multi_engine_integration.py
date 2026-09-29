@@ -4,7 +4,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.scanner.service import build_default_registry
-from app.security.models import FindingType, NormalizedFinding
+from app.security.models import FindingType
 from app.security.normalizer import FindingNormalizer
 from app.security.mappers import CodeqlFindingMapper, GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 
