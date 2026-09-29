@@ -9,6 +9,7 @@ def test_security_registry_contains_osv_and_gitleaks(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", True)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", True)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
+    monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
 
     engines = build_security_registry().list()
     assert [engine.name for engine in engines] == ["osv", "gitleaks"]
