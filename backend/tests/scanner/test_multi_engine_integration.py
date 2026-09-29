@@ -23,6 +23,15 @@ def test_registry_contains_all_four_engines_by_default(monkeypatch):
     assert names == {"osv", "gitleaks", "semgrep", "codeql"}
 
 
+def test_four_engine_registry_order_and_normalization():
+    normalizer = FindingNormalizer([
+        OsvFindingMapper(),
+        GitleaksFindingMapper(),
+        SemgrepFindingMapper(),
+        CodeqlFindingMapper(),
+    ])
+    assert [m.engine_name for m in normalizer.mappers] == ["osv", "gitleaks", "semgrep", "codeql"]
+
 def test_multi_engine_normalization_pipeline():
     """Verify FindingNormalizer handles all four security engines."""
     normalizer = FindingNormalizer([
