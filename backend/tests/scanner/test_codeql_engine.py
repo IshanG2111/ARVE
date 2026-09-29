@@ -75,3 +75,13 @@ def test_codeql_image_is_pinned_to_cli_version():
     assert "CODEQL_SHA256=1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815" in dockerfile
     assert "zstd" in dockerfile
     assert "USER 1000:1000" in dockerfile
+    assert "GOPROXY=off" in dockerfile
+    assert "CODEQL_ENABLE_TELEMETRY=false" in dockerfile
+
+
+def test_codeql_wrapper_handles_partial_language_failures():
+    wrapper = (Path(__file__).resolve().parents[3] / "docker" / "codeql" / "run-codeql.sh").read_text(encoding="utf-8")
+    assert "FAILED_LANGUAGES=()" in wrapper
+    assert "continue" in wrapper
+    assert "exit 1" in wrapper
+    assert "all detected languages failed" in wrapper
