@@ -46,9 +46,12 @@ fi
 query_suite_for_language() {
   case "$PROFILE:$1" in
     default:javascript-typescript|security-extended:javascript-typescript) echo "codeql/javascript-queries:codeql-suites/javascript-security-extended.qls" ;;
-    default:java|security-extended:java) echo "codeql/java-queries:codeql-suites/java-code-scanning.qls" ;;
-    default:python|security-extended:python) echo "codeql/python-queries:codeql-suites/python-code-scanning.qls" ;;
-    default:go|security-extended:go) echo "codeql/go-queries:codeql-suites/go-code-scanning.qls" ;;
+    default:java) echo "codeql/java-queries:codeql-suites/java-code-scanning.qls" ;;
+    security-extended:java) echo "codeql/java-queries:codeql-suites/java-security-extended.qls" ;;
+    default:python) echo "codeql/python-queries:codeql-suites/python-code-scanning.qls" ;;
+    security-extended:python) echo "codeql/python-queries:codeql-suites/python-security-extended.qls" ;;
+    default:go) echo "codeql/go-queries:codeql-suites/go-code-scanning.qls" ;;
+    security-extended:go) echo "codeql/go-queries:codeql-suites/go-security-extended.qls" ;;
     *) return 1 ;;
   esac
 }
