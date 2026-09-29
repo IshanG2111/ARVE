@@ -134,6 +134,10 @@ Python                -> python
 Go                    -> go
 ```
 
+`security-extended` is the default configured profile. The wrapper selects the
+matching language-specific CodeQL suite. JavaScript/TypeScript, Java, and Python
+databases use the supported `none` build mode, while Go uses `autobuild`.
+
 ARVE runs CodeQL with the `security-extended` query suite and stores only:
 
 ```text
