@@ -44,3 +44,10 @@ def test_normalizer_computes_deterministic_fingerprint():
     )[0]
     assert finding.fingerprint is not None
     assert len(finding.fingerprint) == 64
+
+
+def test_codeql_mapper_normalizes_zero_padded_cwe():
+    data = json.loads(_fixture("codeql_findings.sarif"))
+    data["runs"][0]["rules"][0]["properties"]["tags"] = ["security", "external/cwe/cwe-089"]
+    findings = CodeqlFindingMapper().map_artifact(data)
+    assert findings[0].cwe == "CWE-89"
