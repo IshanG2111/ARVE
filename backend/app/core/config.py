@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     SCANNER_CPU_LIMIT: float = 1.5
     SCANNER_CONTAINER_USER: str = "1000:1000"
     SCANNER_ENGINE_TIMEOUT_SECONDS: int = 180
-    SCANNER_GLOBAL_TIMEOUT_SECONDS: int = 600
+    # Must exceed the longest engine timeout so CodeQL is not capped by the global deadline.
+    SCANNER_GLOBAL_TIMEOUT_SECONDS: int = 1500
     SCANNER_LOG_MAX_CHARS: int = 8000
 
     SCAN_QUEUE_BACKEND: str = "celery"
