@@ -1,4 +1,4 @@
-"""Parallel Phase 4A scan execution for OSV-Scanner and Gitleaks."""
+"""Parallel Phase 4A scan execution across all enabled security engines."""
 from __future__ import annotations
 
 import concurrent.futures
