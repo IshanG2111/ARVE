@@ -47,6 +47,7 @@ def test_wrapper_declares_all_required_languages():
     assert "python-security-extended.qls" in wrapper
     assert "go-code-scanning.qls" in wrapper
     assert "go-security-extended.qls" in wrapper
+    assert "--no-download" in wrapper
     assert "FAILED_LANGUAGES" in wrapper
     assert '"/tmp/codeql-db"' in wrapper
     assert '"/output/codeql.sarif"' in wrapper
