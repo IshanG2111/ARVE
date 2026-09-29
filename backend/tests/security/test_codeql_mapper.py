@@ -51,3 +51,9 @@ def test_codeql_mapper_normalizes_zero_padded_cwe():
     data["runs"][0]["rules"][0]["properties"]["tags"] = ["security", "external/cwe/cwe-089"]
     findings = CodeqlFindingMapper().map_artifact(data)
     assert findings[0].cwe == "CWE-89"
+
+
+def test_codeql_mapper_rejects_non_list_runs():
+    data = json.loads(_fixture("codeql_findings.sarif"))
+    data["runs"] = "invalid"
+    assert CodeqlFindingMapper().map_artifact(data) == []
