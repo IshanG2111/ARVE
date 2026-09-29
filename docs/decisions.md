@@ -1227,22 +1227,44 @@ While ARVE initially targeted JavaScript/TypeScript and Python codebases, modern
 
 ---
 
-## ADR-040: CodeQL Integration & Future Engine Architecture Specification
+## ADR-040: CodeQL Deep SAST Integration
 
 ### Context
 
-Semgrep provides fast, lightweight pattern-matching SAST. For deep inter-procedural dataflow, taint tracking across complex abstraction layers, and compiler-level AST analysis, GitHub CodeQL represents the industry standard deep SAST engine. A standardized integration contract is required to plug CodeQL seamlessly into ARVE's multi-engine pipeline.
+ARVE uses Semgrep for fast pattern-based SAST and CodeQL for deeper
+interprocedural/dataflow analysis. CodeQL must use the same scanner protocol,
+Docker sandbox, artifact store, and canonical finding contract as the other
+engines.
 
 ### Decision
 
-1. **Pluggable Scanner Protocol:**
-   * Implement `CodeqlEngine` conforming to `ScannerEngine` protocol (`name = "codeql"`, `build_command`, `artifact_path`).
-   * Pinned Docker image: `mcr.microsoft.com/cstgit/codeql-container:latest` (or custom ARVE CodeQL image).
-2. **Standard SARIF 2.1.0 Ingestion:**
-   * CodeQL outputs standard SARIF 2.1.0 (`codeql.sarif`).
-   * `CodeqlFindingMapper` parses runs, results, rule metadata, and locations into canonical `NormalizedFinding` instances.
-3. **Deterministic Finding Identity:**
-   * CodeQL findings are deduplicated using ARVE's line-shift resilient SHA-256 fingerprinting:
-     `SHA-256(engine | "sast" | rule_id | file_path)`
-4. **Offline Isolation:**
-   * All QL query packs must be pre-bundled into the container image to maintain ARVE's strict air-gapped `--network=none` execution policy.
+1. **Pluggable engine:** `CodeqlEngine` implements `ScannerEngine` with
+   canonical name `codeql`.
+2. **Pinned container:** ARVE builds `arve-codeql:2.27.1` from
+   `docker/codeql/Dockerfile`. The CodeQL Bundle v2.27.1 is downloaded with
+   a pinned SHA-256 verification.
+3. **Supported languages:** JavaScript/TypeScript, Java, Python, and Go.
+   The wrapper detects only languages present in the Phase 2 snapshot.
+4. **Per-language databases:** CodeQL creates temporary databases under
+   `/tmp/codeql-db`. These are never placed in the scanner output mount and
+   are removed on exit.
+5. **Native SARIF:** Each language analysis exports SARIF 2.1.0. The wrapper
+   merges the runs into `/output/codeql.sarif`.
+6. **Query profile:** `security-extended` is the default configured profile.
+7. **Offline execution:** CodeQL runs with the existing DockerRunner default
+   `--network=none`; query packs are bundled inside the image and no B2
+   credentials are passed into the container.
+8. **Artifact persistence:** The existing `ScanArtifactStore` uploads
+   `codeql.sarif` to
+   `scans/<scan-id>/codeql/codeql.sarif`. PostgreSQL stores only the cloud
+   artifact reference.
+9. **Canonical normalization:** `CodeqlFindingMapper` parses SARIF results,
+   rule metadata, locations, security severity, confidence, and CWE/OWASP
+   tags into `NormalizedFinding`. Existing fingerprinting and database
+   persistence are reused.
+10. **Parallel orchestration:** `ParallelSecurityScanService` starts CodeQL
+    alongside OSV, Gitleaks, and Semgrep. A CodeQL failure or timeout results
+    in the same `PARTIAL` semantics as any other failed engine while
+    successful findings remain persisted.
+
+---
