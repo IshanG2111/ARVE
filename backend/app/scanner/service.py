@@ -50,6 +50,11 @@ def build_default_registry() -> "ScanEngineRegistry":
 
         registry.register(SemgrepEngine())
 
+    if getattr(settings, "SCANNER_ENABLE_CODEQL", True):
+        from app.scanner.engines.codeql import CodeqlEngine
+
+        registry.register(CodeqlEngine())
+
     return registry
 
 
@@ -366,9 +371,9 @@ class ScanExecutionService:
                     if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
                         try:
                             from app.security.normalizer import FindingNormalizer
-                            from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
+                            from app.security.mappers import CodeqlFindingMapper, GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 
-                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()])
+                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper(), CodeqlFindingMapper()])
                             engine_artifact = result.artifact_path
                             candidates = (
                                 [engine_artifact] if engine_artifact else []
