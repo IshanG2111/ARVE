@@ -39,8 +39,8 @@ def test_wrapper_declares_all_required_languages():
     for language in ("javascript-typescript", "java", "python", "go"):
         assert language in wrapper
     assert "security-extended" in wrapper
-    assert "javascript-code-scanning.qls" in wrapper
-    assert "javascript-security-extended.qls" in wrapper
+    assert "javascript-typescript-code-scanning.qls" in wrapper
+    assert "javascript-typescript-security-extended.qls" in wrapper
     assert "java-code-scanning.qls" in wrapper
     assert "java-security-extended.qls" in wrapper
     assert "python-code-scanning.qls" in wrapper
