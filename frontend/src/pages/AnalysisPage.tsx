@@ -51,7 +51,8 @@ export const AnalysisPage: React.FC = () => {
     setLoadingArtifact(true);
     try {
       const data = await api.getEngineArtifact(scanId, engineName);
-      setViewingArtifact({ name: `${engineName}.json`, content: data });
+      const artifactFile = engineName === "semgrep" || engineName === "codeql" ? `${engineName}.sarif` : `${engineName}.json`;
+      setViewingArtifact({ name: artifactFile, content: data });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to fetch engine artifact');
     } finally {
@@ -306,6 +307,31 @@ export const AnalysisPage: React.FC = () => {
               </div>
             </div>
 
+            {/* CodeQL Deep SAST Status */}
+            <div
+              style={{
+                padding: "12px 14px",
+                borderRadius: "var(--radius-md)",
+                background: "var(--elevated)",
+                border: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ fontSize: "10.5px", fontFamily: "var(--font-code)", color: "var(--muted)", textTransform: "uppercase" }}>
+                  CodeQL (Deep SAST)
+                </div>
+                <span style={{ fontSize: "10px", fontFamily: "var(--font-code)", color: "var(--accent)", background: "var(--accent-muted)", padding: "1px 6px", borderRadius: "3px" }}>
+                  v2.27.1
+                </span>
+              </div>
+              <div style={{ fontSize: "13px", fontWeight: 650, color: "var(--primary)", marginTop: "4px" }}>
+                {isScanActive ? "Analyzing Code Structure…" : isScanDone ? "Scan Execution Finished" : "Ready"}
+              </div>
+              <div style={{ fontSize: "11px", color: "var(--muted)", fontFamily: "var(--font-code)", marginTop: "2px" }}>
+                Container: arve-codeql:2.27.1 · JS/TS · Java · Python · Go
+              </div>
+            </div>
+
             {/* Findings Summary & Quick Action */}
             <div
               style={{
@@ -381,7 +407,7 @@ export const AnalysisPage: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
               <span>Progress: {latestScan.progress_percent}%</span>
               <span>Commit: {latestScan.commit_sha ? latestScan.commit_sha.slice(0, 7) : 'Snapshot'}</span>
-              <span>Engines: OSV, GitLeaks, Semgrep</span>
+              <span>Engines: OSV, GitLeaks, Semgrep, CodeQL</span>
             </div>
           </div>
         )}
@@ -763,7 +789,7 @@ export const AnalysisPage: React.FC = () => {
                                         disabled={loadingArtifact}
                                     >
                                       <FileJson size={12} />
-                                      View Raw JSON
+                                      View Raw Artifact
                                     </button>
                                 ) : (
                                     <span
