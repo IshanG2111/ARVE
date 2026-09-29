@@ -54,10 +54,10 @@ fi
 query_suite_for_language() {
   case "$PROFILE:$1" in
     default:javascript-typescript)
-      echo "codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls"
+      echo "codeql/javascript-queries:codeql-suites/javascript-typescript-code-scanning.qls"
       ;;
     security-extended:javascript-typescript)
-      echo "codeql/javascript-queries:codeql-suites/javascript-security-extended.qls"
+      echo "codeql/javascript-queries:codeql-suites/javascript-typescript-security-extended.qls"
       ;;
     default:java)
       echo "codeql/java-queries:codeql-suites/java-code-scanning.qls"
