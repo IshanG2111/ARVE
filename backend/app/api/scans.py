@@ -233,11 +233,12 @@ def get_engine_artifact(
             store = ScanArtifactStore()
             client = store._get_client()
             # Resolve the actual persisted object key instead of assuming JSON.
+            safe_engine = store._safe_segment(engine_name)
             expected_names = (
-                f"{engine_name}.sarif",
-                f"{engine_name}.json",
+                f"{safe_engine}.sarif",
+                f"{safe_engine}.json",
             )
-            prefix = f"{store.prefix}/{scan.id}/{engine_name}/"
+            prefix = f"{store.prefix}/{scan.id}/{safe_engine}/"
             candidate_keys = [
                 key for key in store.list_scan_artifacts(scan.id)
                 if key.startswith(prefix)
