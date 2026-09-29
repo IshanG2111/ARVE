@@ -38,6 +38,7 @@ Examples after Phase 4:
 scans/<scan-id>/semgrep/semgrep.sarif
 scans/<scan-id>/osv/osv.json
 scans/<scan-id>/gitleaks/gitleaks.json
+scans/<scan-id>/codeql/codeql.sarif
 ```
 
 Phase 3's smoke-test engine currently writes JSON:
@@ -58,7 +59,7 @@ raw artifacts.
 b2://arve-scan-artifacts/scans/<scan-id>/phase3-test
 ```
 
-The raw file itself is not stored in PostgreSQL. Semgrep uses SARIF; OSV-Scanner and Gitleaks keep their native JSON formats.
+The raw file itself is not stored in PostgreSQL. Semgrep and CodeQL use SARIF; OSV-Scanner and Gitleaks keep their native JSON formats.
 
 ## Local filesystem behavior
 
