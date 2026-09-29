@@ -156,14 +156,16 @@ class CodeqlFindingMapper(FindingMapper):
         if not isinstance(data, dict):
             return []
 
+        if not isinstance(data.get("runs"), list):
+            logger.warning("CodeQL artifact is not a valid SARIF document")
+            return []
+
         version = data.get("version")
         if version not in {None, "2.1.0"}:
             logger.warning("CodeQL artifact is not SARIF 2.1.0")
             return []
 
         runs = data.get("runs") or []
-        if not isinstance(runs, list):
-            return []
 
         findings: list[NormalizedFinding] = []
 
