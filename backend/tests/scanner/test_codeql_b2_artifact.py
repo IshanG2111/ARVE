@@ -1,12 +1,12 @@
 """CodeQL native SARIF artifact contract tests."""
 from pathlib import Path
-from unittest.mock import MagicMock
-
 from app.scanner.artifacts import ScanArtifactStore
 
 
-def test_codeql_sarif_uses_expected_content_type():
+def test_codeql_sarif_uses_expected_content_type_and_key():
     assert ScanArtifactStore._content_type(Path("codeql.sarif")) == "application/sarif+json"
+    store = ScanArtifactStore()
+    assert store._object_prefix("scan-123", "codeql") == "scans/scan-123/codeql"
 
 
 def test_codeql_artifact_upload_contract(tmp_path, monkeypatch):
