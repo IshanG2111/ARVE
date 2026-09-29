@@ -242,6 +242,7 @@ def get_engine_artifact(
             candidate_keys = [
                 key for key in store.list_scan_artifacts(scan.id)
                 if key.startswith(prefix)
+                and key.rsplit("/", 1)[-1] in expected_names
             ]
             ordered_keys = sorted(
                 candidate_keys,
