@@ -50,7 +50,7 @@ def _text(value: Any) -> Optional[str]:
 def _clean_file_path(raw_uri: Any) -> Optional[str]:
     if not raw_uri or not isinstance(raw_uri, str):
         return None
-    uri = unquote(raw_uri.strip()).replace("\\", "/")
+    uri = unquote(raw_uri.strip().replace("\\", "/"))
     parsed = urlparse(uri)
     if parsed.scheme == "file":
         uri = parsed.path or parsed.netloc
@@ -62,8 +62,7 @@ def _clean_file_path(raw_uri: Any) -> Optional[str]:
             break
     while uri.startswith("./"):
         uri = uri[2:]
-    cleaned = str(PurePosixPath(uri)).lstrip("/")
-    return cleaned or None
+    return str(PurePosixPath(uri)).lstrip("/") or None
 
 
 def _extract_properties(rule: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -89,7 +88,7 @@ def _extract_cwe(properties: dict[str, Any], rule: dict[str, Any]) -> Optional[s
 
 
 def _extract_owasp(properties: dict[str, Any]) -> list[str]:
-    values = []
+    values: list[str] = []
     for item in _as_list(properties.get("tags")) + _as_list(properties.get("owasp")):
         raw = str(item).strip()
         if raw and "owasp" in raw.lower():
@@ -120,9 +119,12 @@ def _severity_from_sarif(result: dict[str, Any], properties: dict[str, Any]) -> 
 def _confidence_from_sarif(result: dict[str, Any], properties: dict[str, Any]) -> Optional[FindingConfidence]:
     result_properties = result.get("properties")
     result_properties = result_properties if isinstance(result_properties, dict) else {}
-    raw = properties.get("precision") or properties.get("Precision") or result_properties.get("precision")
-    mapped = _CONFIDENCE_MAP.get(str(raw).strip().lower()) if raw else None
-    return mapped
+    raw = (
+        properties.get("precision")
+        or properties.get("Precision")
+        or result_properties.get("precision")
+    )
+    return _CONFIDENCE_MAP.get(str(raw).strip().lower()) if raw else None
 
 
 class CodeqlFindingMapper(FindingMapper):
@@ -151,9 +153,11 @@ class CodeqlFindingMapper(FindingMapper):
                 logger.warning("Failed to parse CodeQL SARIF: %s", exc)
                 return []
 
-        if not isinstance(data, dict) or data.get("runs") is None:
+        if not isinstance(data, dict):
             return []
-        if data.get("version") not in {None, "2.1.0"}:
+
+        version = data.get("version")
+        if version not in {None, "2.1.0"}:
             logger.warning("CodeQL artifact is not SARIF 2.1.0")
             return []
 
@@ -162,28 +166,28 @@ class CodeqlFindingMapper(FindingMapper):
             return []
 
         findings: list[NormalizedFinding] = []
+
         for run in runs:
             if not isinstance(run, dict):
                 continue
-
             tool = run.get("tool") or {}
             driver = tool.get("driver") if isinstance(tool, dict) else {}
             driver = driver if isinstance(driver, dict) else {}
             engine_version = _text(driver.get("version"))
 
-            rule_index: dict[str, dict[str, Any]] = {}
+            rules_by_id: dict[str, dict[str, Any]] = {}
             for rule in _as_list(driver.get("rules")):
                 if isinstance(rule, dict):
                     rid = str(rule.get("id") or "").strip()
                     if rid:
-                        rule_index[rid] = rule
+                        rules_by_id[rid] = rule
 
             for result in _as_list(run.get("results")):
                 if not isinstance(result, dict):
                     continue
 
                 rule_id = str(result.get("ruleId") or "").strip() or "codeql-finding"
-                rule = rule_index.get(rule_id, {})
+                rule = rules_by_id.get(rule_id, {})
                 properties = _extract_properties(rule, result)
 
                 message = _text(result.get("message")) or f"CodeQL finding: {rule_id}"
@@ -198,10 +202,10 @@ class CodeqlFindingMapper(FindingMapper):
                 primary = locations[0] if locations and isinstance(locations[0], dict) else {}
                 physical = primary.get("physicalLocation") if isinstance(primary, dict) else {}
                 physical = physical if isinstance(physical, dict) else {}
-                region = physical.get("region") if isinstance(physical, dict) else {}
-                region = region if isinstance(region, dict) else {}
                 artifact_location = physical.get("artifactLocation") if isinstance(physical, dict) else {}
                 artifact_location = artifact_location if isinstance(artifact_location, dict) else {}
+                region = physical.get("region") if isinstance(physical, dict) else {}
+                region = region if isinstance(region, dict) else {}
 
                 file_path = _clean_file_path(artifact_location.get("uri"))
 
