@@ -67,3 +67,11 @@ def test_codeql_registry_can_be_disabled(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
     from app.scanner.service import build_default_registry
     assert build_default_registry().list() == []
+
+
+def test_codeql_image_is_pinned_to_cli_version():
+    dockerfile = (Path(__file__).resolve().parents[3] / "docker" / "codeql" / "Dockerfile").read_text(encoding="utf-8")
+    assert "ARG CODEQL_VERSION=2.27.1" in dockerfile
+    assert "CODEQL_SHA256=1d380f79896ededc654c7b21fafb3360136f1aeb678ad4df4df9af3910c6b815" in dockerfile
+    assert "zstd" in dockerfile
+    assert "USER 1000:1000" in dockerfile
