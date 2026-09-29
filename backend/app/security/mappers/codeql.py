@@ -83,7 +83,7 @@ def _extract_cwe(properties: dict[str, Any], rule: dict[str, Any]) -> Optional[s
     for item in candidates:
         match = _CWE_RE.search(str(item))
         if match:
-            return f"CWE-{match.group(1)}"
+            return f"CWE-{int(match.group(1))}"
     return None
 
 
