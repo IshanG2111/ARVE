@@ -85,3 +85,10 @@ def test_codeql_wrapper_handles_partial_language_failures():
     assert "continue" in wrapper
     assert "exit 1" in wrapper
     assert "all detected languages failed" in wrapper
+
+def test_codeql_engine_uses_configured_image(monkeypatch):
+    monkeypatch.setattr(settings, "SCANNER_CODEQL_IMAGE", "custom-codeql:2.27.1")
+    engine_module = __import__("app.scanner.engines.codeql", fromlist=["CodeqlEngine"])
+    monkeypatch.setattr(engine_module.settings, "SCANNER_CODEQL_IMAGE", "custom-codeql:2.27.1")
+    engine = engine_module.CodeqlEngine()
+    assert engine.image == "custom-codeql:2.27.1"
