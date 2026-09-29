@@ -22,6 +22,11 @@ RUN apt-get update \
         zstd \
     && rm -rf /var/lib/apt/lists/*
 
+RUN node --version \
+    && python3 --version \
+    && java -version \
+    && go version
+
 RUN mkdir -p /opt/codeql \
     && curl -fsSL "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_VERSION}/codeql-bundle-linux64.tar.gz" -o /tmp/codeql-bundle.tar.gz \
     && echo "${CODEQL_SHA256}  /tmp/codeql-bundle.tar.gz" | sha256sum -c - \
