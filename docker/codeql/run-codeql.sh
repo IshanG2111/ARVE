@@ -54,10 +54,10 @@ fi
 query_suite_for_language() {
   case "$PROFILE:$1" in
     default:javascript-typescript)
-      echo "codeql/javascript-queries:codeql-suites/javascript-typescript-code-scanning.qls"
+      echo "codeql/javascript-queries:codeql-suites/javascript-code-scanning.qls"
       ;;
     security-extended:javascript-typescript)
-      echo "codeql/javascript-queries:codeql-suites/javascript-typescript-security-extended.qls"
+      echo "codeql/javascript-queries:codeql-suites/javascript-security-extended.qls"
       ;;
     default:java)
       echo "codeql/java-queries:codeql-suites/java-code-scanning.qls"
@@ -113,7 +113,10 @@ for language in "${LANGUAGES[@]}"; do
   build_mode="$(build_mode_for_language "$language")"
 
   echo "CodeQL: creating database for $language (build-mode=$build_mode)"
-  if ! "$CODEQL" database create "$db"       --language="$language"       --build-mode="$build_mode"       --source-root="$WORKSPACE"; then
+  if ! "$CODEQL" database create "$db" \
+      --language="$language" \
+      --build-mode="$build_mode" \
+      --source-root="$WORKSPACE"; then
     echo "CodeQL: database creation failed for $language; continuing with other detected languages." >&2
     FAILED_LANGUAGES+=("$language:create")
     rm -rf "$db"
@@ -121,7 +124,11 @@ for language in "${LANGUAGES[@]}"; do
   fi
 
   echo "CodeQL: analyzing $language with $PROFILE"
-  if ! "$CODEQL" database analyze "$db" "$suite"       --format=sarifv2.1.0       --no-download       --sarif-category="arve-$language"       --output="$sarif"; then
+  if ! "$CODEQL" database analyze "$db" "$suite" \
+      --format=sarifv2.1.0 \
+      --no-download \
+      --sarif-category="arve-$language" \
+      --output="$sarif"; then
     echo "CodeQL: analysis failed for $language; continuing with other detected languages." >&2
     FAILED_LANGUAGES+=("$language:analyze")
     rm -f "$sarif"
