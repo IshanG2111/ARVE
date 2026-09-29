@@ -16,6 +16,7 @@ def test_registry_contains_all_three_engines_by_default(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", True)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", True)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", True)
+    monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", True)
 
     registry = build_default_registry()
     names = {e.name for e in registry.list()}
