@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     SCANNER_CODEQL_MEMORY_LIMIT: str = "4g"
     SCANNER_CODEQL_CPU_LIMIT: float = 2.0
     SCANNER_CODEQL_RAM_MB: int = 2048
+    SCANNER_CODEQL_TIMEOUT_SECONDS: int = 1200
     SCANNER_SEMGREP_IMAGE: str = "semgrep/semgrep:1.90.0"
     SCANNER_SEMGREP_CONFIG: str = "auto"
     SCANNER_SEMGREP_RULES_PATH: Optional[str] = None

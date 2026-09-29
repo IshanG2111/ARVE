@@ -374,11 +374,21 @@ class ScanExecutionService:
                 engine_run = engine_runs[engine.name]
                 self._start_engine_run(engine_run)
                 try:
+                    engine_timeout = (
+                        getattr(
+                            settings,
+                            "SCANNER_CODEQL_TIMEOUT_SECONDS",
+                            settings.SCANNER_ENGINE_TIMEOUT_SECONDS,
+                        )
+                        if engine.name == "codeql"
+                        else settings.SCANNER_ENGINE_TIMEOUT_SECONDS
+                    )
+
                     result = self._run_engine(
                         str(scan.id),
                         workspace,
                         engine,
-                        timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
+                        timeout_seconds=min(engine_timeout, remaining),
                     )
 
                     # Extract findings before artifact_store.persist_output removes the local directory
