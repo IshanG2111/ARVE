@@ -6,7 +6,6 @@ from app.core.config import settings
 from app.scanner.engines.codeql import CodeqlEngine
 from app.scanner.interfaces import ScannerExecutionContext
 
-FIXTURE_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "codeql"
 
 @pytest.fixture
 def context(tmp_path: Path):
