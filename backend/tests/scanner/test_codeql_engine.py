@@ -5,6 +5,7 @@ import pytest
 from app.core.config import settings
 from app.scanner.engines.codeql import CodeqlEngine
 from app.scanner.interfaces import ScannerExecutionContext
+from app.scanner.service import build_default_registry
 
 
 @pytest.fixture
