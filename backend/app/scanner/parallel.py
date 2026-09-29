@@ -13,7 +13,7 @@ from app.scanner.exceptions import ScanOrchestrationError, ScanValidationError, 
 from app.scanner.interfaces import EngineExecutionStatus, ScannerExecutionResult
 from app.scanner.service import ScanExecutionService, build_default_registry
 from app.scanner.state_machine import ScanStateMachine, ScanStatus
-from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
+from app.security.mappers import CodeqlFindingMapper, GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 from app.security.normalizer import FindingNormalizer
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class ParallelSecurityScanService(ScanExecutionService):
             deadline = time.monotonic() + settings.SCANNER_GLOBAL_TIMEOUT_SECONDS
             results: dict[str, ScannerExecutionResult] = {}
             all_db_findings = []
-            mappers = [OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()]
+            mappers = [OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper(), CodeqlFindingMapper()]
             normalizer = FindingNormalizer(mappers)
 
             def run_one(engine):
@@ -255,7 +255,7 @@ class ParallelSecurityScanService(ScanExecutionService):
 
 
 def build_security_registry():
-    """Build the Phase 4 security registry (OSV + Gitleaks + Semgrep)."""
+    """Build the Phase 4 security registry (OSV + Gitleaks + Semgrep + CodeQL)."""
     registry = build_default_registry()
     if getattr(settings, "SCANNER_ENABLE_GITLEAKS", True):
         from app.scanner.engines.gitleaks import GitleaksEngine
@@ -267,4 +267,9 @@ def build_security_registry():
 
         if not any(engine.name == "semgrep" for engine in registry.list()):
             registry.register(SemgrepEngine())
+    if getattr(settings, "SCANNER_ENABLE_CODEQL", True):
+        from app.scanner.engines.codeql import CodeqlEngine
+
+        if not any(engine.name == "codeql" for engine in registry.list()):
+            registry.register(CodeqlEngine())
     return registry
