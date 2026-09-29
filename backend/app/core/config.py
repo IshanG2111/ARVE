@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     SCANNER_CPU_LIMIT: float = 1.5
     SCANNER_CONTAINER_USER: str = "1000:1000"
     SCANNER_ENGINE_TIMEOUT_SECONDS: int = 180
-    SCANNER_GLOBAL_TIMEOUT_SECONDS: int = 600
+    # Must exceed the longest engine timeout so CodeQL is not capped by the global deadline.
+    SCANNER_GLOBAL_TIMEOUT_SECONDS: int = 1500
     SCANNER_LOG_MAX_CHARS: int = 8000
 
     SCAN_QUEUE_BACKEND: str = "celery"
@@ -55,6 +56,14 @@ class Settings(BaseSettings):
     SCANNER_ENABLE_GITLEAKS: bool = True
     SCANNER_GITLEAKS_IMAGE: str = "ghcr.io/gitleaks/gitleaks:v8.24.2"
     SCANNER_ENABLE_SEMGREP: bool = True
+    SCANNER_ENABLE_CODEQL: bool = True
+    SCANNER_CODEQL_IMAGE: str = "arve-codeql:2.27.1"
+    SCANNER_CODEQL_QUERY_SUITE: str = "security-extended"
+    # CodeQL needs more memory than the general scanner sandbox.
+    SCANNER_CODEQL_MEMORY_LIMIT: str = "4g"
+    SCANNER_CODEQL_CPU_LIMIT: float = 2.0
+    SCANNER_CODEQL_RAM_MB: int = 2048
+    SCANNER_CODEQL_TIMEOUT_SECONDS: int = 1200
     SCANNER_SEMGREP_IMAGE: str = "semgrep/semgrep:1.90.0"
     SCANNER_SEMGREP_CONFIG: str = "auto"
     SCANNER_SEMGREP_RULES_PATH: Optional[str] = None

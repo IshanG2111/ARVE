@@ -197,7 +197,7 @@ The executable v1 scope is intentionally bounded:
   -----------------------------------------------------------------------
   Dimension                           v1
   ----------------------------------- -----------------------------------
-  Languages                           JavaScript, TypeScript
+  Languages                           JavaScript, TypeScript, Java, Python, Go
 
   Frameworks                          Express, Next.js, React, Node.js
 
@@ -206,7 +206,7 @@ The executable v1 scope is intentionally bounded:
                                       Secrets, Vulnerable Dependencies,
                                       Security Misconfiguration
 
-  Engines                             Semgrep, OSV-Scanner, Gitleaks
+  Engines                             Semgrep, OSV-Scanner, Gitleaks, CodeQL
 
   Repository size                     ≤ 5,000 source files, ≤ 200 MB, ≤
                                       15 min total scan
@@ -217,9 +217,9 @@ The executable v1 scope is intentionally bounded:
   Graph store                         PostgreSQL adjacency tables
   -----------------------------------------------------------------------
 
-The broader design can accommodate additional analysis such as CodeQL,
-deeper data-flow, and other vulnerability families, but these are not
-automatically part of the v1 commitment.
+CodeQL is now part of the executable security pipeline as the deep SAST engine.
+It runs only for detected JavaScript/TypeScript, Java, Python, and Go source
+and complements the faster Semgrep rules with interprocedural/dataflow analysis.
 
 ------------------------------------------------------------------------
 

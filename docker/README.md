@@ -43,8 +43,8 @@ SCANNER_ENABLE_TEST_ENGINE=true
 SCANNER_TEST_IMAGE=arve-phase3-test-scanner:latest
 ```
 
-Keep the test engine disabled after Phase 3 testing. Phase 4 will register
-Semgrep, OSV-Scanner and Gitleaks.
+Keep the test engine disabled for normal runs. Phase 4A now runs OSV-Scanner, Gitleaks,
+Semgrep, and CodeQL from the real security registry.
 
 ## 4. Install backend dependencies
 
@@ -111,3 +111,65 @@ For a real partial-failure test, register/run a successful engine alongside a
 second smoke engine configured with `fail` or `timeout`. The Phase 3 service
 will persist each `ScanEngineRun` and mark the overall scan `PARTIAL` when at
 least one engine produced a result but another engine failed/timed out.
+
+
+## 7. Build the CodeQL scanner image
+
+CodeQL is a real Phase 4A security engine in ARVE. Its container bundles the
+CodeQL CLI and query packs, creates temporary per-language databases under
+/tmp, and emits one native SARIF artifact.
+
+Build the pinned local image before starting the worker:
+
+```bash
+docker build -t arve-codeql:2.27.1 ./docker/codeql
+```
+
+The current engine detects and scans only these source languages when present:
+
+```text
+JavaScript / TypeScript -> javascript-typescript
+Java                  -> java
+Python                -> python
+Go                    -> go
+```
+
+`security-extended` is the default configured profile. The wrapper selects the
+matching language-specific CodeQL suite. JavaScript/TypeScript, Java, and Python
+databases use the supported `none` build mode, while Go uses `autobuild`.
+
+ARVE runs CodeQL with the `security-extended` query suite and stores only:
+
+```text
+/output/codeql.sarif
+```
+
+The raw artifact is uploaded by the existing scanner artifact store to:
+
+```text
+scans/<scan-id>/codeql/codeql.sarif
+```
+
+CodeQL runs with the same sandbox guarantees as the other offline engines.
+The wrapper never writes its CodeQL databases to the mounted output directory.
+
+## 8. Normal end-to-end flow
+
+From the homepage, **Run Analysis** first creates a fresh Phase 2 snapshot and
+then creates one security scan. The security worker executes all enabled
+engines in parallel:
+
+```text
+OSV + Gitleaks + Semgrep + CodeQL
+              |
+              v
+     Native artifacts
+              |
+              v
+  Finding normalization
+              |
+              v
+      PostgreSQL findings
+```
+
+The analysis page exposes CodeQL engine status and raw SARIF artifact inspection.

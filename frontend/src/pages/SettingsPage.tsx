@@ -240,6 +240,14 @@ export const SettingsPage: React.FC = () => {
                   </div>
                   <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
                 </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--elevated)', borderRadius: 'var(--radius-md)' }}>
+                  <div>
+                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>CodeQL Deep SAST Engine</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Interprocedural and dataflow-based semantic analysis for JavaScript/TypeScript, Java, Python, and Go.</div>
+                  </div>
+                  <span className="badge badge-verified" style={{ fontSize: '10.5px' }}>Active</span>
+                </div>
               </div>
             </div>
           )}
@@ -274,7 +282,7 @@ export const SettingsPage: React.FC = () => {
               <Cloud size={16} style={{ color: '#38BDF8' }} />
               <div>
                 <div style={{ fontSize: '13.5px', fontWeight: 650 }}>Artifact Storage &amp; Backblaze B2</div>
-                <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Raw scanner JSON payloads and snapshot audit trail destination</div>
+                <div style={{ fontSize: '11.5px', color: 'var(--muted)' }}>Raw scanner JSON/SARIF artifacts and snapshot audit trail destination</div>
               </div>
             </div>
             {storageOpen ? <ChevronDown size={16} color="var(--muted)" /> : <ChevronRight size={16} color="var(--muted)" />}

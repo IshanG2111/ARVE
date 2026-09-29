@@ -1,4 +1,4 @@
-"""Parallel Phase 4A scan execution for OSV-Scanner and Gitleaks."""
+"""Parallel Phase 4A scan execution across all enabled security engines."""
 from __future__ import annotations
 
 import concurrent.futures
@@ -13,7 +13,7 @@ from app.scanner.exceptions import ScanOrchestrationError, ScanValidationError, 
 from app.scanner.interfaces import EngineExecutionStatus, ScannerExecutionResult
 from app.scanner.service import ScanExecutionService, build_default_registry
 from app.scanner.state_machine import ScanStateMachine, ScanStatus
-from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
+from app.security.mappers import CodeqlFindingMapper, GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 from app.security.normalizer import FindingNormalizer
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class ParallelSecurityScanService(ScanExecutionService):
             deadline = time.monotonic() + settings.SCANNER_GLOBAL_TIMEOUT_SECONDS
             results: dict[str, ScannerExecutionResult] = {}
             all_db_findings = []
-            mappers = [OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()]
+            mappers = [OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper(), CodeqlFindingMapper()]
             normalizer = FindingNormalizer(mappers)
 
             def run_one(engine):
@@ -86,11 +86,20 @@ class ParallelSecurityScanService(ScanExecutionService):
                         error_message="Global scan timeout reached before engine start",
                     )
                 try:
+                    engine_timeout = (
+                        getattr(
+                            settings,
+                            "SCANNER_CODEQL_TIMEOUT_SECONDS",
+                            settings.SCANNER_ENGINE_TIMEOUT_SECONDS,
+                        )
+                        if engine.name == "codeql"
+                        else settings.SCANNER_ENGINE_TIMEOUT_SECONDS
+                    )
                     return self._run_engine(
                         scan_id_value,
                         workspace,
                         engine,
-                        timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
+                        timeout_seconds=min(engine_timeout, remaining),
                     )
                 except ScannerExecutionError:
                     raise
@@ -118,9 +127,22 @@ class ParallelSecurityScanService(ScanExecutionService):
                     results[engine.name] = result
                     engine_dir = workspace.output / self._safe_engine_name(engine.name)
 
-                    if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
+                    # A CodeQL run can return exit code 1 when one detected
+                    # language failed but another produced a usable merged SARIF.
+                    # Preserve and normalize/persist that artifact before marking
+                    # the engine run failed, so successful language results are not lost.
+                    if engine_dir.exists():
                         artifact_path = result.artifact_path
-                        if artifact_path and artifact_path.exists() and artifact_path.stat().st_size > 0:
+                        has_artifact = bool(
+                            artifact_path
+                            and artifact_path.exists()
+                            and artifact_path.stat().st_size > 0
+                        )
+
+                        if has_artifact and (
+                            result.status == EngineExecutionStatus.SUCCESS
+                            or engine.name == "codeql"
+                        ):
                             try:
                                 raw_text = artifact_path.read_text(encoding="utf-8")
                                 normalized = normalizer.normalize_artifact(
@@ -143,32 +165,41 @@ class ParallelSecurityScanService(ScanExecutionService):
                                     exc,
                                 )
 
-                        try:
-                            persisted = self.artifact_store.persist_output(scan_id_value, engine.name, engine_dir)
-                            if persisted:
+                        should_persist = has_artifact and (
+                            result.status == EngineExecutionStatus.SUCCESS
+                            or engine.name == "codeql"
+                        )
+                        if should_persist:
+                            try:
+                                persisted = self.artifact_store.persist_output(
+                                    scan_id_value,
+                                    engine.name,
+                                    engine_dir,
+                                )
+                                if persisted:
+                                    result = ScannerExecutionResult(
+                                        engine_name=result.engine_name,
+                                        status=result.status,
+                                        exit_code=result.exit_code,
+                                        duration_ms=result.duration_ms,
+                                        artifact_path=None,
+                                        artifact_reference=persisted,
+                                        stdout=result.stdout,
+                                        stderr=result.stderr,
+                                        error_message=result.error_message,
+                                    )
+                                    results[engine.name] = result
+                            except Exception as exc:
                                 result = ScannerExecutionResult(
-                                    engine_name=result.engine_name,
-                                    status=result.status,
+                                    engine_name=engine.name,
+                                    status=EngineExecutionStatus.FAILED,
                                     exit_code=result.exit_code,
                                     duration_ms=result.duration_ms,
-                                    artifact_path=None,
-                                    artifact_reference=persisted,
                                     stdout=result.stdout,
                                     stderr=result.stderr,
-                                    error_message=result.error_message,
+                                    error_message=f"Failed to persist scanner artifact: {exc}",
                                 )
                                 results[engine.name] = result
-                        except Exception as exc:
-                            result = ScannerExecutionResult(
-                                engine_name=engine.name,
-                                status=EngineExecutionStatus.FAILED,
-                                exit_code=result.exit_code,
-                                duration_ms=result.duration_ms,
-                                stdout=result.stdout,
-                                stderr=result.stderr,
-                                error_message=str(exc),
-                            )
-                            results[engine.name] = result
 
                     self._finish_engine_run(engine_runs[engine.name], result)
                     completed_count = len(results)
@@ -255,7 +286,7 @@ class ParallelSecurityScanService(ScanExecutionService):
 
 
 def build_security_registry():
-    """Build the Phase 4 security registry (OSV + Gitleaks + Semgrep)."""
+    """Build the Phase 4 security registry (OSV + Gitleaks + Semgrep + CodeQL)."""
     registry = build_default_registry()
     if getattr(settings, "SCANNER_ENABLE_GITLEAKS", True):
         from app.scanner.engines.gitleaks import GitleaksEngine
@@ -267,4 +298,9 @@ def build_security_registry():
 
         if not any(engine.name == "semgrep" for engine in registry.list()):
             registry.register(SemgrepEngine())
+    if getattr(settings, "SCANNER_ENABLE_CODEQL", True):
+        from app.scanner.engines.codeql import CodeqlEngine
+
+        if not any(engine.name == "codeql" for engine in registry.list()):
+            registry.register(CodeqlEngine())
     return registry

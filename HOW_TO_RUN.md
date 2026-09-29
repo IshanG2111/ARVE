@@ -95,7 +95,7 @@ PONG
 
 ---
 
-# 4. Build Phase 3 Test Scanner
+# 4. Build Security Scanner Images
 
 From the ARVE project root:
 
@@ -114,6 +114,23 @@ Expected image:
 ```text
 arve-phase3-test-scanner
 ```
+
+### Build CodeQL image
+
+From the ARVE project root:
+
+```cmd
+docker build -t arve-codeql:2.27.1 ./docker/codeql
+```
+
+Verify:
+
+```cmd
+docker images arve-codeql:2.27.1
+```
+
+The image must exist before the Celery worker starts because the security scan
+executes OSV-Scanner, Gitleaks, Semgrep, and CodeQL in parallel.
 
 ---
 

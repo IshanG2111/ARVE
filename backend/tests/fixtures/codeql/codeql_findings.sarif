@@ -1,0 +1,65 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "CodeQL",
+          "version": "2.27.1",
+          "rules": [
+            {
+              "id": "py/sql-injection",
+              "name": "SQL injection",
+              "shortDescription": {"text": "SQL query built from user-controlled input"},
+              "fullDescription": {"text": "A SQL query is constructed using data that may be controlled by a remote user."},
+              "helpUri": "https://codeql.github.com/codeql-query-help/python/py-sql-injection/",
+              "properties": {
+                "security-severity": "9.8",
+                "precision": "high",
+                "tags": ["security", "external/cwe/cwe-089"]
+              }
+            },
+            {
+              "id": "py/clear-text-logging",
+              "shortDescription": {"text": "Clear-text logging of sensitive information"},
+              "properties": {
+                "security-severity": "7.1",
+                "precision": "medium",
+                "tags": ["security", "external/cwe/cwe-532"]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "py/sql-injection",
+          "level": "error",
+          "message": {"text": "User input reaches a SQL query without parameterization."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "/code/src/app.py"},
+                "region": {"startLine": 42, "endLine": 44}
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "py/clear-text-logging",
+          "level": "error",
+          "message": {"text": "Sensitive data is logged in clear text."},
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {"uri": "/code/src/logging.py"},
+                "region": {"startLine": 18, "endLine": 18}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

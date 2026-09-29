@@ -143,7 +143,7 @@ export const DashboardPage: React.FC = () => {
 
   const lastAnalyzedDate = latestScan?.completed_at || latestRun?.completed_at;
   const lastAnalyzedText = lastAnalyzedDate
-    ? new Date(lastAnalyzedDate).toLocaleString(undefined, {
+    ? new Date(`${lastAnalyzedDate}Z`).toLocaleString(undefined, {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',

@@ -53,6 +53,7 @@ def test_registry_includes_semgrep_when_enabled(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", True)
+    monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
 
     registry = build_default_registry()
     engines = registry.list()
@@ -66,6 +67,7 @@ def test_registry_excludes_semgrep_when_disabled(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_OSV", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
+    monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
 
     registry = build_default_registry()
     engines = registry.list()

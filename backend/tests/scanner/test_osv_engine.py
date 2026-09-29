@@ -59,6 +59,7 @@ class TestOsvRegistryIntegration:
         monkeypatch.setattr(settings, "SCANNER_ENABLE_TEST_ENGINE", False)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
 
         registry = build_default_registry()
         engines = registry.list()
@@ -71,6 +72,7 @@ class TestOsvRegistryIntegration:
         monkeypatch.setattr(settings, "SCANNER_ENABLE_TEST_ENGINE", False)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
         monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
+        monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", False)
 
         registry = build_default_registry()
         engines = registry.list()

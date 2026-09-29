@@ -14,6 +14,7 @@ class EngineName(str, Enum):
     OSV = "osv"
     GITLEAKS = "gitleaks"
     SEMGREP = "semgrep"
+    CODEQL = "codeql"
 
 
 class FindingType(str, Enum):
@@ -54,6 +55,8 @@ def normalize_engine_name(raw: str | None) -> str:
         return EngineName.GITLEAKS.value
     if cleaned in {"semgrep", "semgrep-sast", "semgrep_sast"}:
         return EngineName.SEMGREP.value
+    if cleaned in {"codeql", "code-ql", "code_ql"}:
+        return EngineName.CODEQL.value
     return cleaned
 
 

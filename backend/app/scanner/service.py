@@ -50,6 +50,11 @@ def build_default_registry() -> "ScanEngineRegistry":
 
         registry.register(SemgrepEngine())
 
+    if getattr(settings, "SCANNER_ENABLE_CODEQL", True):
+        from app.scanner.engines.codeql import CodeqlEngine
+
+        registry.register(CodeqlEngine())
+
     return registry
 
 
@@ -265,14 +270,29 @@ class ScanExecutionService:
 
         # Scanner exit-code semantics:
         #
-        # 0   = packages scanned, no findings
-        # 1   = findings detected (if artifact exists) / failure if artifact missing
-        # 128 = no packages/package sources found
-        #
-        # For ARVE, exit code 1 with a valid artifact indicates a successful scan with findings.
-        # Exit code 1 without an artifact indicates a fatal scanner runtime or configuration error.
+        # OSV may legitimately return 128 when no supported dependency source
+        # is present, and ARVE treats that as a successful clean execution.
+        # CodeQL follows its own documented CLI contract: 0 is success,
+        # 2/3/32/33/98/99/100 (or another non-zero) indicate an execution
+        # problem. CodeQL's wrapper may return 1 when at least one detected
+        # language succeeded but another language failed; the merged SARIF is
+        # still useful and must be normalized/persisted before the engine is
+        # reported as failed.
         if status != EngineExecutionStatus.TIMEOUT:
-            if docker_result.exit_code in {0, 128} or (docker_result.exit_code == 1 and artifact_path is not None):
+            if engine.name == "codeql":
+                if docker_result.exit_code == 0:
+                    status = EngineExecutionStatus.SUCCESS
+                    error_message = None
+                elif docker_result.exit_code == 1 and artifact_path is not None:
+                    status = EngineExecutionStatus.SUCCESS
+                    error_message = (
+                        error_message
+                        or "CodeQL completed with partial language failures; "
+                        "usable SARIF artifact was produced."
+                    )
+                else:
+                    status = EngineExecutionStatus.FAILED
+            elif docker_result.exit_code in {0, 128} or (docker_result.exit_code == 1 and artifact_path is not None):
                 status = EngineExecutionStatus.SUCCESS
                 error_message = None
             elif docker_result.exit_code == 1 and artifact_path is None:
@@ -354,11 +374,21 @@ class ScanExecutionService:
                 engine_run = engine_runs[engine.name]
                 self._start_engine_run(engine_run)
                 try:
+                    engine_timeout = (
+                        getattr(
+                            settings,
+                            "SCANNER_CODEQL_TIMEOUT_SECONDS",
+                            settings.SCANNER_ENGINE_TIMEOUT_SECONDS,
+                        )
+                        if engine.name == "codeql"
+                        else settings.SCANNER_ENGINE_TIMEOUT_SECONDS
+                    )
+
                     result = self._run_engine(
                         str(scan.id),
                         workspace,
                         engine,
-                        timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
+                        timeout_seconds=min(engine_timeout, remaining),
                     )
 
                     # Extract findings before artifact_store.persist_output removes the local directory
@@ -366,9 +396,9 @@ class ScanExecutionService:
                     if result.status == EngineExecutionStatus.SUCCESS and engine_dir.exists():
                         try:
                             from app.security.normalizer import FindingNormalizer
-                            from app.security.mappers import GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
+                            from app.security.mappers import CodeqlFindingMapper, GitleaksFindingMapper, OsvFindingMapper, SemgrepFindingMapper
 
-                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper()])
+                            normalizer = FindingNormalizer([OsvFindingMapper(), GitleaksFindingMapper(), SemgrepFindingMapper(), CodeqlFindingMapper()])
                             engine_artifact = result.artifact_path
                             candidates = (
                                 [engine_artifact] if engine_artifact else []

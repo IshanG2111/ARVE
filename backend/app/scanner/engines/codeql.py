@@ -1,0 +1,46 @@
+"""GitHub CodeQL deep SAST engine for ARVE.
+
+The CodeQL container ships a pinned CodeQL CLI bundle and query packs. It
+detects supported languages inside the immutable Phase-2 snapshot, creates a
+separate temporary database for each detected language, analyzes each database
+with the configured query suite, and merges the resulting SARIF runs into one
+native artifact.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Sequence
+
+from app.core.config import settings
+from app.scanner.interfaces import ScannerExecutionContext
+from app.security.models import EngineName
+
+
+class CodeqlEngine:
+    """ScannerEngine implementation for CodeQL deep SAST."""
+
+    name: str = EngineName.CODEQL.value
+    image: str = getattr(settings, "SCANNER_CODEQL_IMAGE", "arve-codeql:2.27.1")
+
+    def build_command(self, context: ScannerExecutionContext) -> Sequence[str]:
+        """Construct arguments for the CodeQL container entrypoint."""
+        # The Docker image already declares run-codeql.sh as ENTRYPOINT.
+        # Only pass wrapper arguments here; including the script path again
+        # makes the wrapper receive its own path as an unknown argument.
+        return [
+            "--workspace",
+            "/code",
+            "--output",
+            "/output/codeql.sarif",
+            "--profile",
+            getattr(settings, "SCANNER_CODEQL_QUERY_SUITE", "security-extended"),
+            "--ram",
+            str(getattr(settings, "SCANNER_CODEQL_RAM_MB", 2048)),
+        ]
+
+    def artifact_path(self, context: ScannerExecutionContext) -> Path:
+        """Return the merged native CodeQL SARIF artifact path."""
+        return context.output_path / "codeql.sarif"
+
+
+assert isinstance(CodeqlEngine.name, str)
