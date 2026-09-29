@@ -77,6 +77,10 @@ Add these keys in Infisical under environment `dev` / `staging` / `prod`:
 | `SCANNER_OSV_IMAGE` | `ghcr.io/google/osv-scanner:v1.9.2` | OSV container image |
 | `SCANNER_OSV_NETWORK` | `bridge` | Outbound network mode for OSV vulnerability queries |
 | `SCANNER_ENABLE_GITLEAKS` | `true` | Enable/disable Gitleaks secret scanner |
+| `SCANNER_ENABLE_CODEQL` | `true` | Enable/disable CodeQL deep SAST engine |
+| `SCANNER_CODEQL_IMAGE` | `arve-codeql:2.27.1` | Pinned local ARVE CodeQL container image |
+| `SCANNER_CODEQL_QUERY_SUITE` | `security-extended` | CodeQL security query suite |
+
 | `SCANNER_GITLEAKS_IMAGE` | `ghcr.io/gitleaks/gitleaks:v8.24.2` | Gitleaks container image |
 | `SCANNER_NETWORK_MODE` | `none` | Default sandbox container network mode |
 | `SCANNER_MEMORY_LIMIT` | `1g` | Memory cap per engine container |
@@ -141,105 +145,81 @@ When adding or altering rules in `backend/app/security/semgrep/rules/`:
 
 ---
 
-## 4. How to Integrate CodeQL (Blueprint for the Next Developer)
+## 4. CodeQL Integration — Implemented
 
-CodeQL provides deep inter-procedural dataflow and taint analysis. It requires two main phases:
-1. **Database Creation**: Compiling / extracting the AST/graph database from source code.
-2. **Analysis**: Running QL queries against the database and exporting SARIF 2.1.0.
+CodeQL is implemented as one ARVE scanner engine backed by a dedicated pinned
+Docker image. The engine detects only supported languages present in the Phase
+2 snapshot, creates isolated temporary databases, analyzes each database with
+the configured security query suite, and merges the language reports into one
+SARIF 2.1.0 artifact.
 
-### Step 1: Create Engine Protocol Implementation (`backend/app/scanner/engines/codeql.py`)
+### Engine contract
 
-Follow the `ScannerEngine` protocol established in [backend/app/scanner/interfaces.py](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/backend/app/scanner/interfaces.py):
-
-```python
-from pathlib import Path
-from typing import Sequence
-from app.core.config import settings
-from app.scanner.interfaces import ScannerExecutionContext
-from app.security.models import EngineName
-
-class CodeqlEngine:
-    name: str = "codeql"
-    image: str = getattr(settings, "SCANNER_CODEQL_IMAGE", "mcr.microsoft.com/cstgit/codeql-container:latest")
-
-    def build_command(self, context: ScannerExecutionContext) -> Sequence[str]:
-        # Script or command inside container that runs:
-        # 1. codeql database create /tmp/codeql-db --language=javascript --source-root=/code
-        # 2. codeql database analyze /tmp/codeql-db /qlpacks/javascript-queries --format=sarif-latest --output=/output/codeql.sarif
-        return [
-            "/opt/codeql/entrypoint.sh",
-            "--workspace", "/code",
-            "--output", "/output/codeql.sarif",
-        ]
-
-    def artifact_path(self, context: ScannerExecutionContext) -> Path:
-        return context.output_path / "codeql.sarif"
+```text
+backend/app/scanner/engines/codeql.py
+    |
+    +-- name = "codeql"
+    +-- image = arve-codeql:2.27.1
+    +-- build_command()
+    +-- artifact_path() -> /output/codeql.sarif
 ```
 
-### Step 2: Register in Engine Registry (`backend/app/scanner/service.py`)
+### Supported languages
 
-In `build_default_registry()`:
-
-```python
-if getattr(settings, "SCANNER_ENABLE_CODEQL", False):
-    from app.scanner.engines.codeql import CodeqlEngine
-    registry.register(CodeqlEngine())
+```text
+.js .jsx .mjs .cjs .ts .tsx  -> javascript-typescript
+.java                       -> java
+.py                         -> python
+.go                         -> go
 ```
 
-### Step 3: Implement Finding Mapper (`backend/app/security/mappers/codeql.py`)
+Only detected languages are executed. CodeQL databases are created under
+`/tmp/codeql-db` and removed automatically after the wrapper exits.
 
-CodeQL outputs standard **SARIF 2.1.0**. You can parse SARIF using `sarif-om` or standard Python JSON:
+### Container
 
-```python
-import json
-from app.security.mappers.base import FindingMapper
-from app.security.models import NormalizedFinding, FindingType, FindingSeverity, FindingStatus
+Build the local image before running ARVE:
 
-class CodeqlFindingMapper(FindingMapper):
-    @property
-    def engine_name(self) -> str:
-        return "codeql"
-
-    def map_artifact(self, raw_content, context=None) -> list[NormalizedFinding]:
-        data = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
-        findings = []
-        for run in data.get("runs", []):
-            for result in run.get("results", []):
-                rule_id = result.get("ruleId")
-                message = result.get("message", {}).get("text", "")
-                locations = result.get("locations", [])
-                loc = locations[0].get("physicalLocation", {}) if locations else {}
-                file_path = loc.get("artifactLocation", {}).get("uri")
-                line_start = loc.get("region", {}).get("startLine")
-                line_end = loc.get("region", {}).get("endLine", line_start)
-
-                finding = NormalizedFinding(
-                    engine=self.engine_name,
-                    finding_type=FindingType.SAST.value,
-                    title=f"CodeQL: {rule_id}",
-                    description=message,
-                    severity=FindingSeverity.HIGH,
-                    status=FindingStatus.OPEN,
-                    file_path=file_path,
-                    line_start=line_start,
-                    line_end=line_end,
-                    rule_id=rule_id,
-                    raw_json=result,
-                )
-                findings.append(finding)
-        return findings
+```bash
+docker build -t arve-codeql:2.27.1 ./docker/codeql
 ```
 
-### Step 4: Add to Normalizer Pipeline
+The wrapper emits only:
 
-In [backend/app/scanner/service.py](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/backend/app/scanner/service.py) and [backend/app/scanner/parallel.py](file:///c:/Users/KIIT0001/Desktop/STUDY/Github/ARVE/backend/app/scanner/parallel.py):
-Include `CodeqlFindingMapper()` in the `FindingNormalizer` mappers list alongside `OsvFindingMapper`, `GitleaksFindingMapper`, and `SemgrepFindingMapper`.
+```text
+/output/codeql.sarif
+```
 
-### Step 5: Test & Validate
-1. Add tests in `backend/tests/scanner/test_codeql_engine.py` and `backend/tests/security/test_codeql_mapper.py`.
-2. Verify finding deduplication via `compute_finding_fingerprint(finding)`.
+and the normal ARVE artifact store uploads it under:
 
----
+```text
+scans/<scan-id>/codeql/codeql.sarif
+```
+
+### Normalization
+
+`backend/app/security/mappers/codeql.py` parses SARIF 2.1.0, preserves rule
+and tool metadata, extracts CWE/OWASP tags when present, maps CodeQL
+security-severity/level into the ARVE severity taxonomy, records confidence
+from SARIF precision, and produces canonical `NormalizedFinding` objects.
+The existing fingerprinting and PostgreSQL persistence layers are reused.
+
+### Orchestration
+
+CodeQL is registered through `build_default_registry()` and
+`build_security_registry()`. The parallel service executes OSV, Gitleaks,
+Semgrep, and CodeQL concurrently. One engine may fail or time out without
+discarding findings produced by successful engines; the scan is then marked
+`PARTIAL`.
+
+### Frontend
+
+The analysis page shows CodeQL engine status, lists it with the other engines,
+and opens its raw SARIF artifact through the existing artifact API. The
+findings page includes CodeQL as an engine filter. The homepage Run Analysis
+flow is unchanged because it already queues the generic security scan after a
+fresh ingestion; CodeQL participates automatically through the backend
+registry.
 
 ## 5. Key Architecture Constraints & Gotchas
 
