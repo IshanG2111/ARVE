@@ -56,7 +56,6 @@ def test_codeql_registry_can_be_enabled(monkeypatch):
     monkeypatch.setattr(settings, "SCANNER_ENABLE_GITLEAKS", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_SEMGREP", False)
     monkeypatch.setattr(settings, "SCANNER_ENABLE_CODEQL", True)
-    from app.scanner.service import build_default_registry
     assert [engine.name for engine in build_default_registry().list()] == ["codeql"]
 
 def test_codeql_registry_can_be_disabled(monkeypatch):
