@@ -1265,6 +1265,8 @@ engines.
 10. **Parallel orchestration:** `ParallelSecurityScanService` starts CodeQL
     alongside OSV, Gitleaks, and Semgrep. A CodeQL failure or timeout results
     in the same `PARTIAL` semantics as any other failed engine while
-    successful findings remain persisted.
+    successful findings remain persisted. If CodeQL produces usable SARIF
+    before a language-level failure, that artifact is normalized and stored
+    before the CodeQL engine is marked failed.
 
 ---
