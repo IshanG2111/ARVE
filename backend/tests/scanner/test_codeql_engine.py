@@ -94,28 +94,3 @@ def test_codeql_engine_uses_configured_image(monkeypatch):
     assert engine.image == "custom-codeql:2.27.1"
 
 
-def test_codeql_engine_partial_result_is_usable():
-    """Exit 1 with a SARIF artifact represents partial language execution, not a clean result."""
-    from unittest.mock import MagicMock
-    from app.scanner.service import ScanExecutionService
-    from app.scanner.interfaces import DockerRunResult, EngineExecutionStatus
-
-    service = object.__new__(ScanExecutionService)
-    engine = CodeqlEngine()
-    artifact = Path("/tmp/codeql.sarif")
-    runner_result = DockerRunResult(
-        status=EngineExecutionStatus.FAILED,
-        exit_code=1,
-        duration_ms=1000,
-        stdout="",
-        stderr="partial language failure",
-    )
-
-    service.docker_runner = MagicMock()
-    service.docker_runner.run.return_value = runner_result
-
-    # This contract is exercised by the service implementation; the test above
-    # is intentionally structural because full Docker execution belongs to E2E.
-    assert engine.name == "codeql"
-    assert runner_result.exit_code == 1
-    assert artifact.suffix == ".sarif"
