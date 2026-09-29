@@ -1263,10 +1263,11 @@ engines.
    tags into `NormalizedFinding`. Existing fingerprinting and database
    persistence are reused.
 10. **Parallel orchestration:** `ParallelSecurityScanService` starts CodeQL
-    alongside OSV, Gitleaks, and Semgrep. A CodeQL failure or timeout results
-    in the same `PARTIAL` semantics as any other failed engine while
-    successful findings remain persisted. If CodeQL produces usable SARIF
-    before a language-level failure, that artifact is normalized and stored
-    before the CodeQL engine is marked failed.
+    alongside OSV, Gitleaks, and Semgrep. A CodeQL hard failure or timeout
+    results in the same `PARTIAL` semantics as any other failed engine while
+    successful findings remain persisted. If the CodeQL wrapper reports exit
+    code 1 after producing usable SARIF for at least one detected language,
+    ARVE preserves and normalizes that artifact; the language-level partial
+    result remains usable while the scan can continue with the other engines.
 
 ---
