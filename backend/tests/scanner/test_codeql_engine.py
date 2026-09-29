@@ -38,6 +38,15 @@ def test_wrapper_declares_all_required_languages():
     for language in ("javascript-typescript", "java", "python", "go"):
         assert language in wrapper
     assert "security-extended" in wrapper
+    assert "javascript-code-scanning.qls" in wrapper
+    assert "javascript-security-extended.qls" in wrapper
+    assert "java-code-scanning.qls" in wrapper
+    assert "java-security-extended.qls" in wrapper
+    assert "python-code-scanning.qls" in wrapper
+    assert "python-security-extended.qls" in wrapper
+    assert "go-code-scanning.qls" in wrapper
+    assert "go-security-extended.qls" in wrapper
+    assert "FAILED_LANGUAGES" in wrapper
     assert '"/tmp/codeql-db"' in wrapper
     assert '"/output/codeql.sarif"' in wrapper
 
