@@ -19,6 +19,7 @@ RUN apt-get update \
         python3 \
         python3-minimal \
         tar \
+        zstd \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/codeql \
