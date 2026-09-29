@@ -43,6 +43,10 @@ export const FindingsPage: React.FC = () => {
             if (engine === 'semgrep') {
                 engines.add('Semgrep');
             }
+
+            if (engine === 'codeql') {
+                engines.add('CodeQL');
+            }
         });
 
         // Phase 4A engines should still be visible on a clean scan
@@ -50,6 +54,8 @@ export const FindingsPage: React.FC = () => {
         if (engines.size === 0) {
             engines.add('OSV-Scanner');
             engines.add('Gitleaks');
+            engines.add('Semgrep');
+            engines.add('CodeQL');
         }
 
         return Array.from(engines);
@@ -443,7 +449,7 @@ export const FindingsPage: React.FC = () => {
                             <option value="ALL">All Engines</option>
                             <option value="osv">OSV Scanner (SCA)</option>
                             <option value="gitleaks">GitLeaks (Secrets)</option>
-                            <option value="semgrep">Semgrep (SAST)</option>
+                            <option value="semgrep">Semgrep (SAST)</option>\n                            <option value="codeql">CodeQL (Deep SAST)</option>
                         </select>
 
                         {/* Status Filter */}
