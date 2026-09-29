@@ -143,9 +143,33 @@ def build_scanner() -> None:
     print("\n[OK] Phase 3 scanner build completed.")
 
 
+def build_codeql_scanner() -> None:
+    # Runs from ARVE root because the Docker build context is ./docker/codeql.
+    banner("4 — CodeQL Scanner")
+
+    run_command(
+        [
+            "docker",
+            "build",
+            "-t",
+            "arve-codeql:2.27.1",
+            "./docker/codeql",
+        ],
+        cwd=ROOT,
+    )
+
+    run_command(
+        ["docker", "images", "arve-codeql:2.27.1"],
+        cwd=ROOT,
+    )
+
+    print("
+[OK] CodeQL scanner image build completed.")
+
+
 def backend_dependencies() -> None:
     # Runs from ARVE/backend.
-    banner("4 — Backend Dependencies")
+    banner("5 — Backend Dependencies")
 
     # Exact command from HOW_TO_RUN.md.
     run_command(
@@ -493,6 +517,7 @@ def main() -> int:
         check_docker()
         start_redis()
         build_scanner()
+        build_codeql_scanner()
         backend_dependencies()
         database_migration()
         start_celery()
