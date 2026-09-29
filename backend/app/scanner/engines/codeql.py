@@ -23,9 +23,11 @@ class CodeqlEngine:
     image: str = getattr(settings, "SCANNER_CODEQL_IMAGE", "arve-codeql:2.27.1")
 
     def build_command(self, context: ScannerExecutionContext) -> Sequence[str]:
-        """Construct the in-container ARVE CodeQL wrapper invocation."""
+        """Construct arguments for the CodeQL container entrypoint."""
+        # The Docker image already declares run-codeql.sh as ENTRYPOINT.
+        # Only pass wrapper arguments here; including the script path again
+        # makes the wrapper receive its own path as an unknown argument.
         return [
-            "/opt/arve-codeql/run-codeql.sh",
             "--workspace",
             "/code",
             "--output",
