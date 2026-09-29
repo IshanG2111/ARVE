@@ -270,14 +270,29 @@ class ScanExecutionService:
 
         # Scanner exit-code semantics:
         #
-        # 0   = packages scanned, no findings
-        # 1   = findings detected (if artifact exists) / failure if artifact missing
-        # 128 = no packages/package sources found
-        #
-        # For ARVE, exit code 1 with a valid artifact indicates a successful scan with findings.
-        # Exit code 1 without an artifact indicates a fatal scanner runtime or configuration error.
+        # OSV may legitimately return 128 when no supported dependency source
+        # is present, and ARVE treats that as a successful clean execution.
+        # CodeQL follows its own documented CLI contract: 0 is success,
+        # 2/3/32/33/98/99/100 (or another non-zero) indicate an execution
+        # problem. CodeQL's wrapper may return 1 when at least one detected
+        # language succeeded but another language failed; the merged SARIF is
+        # still useful and must be normalized/persisted before the engine is
+        # reported as failed.
         if status != EngineExecutionStatus.TIMEOUT:
-            if docker_result.exit_code in {0, 128} or (docker_result.exit_code == 1 and artifact_path is not None):
+            if engine.name == "codeql":
+                if docker_result.exit_code == 0:
+                    status = EngineExecutionStatus.SUCCESS
+                    error_message = None
+                elif docker_result.exit_code == 1 and artifact_path is not None:
+                    status = EngineExecutionStatus.FAILED
+                    error_message = (
+                        error_message
+                        or "CodeQL completed with partial language failures; "
+                        "usable SARIF artifact was produced."
+                    )
+                else:
+                    status = EngineExecutionStatus.FAILED
+            elif docker_result.exit_code in {0, 128} or (docker_result.exit_code == 1 and artifact_path is not None):
                 status = EngineExecutionStatus.SUCCESS
                 error_message = None
             elif docker_result.exit_code == 1 and artifact_path is None:
