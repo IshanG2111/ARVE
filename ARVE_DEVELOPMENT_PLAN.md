@@ -13,8 +13,7 @@ Everything below is bounded by these limits.
   -----------------------------------------------------------------------
   Dimension               v1 scope                Deferred
   ----------------------- ----------------------- -----------------------
-  Languages               JavaScript, TypeScript  Python (v1.1),
-                                                  Java/Go/C#
+  Languages               JavaScript, TypeScript, Python, Java, Go
 
   Frameworks              Express, Next.js,       Everything else
                           React, Node.js          
@@ -27,8 +26,7 @@ Everything below is bounded by these limits.
                           Dependencies, Security  
                           Misconfiguration        
 
-  Engines                 Semgrep, OSV-Scanner,   Checkov Tier 2, CodeQL,
-                          Gitleaks                ZAP
+  Engines                 Semgrep, OSV-Scanner, Gitleaks, CodeQL      Checkov Tier 2, ZAP
 
   Repo size               ≤ 5,000 source files, ≤ Larger repos rejected
                           200 MB, ≤ 15 min total  clearly
@@ -781,7 +779,7 @@ OSV-Scanner and Gitleaks use dedicated adapters.
 ## Done When
 
 Each engine can run inside its container against a known-vulnerable
-repository and produce persisted machine-readable output.
+repository and produce persisted machine-readable output, including CodeQL.
 
 ------------------------------------------------------------------------
 
