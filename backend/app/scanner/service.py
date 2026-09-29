@@ -284,7 +284,7 @@ class ScanExecutionService:
                     status = EngineExecutionStatus.SUCCESS
                     error_message = None
                 elif docker_result.exit_code == 1 and artifact_path is not None:
-                    status = EngineExecutionStatus.FAILED
+                    status = EngineExecutionStatus.SUCCESS
                     error_message = (
                         error_message
                         or "CodeQL completed with partial language failures; "
