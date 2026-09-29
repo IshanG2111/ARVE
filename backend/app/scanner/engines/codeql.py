@@ -34,6 +34,8 @@ class CodeqlEngine:
             "/output/codeql.sarif",
             "--profile",
             getattr(settings, "SCANNER_CODEQL_QUERY_SUITE", "security-extended"),
+            "--ram",
+            str(getattr(settings, "SCANNER_CODEQL_RAM_MB", 2048)),
         ]
 
     def artifact_path(self, context: ScannerExecutionContext) -> Path:

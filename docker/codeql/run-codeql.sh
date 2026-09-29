@@ -4,14 +4,16 @@ set -euo pipefail
 WORKSPACE="/code"
 OUTPUT="/output/codeql.sarif"
 PROFILE="security-extended"
+RAM_MB="${CODEQL_RAM_MB:-2048}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --workspace) WORKSPACE="$2"; shift 2 ;;
     --output) OUTPUT="$2"; shift 2 ;;
     --profile) PROFILE="$2"; shift 2 ;;
+    --ram) RAM_MB="$2"; shift 2 ;;
     -h|--help)
-      echo "Usage: run-codeql.sh [--workspace PATH] [--output PATH] [--profile NAME]"
+      echo "Usage: run-codeql.sh [--workspace PATH] [--output PATH] [--profile NAME] [--ram MB]"
       exit 0
       ;;
     *)
@@ -33,6 +35,11 @@ case "$PROFILE" in
     exit 2
     ;;
 esac
+
+if ! [[ "$RAM_MB" =~ ^[0-9]+$ ]] || (( RAM_MB < 2048 )); then
+  echo "CodeQL RAM must be an integer of at least 2048 MB; received: $RAM_MB" >&2
+  exit 2
+fi
 
 mapfile -t JS_TS_FILES < <(find "$WORKSPACE" -type f ! -path "*/.git/*" \( -iname "*.js" -o -iname "*.jsx" -o -iname "*.mjs" -o -iname "*.cjs" -o -iname "*.ts" -o -iname "*.tsx" \) -print)
 mapfile -t JAVA_FILES < <(find "$WORKSPACE" -type f ! -path "*/.git/*" -iname "*.java" -print)
@@ -112,10 +119,11 @@ for language in "${LANGUAGES[@]}"; do
   suite="$(query_suite_for_language "$language")"
   build_mode="$(build_mode_for_language "$language")"
 
-  echo "CodeQL: creating database for $language (build-mode=$build_mode)"
+  echo "CodeQL: creating database for $language (build-mode=$build_mode, ram=${RAM_MB}MB)"
   if ! "$CODEQL" database create "$db" \
       --language="$language" \
       --build-mode="$build_mode" \
+      --ram="$RAM_MB" \
       --source-root="$WORKSPACE"; then
     echo "CodeQL: database creation failed for $language; continuing with other detected languages." >&2
     FAILED_LANGUAGES+=("$language:create")
@@ -123,10 +131,11 @@ for language in "${LANGUAGES[@]}"; do
     continue
   fi
 
-  echo "CodeQL: analyzing $language with $PROFILE"
+  echo "CodeQL: analyzing $language with $PROFILE (ram=${RAM_MB}MB)"
   if ! "$CODEQL" database analyze "$db" "$suite" \
       --format=sarifv2.1.0 \
       --no-download \
+      --ram="$RAM_MB" \
       --sarif-category="arve-$language" \
       --output="$sarif"; then
     echo "CodeQL: analysis failed for $language; continuing with other detected languages." >&2

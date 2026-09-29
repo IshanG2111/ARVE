@@ -309,6 +309,35 @@ def test_docker_runner_builds_locked_down_command(tmp_path):
     assert "target=/output" in joined
     assert "--env ARVE_TEST_MODE=success" in joined
 
+def test_docker_runner_gives_codeql_a_larger_resource_budget(tmp_path, monkeypatch):
+    from app.core import config as config_module
+    from app.scanner.docker_runner import DockerRunner
+
+    monkeypatch.setattr(config_module.settings, "SCANNER_CODEQL_MEMORY_LIMIT", "4g")
+    monkeypatch.setattr(config_module.settings, "SCANNER_CODEQL_CPU_LIMIT", 2.0)
+
+    source = tmp_path / "src"
+    output = tmp_path / "out"
+    source.mkdir()
+    output.mkdir()
+    context = ScannerExecutionContext(
+        scan_id="scan-codeql",
+        workspace_path=source,
+        output_path=output,
+        timeout_seconds=180,
+        environment={},
+    )
+    command = DockerRunner(docker_binary="docker")._build_command(
+        context,
+        "codeql",
+        "arve-codeql:2.27.1",
+        ["--workspace", "/code"],
+    )
+
+    joined = " ".join(command)
+    assert "--memory 4g" in joined
+    assert "--cpus 2.0" in joined
+
 
 def test_create_scan_uses_latest_completed_run_when_not_explicit(db):
     project, first = _make_snapshot(db)

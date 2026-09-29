@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     SCANNER_ENABLE_CODEQL: bool = True
     SCANNER_CODEQL_IMAGE: str = "arve-codeql:2.27.1"
     SCANNER_CODEQL_QUERY_SUITE: str = "security-extended"
+    # CodeQL needs more memory than the general scanner sandbox.
+    SCANNER_CODEQL_MEMORY_LIMIT: str = "4g"
+    SCANNER_CODEQL_CPU_LIMIT: float = 2.0
+    SCANNER_CODEQL_RAM_MB: int = 2048
     SCANNER_SEMGREP_IMAGE: str = "semgrep/semgrep:1.90.0"
     SCANNER_SEMGREP_CONFIG: str = "auto"
     SCANNER_SEMGREP_RULES_PATH: Optional[str] = None

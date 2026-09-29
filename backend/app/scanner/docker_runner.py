@@ -66,6 +66,13 @@ class DockerRunner:
         else:
             network = getattr(settings, "SCANNER_NETWORK_MODE", "none")
 
+        if engine_name == "codeql":
+            memory_limit = getattr(settings, "SCANNER_CODEQL_MEMORY_LIMIT", settings.SCANNER_MEMORY_LIMIT)
+            cpu_limit = getattr(settings, "SCANNER_CODEQL_CPU_LIMIT", settings.SCANNER_CPU_LIMIT)
+        else:
+            memory_limit = settings.SCANNER_MEMORY_LIMIT
+            cpu_limit = settings.SCANNER_CPU_LIMIT
+
         command = [
             self.docker_binary,
             "run",
@@ -77,9 +84,9 @@ class DockerRunner:
             "--tmpfs",
             "/tmp:rw",
             "--memory",
-            settings.SCANNER_MEMORY_LIMIT,
+            memory_limit,
             "--cpus",
-            str(settings.SCANNER_CPU_LIMIT),
+            str(cpu_limit),
             "--user",
             settings.SCANNER_CONTAINER_USER,
             "--mount",
