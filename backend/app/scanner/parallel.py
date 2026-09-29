@@ -86,11 +86,20 @@ class ParallelSecurityScanService(ScanExecutionService):
                         error_message="Global scan timeout reached before engine start",
                     )
                 try:
+                    engine_timeout = (
+                        getattr(
+                            settings,
+                            "SCANNER_CODEQL_TIMEOUT_SECONDS",
+                            settings.SCANNER_ENGINE_TIMEOUT_SECONDS,
+                        )
+                        if engine.name == "codeql"
+                        else settings.SCANNER_ENGINE_TIMEOUT_SECONDS
+                    )
                     return self._run_engine(
                         scan_id_value,
                         workspace,
                         engine,
-                        timeout_seconds=min(settings.SCANNER_ENGINE_TIMEOUT_SECONDS, remaining),
+                        timeout_seconds=min(engine_timeout, remaining),
                     )
                 except ScannerExecutionError:
                     raise
