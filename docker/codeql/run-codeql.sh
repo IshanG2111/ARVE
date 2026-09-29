@@ -121,7 +121,7 @@ for language in "${LANGUAGES[@]}"; do
   fi
 
   echo "CodeQL: analyzing $language with $PROFILE"
-  if ! "$CODEQL" database analyze "$db" "$suite"       --format=sarifv2.1.0       --sarif-category="arve-$language"       --output="$sarif"; then
+  if ! "$CODEQL" database analyze "$db" "$suite"       --format=sarifv2.1.0       --no-download       --sarif-category="arve-$language"       --output="$sarif"; then
     echo "CodeQL: analysis failed for $language; continuing with other detected languages." >&2
     FAILED_LANGUAGES+=("$language:analyze")
     rm -f "$sarif"
