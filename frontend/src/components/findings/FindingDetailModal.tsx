@@ -18,6 +18,8 @@ import { StatusBadge } from '../common/StatusBadge';
 import { JsonViewer } from '../ui/JsonViewer';
 import { MarkdownContent } from '../ui/MarkdownContent';
 import { useToast } from '../ui/ToastProvider';
+import { AIExplanationPanel } from '../ai/AIExplanationPanel';
+import { useAIStatus } from '../../hooks/useAIStatus';
 import { api } from '../../services/api';
 import type { SecurityFinding } from '@/types';
 
@@ -53,6 +55,19 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
   const [suppressReason, setSuppressReason] = useState(SUPPRESSION_REASONS[0]);
   const [suppressJustification, setSuppressJustification] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [copiedDiff, setCopiedDiff] = useState(false);
+  const aiStatus = useAIStatus();
+
+  const rawJson = finding?.raw_json;
+  const parsedRaw = useMemo<Record<string, any> | null>(() => {
+    if (!rawJson) return null;
+    if (typeof rawJson === 'object') return rawJson as Record<string, any>;
+    try {
+      return JSON.parse(rawJson) as Record<string, any>;
+    } catch {
+      return null;
+    }
+  }, [rawJson]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -100,22 +115,12 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
 
   const upgradeCommand = getUpgradeCommand();
 
-  const parsedRaw = useMemo<Record<string, any> | null>(() => {
-    if (!finding.raw_json) return null;
-    if (typeof finding.raw_json === 'object') return finding.raw_json as Record<string, any>;
-    try {
-      return JSON.parse(finding.raw_json) as Record<string, any>;
-    } catch {
-      return null;
-    }
-  }, [finding.raw_json]);
-
   const remediation = parsedRaw?.remediation;
   const exampleDiff: string | undefined = remediation?.example_diff;
   const whyItMatters: string | undefined = remediation?.why_it_matters;
   const recommendedAction: string | undefined = remediation?.recommended_action;
   const vulnerableLines: string | undefined = parsedRaw?.lines;
-  const [copiedDiff, setCopiedDiff] = useState(false);
+  const showAI = Boolean(aiStatus?.enabled && finding.scan_id);
 
   const handleCopyDiff = () => {
     if (exampleDiff) {
@@ -404,6 +409,11 @@ export const FindingDetailModal: React.FC<FindingDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* AI explanation (hidden when AI is off on the server) */}
+          {showAI && finding.scan_id && (
+            <AIExplanationPanel key={finding.id} scanId={finding.scan_id} findingId={finding.id} />
+          )}
 
           {/* Dedicated Before/After Code Remediation Diff */}
           {exampleDiff && (

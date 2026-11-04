@@ -14,9 +14,15 @@ import type {
   Scan,
   ScanStatusResponse,
   SecurityFinding,
+  AIStatus,
+  FindingExplanationResponse,
+  ScanSummaryResponse,
 } from '@/types';
 
 export type {
+  AIStatus,
+  FindingExplanationResponse,
+  ScanSummaryResponse,
   User,
   GitHubRepo,
   Branch,
@@ -324,6 +330,57 @@ export async function getEngineArtifact(scanId: string, engineName: string = 'os
   return handleResponse<any>(res);
 }
 
+// ─── AI explanations & security report ─────────────────────────────────────
+export async function getAIStatus(): Promise<AIStatus> {
+  const res = await fetch(`${BASE}/ai/status`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<AIStatus>(res);
+}
+
+export async function explainFinding(scanId: string, findingId: string): Promise<FindingExplanationResponse> {
+  const res = await fetch(`${BASE}/scans/${scanId}/findings/${findingId}/explain`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<FindingExplanationResponse>(res);
+}
+
+export async function getAISummary(scanId: string): Promise<ScanSummaryResponse> {
+  const res = await fetch(`${BASE}/scans/${scanId}/ai-summary`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanSummaryResponse>(res);
+}
+
+// The report needs the bearer token, so it is fetched as a blob instead of opened as a link.
+export async function downloadScanReport(scanId: string): Promise<void> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report.pdf`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+    throw new Error(err.detail || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] || `arve-report-${scanId.slice(0, 8)}.pdf`;
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -349,4 +406,8 @@ Object.assign(api, {
   getScanFindings,
   updateFindingStatus,
   getEngineArtifact,
+  getAIStatus,
+  explainFinding,
+  getAISummary,
+  downloadScanReport,
 });

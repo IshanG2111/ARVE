@@ -7,6 +7,8 @@ from app.api.repositories import router as repositories_router
 from app.api.ingestion import router as ingestion_router
 from app.api.scans import router as scans_router
 from app.api.health import router as health_router
+from app.api.reports import router as reports_router
+from app.api.ai import router as ai_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -17,3 +19,5 @@ api_router.include_router(targets_router)
 api_router.include_router(repositories_router)
 api_router.include_router(ingestion_router)
 api_router.include_router(scans_router)
+api_router.include_router(reports_router)
+api_router.include_router(ai_router)
