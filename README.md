@@ -1,4 +1,4 @@
-Used for secret detection.
+Used for secret detection
 
 ARVE must redact secret values before storage.
 
