@@ -26,6 +26,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # lets the frontend read the report filename
 )
 
 from app.api.health import router as health_router

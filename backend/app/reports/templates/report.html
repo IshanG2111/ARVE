@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Security Audit Report - {{ report.project_name }}</title>
+<style>
+  {% if for_pdf %}
+  @page {
+    size: a4 portrait;
+    margin: 1.8cm 1.6cm 2cm 1.6cm;
+    @frame footer {
+      -pdf-frame-content: page-footer;
+      bottom: 0.8cm; left: 1.6cm; right: 1.6cm; height: 0.8cm;
+    }
+  }
+  {% endif %}
+  body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #1f2933; line-height: 1.4; {% if not for_pdf %}max-width: 960px; margin: 24px auto; padding: 0 16px; background: #ffffff;{% endif %} }
+  h1 { font-size: 22pt; margin: 0 0 4pt 0; color: #102a43; }
+  h2, h3 { -pdf-keep-with-next: true; }
+  h2 { font-size: 14pt; margin: 18pt 0 6pt 0; padding-bottom: 3pt; border-bottom: 1px solid #bcccdc; color: #102a43; }
+  h3 { font-size: 11pt; margin: 0 0 4pt 0; color: #102a43; }
+  .subtitle { color: #486581; font-size: 10pt; margin-bottom: 10pt; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt 0; }
+  th, td { text-align: left; vertical-align: top; padding: 4pt 5pt; border-bottom: 1px solid #d9e2ec; font-size: 9pt; }
+  th { background-color: #f0f4f8; color: #243b53; }
+  .meta th { width: 30%; background-color: #ffffff; color: #486581; font-weight: normal; }
+  .banner { border: 1px solid #d68910; background-color: #fef5e7; padding: 6pt 8pt; margin: 8pt 0; }
+  .muted { color: #627d98; }
+  .sev { font-weight: bold; }
+  .sev-CRITICAL { color: #8b0000; }
+  .sev-HIGH { color: #c0392b; }
+  .sev-MEDIUM { color: #b9770e; }
+  .sev-LOW { color: #2471a3; }
+  .sev-INFO { color: #616a6b; }
+  .finding { border: 1px solid #d9e2ec; padding: 6pt 8pt; margin: 0 0 8pt 0; }
+  .label { color: #486581; }
+  .code { font-family: Courier, monospace; font-size: 7.5pt; background-color: #f5f7fa; border: 1px solid #e4e7eb; padding: 4pt; margin: 4pt 0; white-space: pre-wrap; }
+  .path { font-family: Courier, monospace; font-size: 8.5pt; -pdf-word-wrap: CJK; word-wrap: break-word; }
+  ul, ol { margin: 2pt 0 2pt 0; padding-left: 14pt; }
+  .ai { border: 1px solid #9fb3c8; border-left: 3px solid #4c63b6; background-color: #f5f7ff; padding: 5pt 8pt; margin: 6pt 0 4pt 0; }
+  .ai-tag { color: #4c63b6; font-weight: bold; font-size: 8.5pt; }
+  #page-footer { font-size: 8pt; color: #829ab1; text-align: center; }
+</style>
+</head>
+<body>
+
+<h1>Security Audit Report</h1>
+<div class="subtitle">{{ report.project_name }}</div>
+
+<table class="meta">
+  <tr><th>Repository</th><td>{{ report.repo_name or "not recorded" }}</td></tr>
+  <tr><th>Commit</th><td class="path">{{ report.commit_sha }}</td></tr>
+  <tr><th>Branch</th><td>{{ report.branch or "not recorded" }} <span class="muted">(project branch when this report was generated)</span></td></tr>
+  <tr><th>Scan</th><td class="path">{{ report.scan_id }}</td></tr>
+  <tr><th>Scan status</th><td>{{ report.scan_status }}</td></tr>
+  <tr><th>Scan completed</th><td>{{ report.scan_completed_at | date }}</td></tr>
+  <tr><th>Files analysed</th><td>{{ report.files_ingested if report.files_ingested is not none else "not recorded" }}</td></tr>
+  <tr><th>Languages</th><td>{{ report.languages | join(", ") if report.languages else "not recorded" }}</td></tr>
+  <tr><th>Report generated</th><td>{{ report.generated_at | date }}</td></tr>
+</table>
+
+{% if report.partial %}
+<div class="banner">
+  <strong>Partial coverage.</strong> One or more engines did not complete. Their categories were not checked,
+  so this report may be missing issues. See Scan coverage below.
+</div>
+{% endif %}
+
+<h2>1. Summary</h2>
+<p>
+  This scan has <strong>{{ report.active_total }}</strong> open finding{{ "" if report.active_total == 1 else "s" }}.
+  Counts below cover open, reopened and acknowledged findings only.
+</p>
+<table>
+  <tr>{% for severity, _ in report.severity_counts %}<th>{{ severity }}</th>{% endfor %}</tr>
+  <tr>{% for severity, count in report.severity_counts %}<td class="sev sev-{{ severity }}">{{ count }}</td>{% endfor %}</tr>
+</table>
+{% if report.inactive_counts %}
+<p class="muted">
+  Also listed but not counted above:
+  {% for status, count in report.inactive_counts %}{{ count }} {{ status | lower | replace("_", " ") }}{{ ", " if not loop.last else "." }}{% endfor %}
+</p>
+{% endif %}
+{% if report.ai_summary %}
+<div class="ai">
+  <div class="ai-tag">AI-assisted overview ({{ report.ai_summary.model }})</div>
+  <p>{{ report.ai_summary.overview }}</p>
+  {% if report.ai_summary.top_risks %}
+  <div class="label">Top risks</div>
+  <ol>{% for item in report.ai_summary.top_risks %}<li>{{ item }}</li>{% endfor %}</ol>
+  {% endif %}
+  {% if report.ai_summary.first_actions %}
+  <div class="label">Fix first</div>
+  <ol>{% for item in report.ai_summary.first_actions %}<li>{{ item }}</li>{% endfor %}</ol>
+  {% endif %}
+  <div class="muted">The counts and tables in this report are the source of truth; this overview covers the most severe open findings only.</div>
+</div>
+{% endif %}
+
+<h2>2. Scan coverage</h2>
+<table>
+  <tr><th>Engine</th><th>Result</th><th>Findings</th><th>Notes</th></tr>
+  {% for engine in report.engines %}
+  <tr>
+    <td>{{ engine.label }}</td>
+    <td>{{ engine.state }}</td>
+    <td>{{ engine.finding_count if engine.usable else "-" }}</td>
+    <td>{{ engine.note or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if for_pdf and report.findings %}<pdf:nextpage />{% endif %}
+<h2>3. Findings overview</h2>
+{% if report.findings %}
+<table repeat="1">
+  <tr><th width="15%">ID</th><th width="10%">Severity</th><th width="13%">Type</th><th width="27%">Title</th><th width="23%">Location</th><th width="12%">Status</th></tr>
+  {% for f in report.findings %}
+  <tr>
+    <td class="path">{{ f.display_id }}</td>
+    <td class="sev sev-{{ f.severity }}">{{ f.severity }}</td>
+    <td>{{ f.type_label }}</td>
+    <td>{{ f.title }}</td>
+    <td class="path">{{ f.locations[0] if f.locations else (f.package_name or "-") }}{% if f.locations | length > 1 %} <span class="muted">(+{{ f.locations | length - 1 }} more)</span>{% endif %}</td>
+    <td>{{ f.status }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p>The engines that completed reported no findings for this commit. This is not proof that the code is secure; see Scan coverage and Limitations.</p>
+{% endif %}
+
+{% if report.findings %}
+<h2>4. Finding details</h2>
+{% for f in report.findings %}
+<div class="finding">
+  <h3>{{ f.display_id }} &middot; <span class="sev sev-{{ f.severity }}">{{ f.severity }}</span> &middot; {{ f.title }}</h3>
+  <table class="meta">
+    <tr><th>Type</th><td>{{ f.type_label }}, reported by {{ f.engine_label }}</td></tr>
+    <tr><th>Status</th><td>{{ f.status }}</td></tr>
+    {% if f.locations %}
+    <tr><th>Location{{ "s" if f.locations | length > 1 else "" }}</th><td class="path">{% for loc in f.locations %}<div>{{ loc }}</div>{% endfor %}</td></tr>
+    {% endif %}
+    {% if f.package_name %}
+    <tr><th>Package</th><td>{{ f.package_name }}{% if f.package_version %} {{ f.package_version }}{% endif %}{% if f.ecosystem %} ({{ f.ecosystem }}){% endif %}</td></tr>
+    <tr><th>Fixed version</th><td>{{ f.fixed_version or "not recorded" }}</td></tr>
+    {% endif %}
+    {% if f.cve or f.ghsa or f.cwe %}
+    <tr><th>References</th><td>{{ [f.cve, f.ghsa, f.cwe] | select | join(", ") }}</td></tr>
+    {% endif %}
+    {% if f.rule_id %}
+    <tr><th>Rule</th><td class="path">{{ f.rule_id }}</td></tr>
+    {% endif %}
+  </table>
+  {% if f.description %}
+  <p>{{ f.description }}</p>
+  {% endif %}
+  {% if f.excerpt %}
+  <pre class="code">{% for line in f.excerpt | code_lines(f.excerpt_start) %}{{ line }}
+{% endfor %}</pre>
+  {% endif %}
+  <p><span class="label">Recommended action:</span> {{ f.fix or "No standard guidance is available for this rule. Review the code at the location above." }}</p>
+  {% if f.ai %}
+  <div class="ai">
+    <div class="ai-tag">AI-assisted explanation</div>
+    <p>{{ f.ai.summary }}</p>
+    <p><span class="label">Why it matters:</span> {{ f.ai.why_it_matters }}</p>
+    {% if f.ai.fix_steps %}
+    <div class="label">How to fix</div>
+    <ol>{% for step in f.ai.fix_steps %}<li>{{ step }}</li>{% endfor %}</ol>
+    {% endif %}
+    {% if f.ai.suggested_code %}
+    <div class="label">Suggested change, not applied</div>
+    <pre class="code">{% for line in f.ai.suggested_code | wrap_code %}{{ line }}
+{% endfor %}</pre>
+    {% endif %}
+    {% if f.ai.caveats %}
+    <div class="label">Caveats</div>
+    <ul>{% for c in f.ai.caveats %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>{{ "5" if report.findings else "4" }}. Methodology and limitations</h2>
+<p>
+  ARVE ran the scanner engines listed under Scan coverage against a snapshot of the repository at the commit above.
+  Engine results were normalised into one format and grouped by fingerprint.
+  {% if report.has_ai %}
+  Sections marked AI-assisted were generated by {{ report.ai_model }}; everything else is deterministic.
+  {% else %}
+  This report contains no AI-generated text.
+  {% endif %}
+</p>
+<ul>
+  {% for item in report.limitations %}<li>{{ item }}</li>{% endfor %}
+</ul>
+<p class="muted">Template version {{ template_version }}.</p>
+
+{% if for_pdf %}
+<div id="page-footer">ARVE Security Audit Report &middot; {{ report.commit_sha[:7] }} &middot; Page <pdf:pagenumber> of <pdf:pagecount></div>
+{% endif %}
+</body>
+</html>

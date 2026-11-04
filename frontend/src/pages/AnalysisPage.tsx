@@ -9,6 +9,9 @@ import { EmptyState } from '../components/common/EmptyState';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { Wave } from '../components/ui/wave';
 import { JsonViewer } from '../components/ui/JsonViewer';
+import { AISummaryCard } from '../components/ai/AISummaryCard';
+import { FindingDetailModal } from '../components/findings/FindingDetailModal';
+import { useAIStatus } from '../hooks/useAIStatus';
 import {
   Play,
   Layers,
@@ -16,9 +19,12 @@ import {
   Shield,
   RefreshCw,
   FileJson,
+  FileDown,
   X,
 } from 'lucide-react';
-import type { ScanStatusResponse } from '@/types';
+import type { ScanStatusResponse, SecurityFinding } from '@/types';
+
+const FINISHED_SCAN_STATUSES = ['COMPLETED', 'PARTIAL'];
 
 export const AnalysisPage: React.FC = () => {
   const toast = useToast();
@@ -46,6 +52,32 @@ export const AnalysisPage: React.FC = () => {
   const [viewingArtifact, setViewingArtifact] = useState<{ name: string; content: any } | null>(null);
   const [loadingArtifact, setLoadingArtifact] = useState(false);
   const [activeIngestionId, setActiveIngestionId] = useState<string | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [inspectingFinding, setInspectingFinding] = useState<SecurityFinding | null>(null);
+  const aiStatus = useAIStatus();
+
+  const handleDownloadReport = async (scanId: string) => {
+    setDownloadingReport(true);
+    try {
+      await api.downloadScanReport(scanId);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to download report');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
+  // Opens a finding referenced by the AI summary (F1, F2, ...) in the usual detail modal.
+  const handleOpenFinding = async (scanId: string, findingId: string) => {
+    try {
+      const findings: SecurityFinding[] = await api.getScanFindings(scanId);
+      const finding = findings.find((f) => f.id === findingId);
+      if (finding) setInspectingFinding(finding);
+      else toast.error('That finding is no longer available.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load finding');
+    }
+  };
 
   const handleInspectArtifact = async (scanId: string, engineName: string) => {
     setLoadingArtifact(true);
@@ -181,6 +213,7 @@ export const AnalysisPage: React.FC = () => {
       latestScan &&
       ['COMPLETED', 'PARTIAL'].includes(latestScan.status)
   );
+  const isActiveScanFinished = Boolean(activeScan && FINISHED_SCAN_STATUSES.includes(activeScan.status));
 
   return (
     <div className="analysis-page anim-fade-up" style={{ padding: '24px 0 64px' }}>
@@ -410,6 +443,15 @@ export const AnalysisPage: React.FC = () => {
               <span>Engines: OSV, Gitleaks, Semgrep, CodeQL</span>
             </div>
           </div>
+        )}
+
+        {/* AI summary of the selected finished scan (hidden when AI is off on the server) */}
+        {aiStatus?.enabled && activeScan && isActiveScanFinished && (
+          <AISummaryCard
+            key={activeScan.id}
+            scanId={activeScan.id}
+            onOpenFinding={(findingId) => handleOpenFinding(activeScan.id, findingId)}
+          />
         )}
 
         {/* ── Systematic History Section with Tab Switcher ── */}
@@ -679,6 +721,20 @@ export const AnalysisPage: React.FC = () => {
                   </div>
                 </div>
 
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                {historyTab === 'scans' && activeScan && isActiveScanFinished && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ fontSize: '11.5px', padding: '4px 10px', gap: '6px' }}
+                    onClick={() => handleDownloadReport(activeScan.id)}
+                    disabled={downloadingReport}
+                    id="download-report-btn"
+                  >
+                    {downloadingReport ? <Wave size="xs" color="currentColor" /> : <FileDown size={13} />}
+                    <span>{downloadingReport ? 'Preparing Report…' : 'Download Report (PDF)'}</span>
+                  </button>
+                )}
+
                 {/* Sub-tabs inside Inspector */}
                 <div style={{ display: 'flex', gap: '4px', background: 'var(--elevated)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                   {(['overview', 'engines', 'logs'] as const).map((tab) => (
@@ -702,6 +758,7 @@ export const AnalysisPage: React.FC = () => {
                       {tab}
                     </button>
                   ))}
+                </div>
                 </div>
               </div>
 
@@ -857,6 +914,20 @@ export const AnalysisPage: React.FC = () => {
           onComplete={() => {
             refreshRuns();
           }}
+        />
+      )}
+
+      {/* Finding opened from an AI summary reference */}
+      {inspectingFinding && (
+        <FindingDetailModal
+          finding={inspectingFinding}
+          onClose={() => setInspectingFinding(null)}
+          onStatusChange={(_findingId, newStatus) =>
+            setInspectingFinding((f) => (f ? { ...f, status: newStatus } : f))
+          }
+          onOpenInCode={(filePath) =>
+            navigate(`/code?repo=${currentProjectId}${filePath ? `&file=${encodeURIComponent(filePath)}` : ''}`)
+          }
         />
       )}
 

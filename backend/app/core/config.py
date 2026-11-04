@@ -78,6 +78,19 @@ class Settings(BaseSettings):
     B2_SECRET_ACCESS_KEY: Optional[str] = None
     B2_ARTIFACT_PREFIX: str = "scans"
 
+    # Directory of AST JSON output, one file per analysis run named
+    # <analysis_run_id>.json or <commit_sha>.json. Unset means no AST context.
+    AST_OUTPUT_DIR: Optional[str] = None
+
+    # AI explanations (Google Gemini). Off unless explicitly enabled.
+    AI_ENABLED: bool = False
+    # Google's unpaid tier may use submitted content; keep private code out unless on paid quota.
+    AI_ALLOW_PRIVATE_REPOS: bool = False
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    AI_TIMEOUT_SECONDS: int = 45
+    AI_MAX_OUTPUT_TOKENS: int = 4096
+
     model_config = SettingsConfigDict(case_sensitive=False, env_file=ENV_FILES, extra="ignore")
 
     @model_validator(mode="after")

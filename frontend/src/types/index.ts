@@ -268,3 +268,60 @@ export interface SecurityFinding {
   created_at?: string;
   updated_at?: string;
 }
+
+// ─── AI explanations ────────────────────────────────────────────────────────
+export interface AIStatus {
+  enabled: boolean;
+  model?: string | null;
+  private_repos_allowed: boolean;
+}
+
+// VALIDATED: AI answer that passed the backend checks. FALLBACK: standard guidance, with `reason`.
+export type AIResultStatus = 'VALIDATED' | 'FALLBACK';
+
+export interface FindingExplanation {
+  summary: string;
+  why_it_matters: string;
+  fix_steps: string[];
+  suggested_code?: string | null;
+  references_used: string[];
+  caveats: string[];
+}
+
+export interface FindingExplanationResponse {
+  status: AIResultStatus;
+  reason?: string | null;
+  cached: boolean;
+  model?: string | null;
+  prompt_version?: string | null;
+  scan_id: string;
+  finding_id: string;
+  commit_sha: string;
+  code_source?: 'ast' | 'lines' | null;
+  code_symbol?: string | null;
+  explanation: FindingExplanation;
+}
+
+export interface ScanSummary {
+  overview: string;
+  top_risks: string[];
+  first_actions: string[];
+}
+
+export interface ScanSummaryRef {
+  finding_id: string;
+  title: string;
+  severity: string;
+}
+
+export interface ScanSummaryResponse {
+  status: AIResultStatus;
+  reason?: string | null;
+  cached: boolean;
+  model?: string | null;
+  prompt_version?: string | null;
+  scan_id: string;
+  commit_sha: string;
+  refs: Record<string, ScanSummaryRef>;
+  summary: ScanSummary;
+}

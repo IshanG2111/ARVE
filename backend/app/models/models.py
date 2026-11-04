@@ -235,3 +235,27 @@ class SecurityFinding(Base):
 
     scan = relationship("Scan", back_populates="findings")
     project = relationship("Project", back_populates="findings")
+
+
+class AIExplanation(Base):
+    """Cache of validated AI output for a finding or a scan summary.
+
+    Only validated responses are stored. Prompts and code are never stored.
+    """
+    __tablename__ = "ai_explanations"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("security_findings.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String, nullable=False)  # FINDING_EXPLANATION or SCAN_SUMMARY
+    cache_key = Column(String, nullable=False, unique=True)
+    prompt_version = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    served_model = Column(String, nullable=True)
+    response_json = Column(Text, nullable=False)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    thought_tokens = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
