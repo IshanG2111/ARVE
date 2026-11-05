@@ -22,6 +22,11 @@ class FindingNormalizer:
             for mapper in mappers:
                 self.register_mapper(mapper)
 
+    @property
+    def mappers(self) -> list[FindingMapper]:
+        """Registered mappers in deterministic registration order."""
+        return list(self._mappers.values())
+
     def register_mapper(self, mapper: FindingMapper) -> None:
         """Register a FindingMapper instance for its canonical engine identifier."""
         canonical_name = normalize_engine_name(mapper.engine_name)
