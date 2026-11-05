@@ -87,3 +87,4 @@ vine==5.1.0
 watchfiles==1.2.0
 wcwidth==0.8.2
 websockets==17.0.1
+\ntree-sitter==0.25.2\ntree-sitter-python==0.23.6\ntree-sitter-javascript==0.23.1\ntree-sitter-typescript==0.23.2\ntree-sitter-java==0.23.5\ntree-sitter-php==0.23.11\ntree-sitter-go==0.23.4\n

@@ -30,6 +30,12 @@ export const CodeIntelligencePage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<RepositoryFile | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'source' | 'findings'>('source');
+  const [astSummary, setAstSummary] = useState<any>(null);
+  const [astFiles, setAstFiles] = useState<any[]>([]);
+  const [astSymbols, setAstSymbols] = useState<any[]>([]);
+  const [astScanId, setAstScanId] = useState<string | null>(null);
+  const [astLoading, setAstLoading] = useState(false);
+
 
   const fileParam = searchParams.get('file');
 
@@ -70,6 +76,44 @@ export const CodeIntelligencePage: React.FC = () => {
 
     return () => { cancelled = true; };
   }, [latestRun?.id, fileParam]);
+
+
+  // Load AST index for the latest completed security scan of this project.
+  useEffect(() => {
+    if (!currentProject?.id) { setAstSummary(null); setAstFiles([]); setAstScanId(null); return; }
+    let cancelled = false;
+    setAstLoading(true);
+    api.getProjectScans(currentProject.id)
+      .then(async (scans: any[]) => {
+        const scan = (scans || []).find((item) => ['COMPLETED', 'PARTIAL'].includes(String(item.status).toUpperCase()));
+        if (!scan) return null;
+        const summary = await api.getAstSummary(scan.id);
+        const filesResult = await api.getAstFiles(scan.id, 500, 0);
+        return { scanId: scan.id, summary, files: filesResult.items || [] };
+      })
+      .then((result: any) => {
+        if (cancelled) return;
+        setAstScanId(result?.scanId || null);
+        setAstSummary(result?.summary || null);
+        setAstFiles(result?.files || []);
+      })
+      .catch(() => {
+        if (!cancelled) { setAstSummary(null); setAstFiles([]); setAstScanId(null); }
+      })
+      .finally(() => { if (!cancelled) setAstLoading(false); });
+    return () => { cancelled = true; };
+  }, [currentProject?.id]);
+
+  useEffect(() => {
+    if (!astScanId || !selectedFile) { setAstSymbols([]); return; }
+    const astFile = astFiles.find((item) => norm(item.path) === norm(selectedFile.path));
+    if (!astFile) { setAstSymbols([]); return; }
+    let cancelled = false;
+    api.getAstFileSymbols(astScanId, astFile.id)
+      .then((items: any[]) => { if (!cancelled) setAstSymbols(items || []); })
+      .catch(() => { if (!cancelled) setAstSymbols([]); });
+    return () => { cancelled = true; };
+  }, [astScanId, astFiles, selectedFile?.path]);
 
   // Filter & tree
   const filteredFiles = useMemo(() => {
@@ -240,6 +284,40 @@ export const CodeIntelligencePage: React.FC = () => {
             </span>
           }
         />
+
+
+        {/* AST analysis summary and selected-file symbol index */}
+        <section style={{ marginBottom: '16px', padding: '16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--surface)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>AST Code Intelligence</div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
+                {astLoading ? 'Loading AST index…' : astSummary ? `Commit ${String(astSummary.commit_sha || '').slice(0, 8)} · ${astSummary.status}` : 'No AST index available for a completed scan yet.'}
+              </div>
+            </div>
+            {astSummary && <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Schema {astSummary.schema_version}</span>}
+          </div>
+          {astSummary && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px', marginTop: '14px' }}>
+            {[
+              ['Files', astSummary.files_parsed], ['Failed', astSummary.files_failed],
+              ['Functions', astSummary.functions], ['Classes', astSummary.classes],
+              ['Imports', astSummary.imports], ['Calls', astSummary.calls],
+              ['Relationships', astSummary.relationships], ['Unsupported', astSummary.files_unsupported],
+            ].map(([label, value]) => <div key={String(label)} style={{ padding: '10px', borderRadius: '8px', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)' }}>{value ?? 0}</div>
+              <div style={{ fontSize: '10px', color: 'var(--muted)' }}>{label}</div>
+            </div>)}
+          </div>}
+          {astSummary?.error_summary && <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px', color: 'var(--muted)', marginTop: '10px' }}>{astSummary.error_summary}</pre>}
+          {selectedFile && <div style={{ marginTop: '14px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 650, color: 'var(--primary)', marginBottom: '8px' }}>Symbols in {norm(selectedFile.path)}</div>
+            {astSymbols.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {astSymbols.map((symbol) => <span key={symbol.id} style={{ padding: '5px 8px', borderRadius: '6px', background: 'var(--elevated)', border: '1px solid var(--border)', fontSize: '10px', color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                {symbol.type} · {symbol.name} {symbol.line_start ? `L${symbol.line_start}` : ''}
+              </span>)}
+            </div> : <div style={{ fontSize: '10px', color: 'var(--muted)' }}>{astSummary ? 'No AST symbols found for this file.' : 'AST symbols will appear after indexing.'}</div>}
+          </div>}
+        </section>
 
         {/* Dual pane layout */}
         <div style={{
