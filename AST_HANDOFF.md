@@ -107,8 +107,8 @@ backend/
 ## 5. End-to-end processing lifecycle
 
 Main entry point:
-
-```python
+*python*
+```
 ASTAnalysisService.analyze_and_persist(scan, workspace)
 ```
 
@@ -223,8 +223,8 @@ The resolver does not guess dynamic imports, arbitrary default imports, complex 
 ## 9. Security finding context mapping
 
 The mapping logic is in:
-
-```python
+*python*
+```
 ASTAnalysisService._map_findings(...)
 ```
 

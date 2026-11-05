@@ -1324,7 +1324,7 @@ Language-specific databases keep analysis isolated and prevent one language's da
 
 ---
 
-## ADR-045: 5. Native SARIF Output and Merging
+## ADR-045: Native SARIF Output and Merging
 
 ### Context
 Producing native SARIF output and merging results is essential for a standardized and consistent security analysis.
@@ -1339,7 +1339,7 @@ SARIF provides a standard security-result format while the merged artifact gives
 
 ---
 
-## ADR-046: 6. Offline CodeQL Execution
+## ADR-046: Offline CodeQL Execution
 
 ### Context
 Running CodeQL in an offline environment is crucial for maintaining security and preventing data leakage.
@@ -1352,7 +1352,7 @@ CodeQL does not need external network access during scanning. This improves secu
 
 ---
 
-## ADR-047: 7. ARVE Canonical Finding Normalization
+## ADR-047: ARVE Canonical Finding Normalization
 
 ### Context
 Normalizing security findings into a canonical format is essential for consistent analysis and reporting.
@@ -1374,7 +1374,7 @@ CodeQL-specific output remains isolated at the mapper boundary while the rest of
 
 ---
 
-## ADR-048: 8. Parallel Execution with Failure Isolation
+## ADR-048: Parallel Execution with Failure Isolation
 
 ### Context
 Executing multiple security scanners in parallel can significantly reduce the overall scan time, but it's important to ensure that a failure in one scanner doesn't compromise the results of others.
@@ -1386,5 +1386,270 @@ If CodeQL fails or times out, the overall scan becomes `PARTIAL` rather than dis
 
 ### Why
 CodeQL is significantly more computationally expensive than some other scanners. Parallel execution reduces total scan latency, while per-engine failure isolation ensures one scanner cannot invalidate the entire security scan.
+
+---
+
+
+---
+
+## ADR-049: AST as a Semantic Enrichment Layer — Separate from Security Detection
+
+### Context
+
+External security scanners identify vulnerabilities and security issues, but their findings alone do not provide enough understanding of the application's internal structure.
+
+ARVE needs to connect security findings with actual source-code elements such as functions, classes, methods, imports, routes, and function calls.
+
+Building AST analysis directly into individual scanner implementations would tightly couple code understanding with scanner-specific logic.
+
+### Decision
+
+Implement AST analysis as an independent semantic analysis layer within ARVE.
+
+The AST engine operates on the persisted repository snapshot and produces structured code intelligence that can be connected with security findings.
+
+The responsibilities are separated as follows:
+
+- **External Security Engines:** Detect vulnerabilities, dependency issues, and exposed secrets.
+- **AST Engine:** Extract code structure, symbols, imports, calls, and relationships.
+- **Security Context Mapping:** Connect available security findings with relevant AST entities.
+- **Future Attack Graph Layer:** Use the extracted relationships and evidence for attack-path reconstruction.
+
+```text
+Persisted Repository Snapshot
+          |
+          v
+      AST Engine
+          |
+          v
+   Semantic Code Model
+          |
+          v
+  Security Context Mapping
+          |
+          v
+   Future Attack Graph
+```
+
+### AI Reasoning & Trade-off Analysis
+
+- **Separation of Concerns:** Scanner implementations remain independent of AST parsing and symbol resolution.
+- **Reusability:** The semantic model can support multiple security engines instead of being designed around one scanner.
+- **Extensibility:** Framework-specific analysis and more advanced data-flow capabilities can be added incrementally.
+- **Maintainability:** Changes to AST extraction do not require modifications to every scanner integration.
+
+The fundamental principle is:
+
+> Security scanners identify potential security issues; AST analysis explains where those issues exist within the application's code structure.
+
+---
+
+## ADR-050: Hybrid AST Persistence — Relational Analysis Records and Versioned JSON Artifacts in Backblaze B2
+
+### Context
+
+AST analysis can produce a large amount of structured information, including files, symbols, functions, classes, imports, calls, relationships, and security context.
+
+Storing the complete AST representation in relational database tables would introduce additional schema complexity and make changes to the semantic model difficult to manage.
+
+Keeping the entire result only in temporary files would also make it unavailable after the analysis worker finishes.
+
+### Decision
+
+Use a hybrid persistence strategy:
+
+1. Store important analysis information and artifact metadata in PostgreSQL through the existing AST analysis models.
+2. Generate a normalized, versioned JSON representation of the AST analysis.
+3. Persist the generated JSON artifacts using the existing `ScanArtifactStore` and Backblaze B2 integration.
+4. Store artifact metadata in the `ASTAnalysisRun` record.
+
+The AST integration persists two primary artifacts:
+
+- `ast-output.json` — Normalized AST analysis output.
+- `manifest.json` — Artifact manifest and associated metadata.
+
+The storage flow is:
+
+```text
+       AST Analysis
+            |
+            v
+   Normalized AST JSON
+            |
+       +----+----+
+       |         |
+       v         v
+  PostgreSQL   Backblaze B2
+  Metadata     JSON Artifacts
+       |         |
+       +----+----+
+            |
+            v
+     Authorized API
+            |
+            v
+      AST Export
+```
+
+The AST analysis record tracks:
+
+- `artifact_status`
+- `artifact_bucket`
+- `artifact_key`
+- `artifact_sha256`
+- `artifact_size_bytes`
+- `artifact_created_at`
+- `artifact_error`
+
+### AI Reasoning & Trade-off Analysis
+
+- **Database Efficiency:** Large structured AST documents are not unnecessarily stored as relational records.
+- **Versionability:** A normalized JSON representation allows the AST output schema to evolve independently of the relational database schema.
+- **Integrity:** SHA-256 checksums allow artifact integrity verification when retrieving stored documents.
+- **Reusability:** The existing artifact storage infrastructure is reused instead of introducing a second cloud-storage implementation.
+- **Reliability:** Relational AST analysis results remain available even if cloud artifact persistence fails.
+
+The key principle is:
+
+> PostgreSQL stores analysis state and artifact references; Backblaze B2 stores the complete AST JSON evidence.
+
+---
+
+## ADR-051: Conservative Cross-File Symbol Resolution — Resolve Only When the Relationship Is Unambiguous
+
+### Context
+
+AST parsing can identify functions, methods, imports, and function calls within individual source files.
+
+However, connecting a function call to its actual implementation across multiple files is more difficult.
+
+Aggressive symbol resolution can create incorrect relationships when multiple functions share the same name, imports are dynamic, or the language uses complex module resolution.
+
+Incorrect relationships would introduce misleading security context and potentially unreliable attack paths.
+
+### Decision
+
+Implement conservative, evidence-based symbol resolution.
+
+The resolution strategy includes:
+
+1. Extract function and class declarations from supported source files.
+2. Extract import statements and function-call relationships.
+3. Resolve Python imports using the existing conservative module-resolution logic.
+4. Resolve relative JavaScript and TypeScript imports using supported extensions:
+    - `.ts`
+    - `.tsx`
+    - `.js`
+    - `.jsx`
+    - `.mjs`
+    - `.cjs`
+5. Consider `index.*` module candidates where applicable.
+6. Resolve named imports and aliases only when a unique matching function can be identified.
+7. Mark explicitly recognized built-in global functions as external.
+8. Keep ambiguous or unsupported relationships unresolved instead of guessing.
+
+```text
+Source File
+    |
+    v
+Import Extraction
+    |
+    v
+Call Extraction
+    |
+    v
+Candidate Symbol Resolution
+    |
+    +---- Unique Match ------> RESOLVED
+    |
+    +---- Multiple Matches --> UNRESOLVED
+    |
+    +---- Unsupported -------> UNRESOLVED
+```
+
+Dynamic imports, ambiguous matches, and unsupported resolution patterns are not automatically assigned to arbitrary symbols.
+
+### AI Reasoning & Trade-off Analysis
+
+- **Accuracy over Coverage:** Incorrect relationships are potentially more harmful than explicitly unresolved relationships.
+- **Trustworthy Security Context:** Downstream analysis receives relationships supported by actual source-code evidence.
+- **Extensibility:** Additional resolution strategies can be introduced without changing the existing extraction contract.
+- **Debuggability:** Unresolved relationships remain identifiable for future improvements.
+
+The fundamental rule is:
+
+> ARVE should report an unresolved relationship rather than invent a connection between two code symbols.
+
+---
+
+## ADR-052: Partial AST Analysis and Explicit Unsupported-File Tracking
+
+### Context
+
+Real-world repositories contain multiple programming languages, unsupported syntax, generated files, binary assets, and files that may fail to parse.
+
+Treating every unsupported or problematic file as a fatal AST analysis error would prevent ARVE from extracting useful code intelligence from the remaining repository.
+
+Silently ignoring these files would also make it difficult to understand the coverage and limitations of an analysis run.
+
+### Decision
+
+Adopt a fault-tolerant AST processing strategy.
+
+1. Process supported source files independently.
+2. Detect binary content using actual null-byte detection (`b"\x00" in sample`).
+3. Exclude binary content from AST parsing.
+4. Record unsupported file paths and their corresponding skip reasons.
+5. Continue processing other valid source files when an individual file cannot be analyzed.
+6. Preserve successfully extracted AST entities and relationships.
+7. Mark the overall AST analysis as `PARTIAL` when appropriate failures or incomplete processing occur.
+8. Keep artifact persistence status independent from relational AST analysis results.
+
+The supported AST language scope includes:
+
+- Python
+- JavaScript
+- TypeScript
+- Java
+- PHP
+- Go
+
+```text
+       Repository Files
+             |
+             v
+      File Classification
+             |
+       +-----+------+
+       |            |
+       v            v
+ Supported       Unsupported /
+ Source Files    Binary Files
+       |            |
+       v            v
+   AST Parsing   Record Reason
+       |
+       v
+ Successful Extraction
+       |
+       v
+ Relational Persistence
+       |
+       v
+ Overall Analysis Status
+  COMPLETED / PARTIAL / FAILED
+```
+
+### AI Reasoning & Trade-off Analysis
+
+- **Fault Tolerance:** A single unsupported file does not prevent analysis of the remaining repository.
+- **Transparency:** Unsupported files and their reasons are explicitly recorded.
+- **Data Preservation:** Successfully extracted entities and relationships are retained even when other files fail.
+- **Operational Reliability:** Artifact-storage failures do not automatically invalidate successfully persisted relational analysis.
+- **Future Compatibility:** Additional language extractors can be introduced without redesigning the overall analysis pipeline.
+
+The key principle is:
+
+> Incomplete repository coverage should be reported explicitly, not treated as a reason to discard valid AST analysis results.
 
 ---
