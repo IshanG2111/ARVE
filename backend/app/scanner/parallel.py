@@ -245,7 +245,13 @@ class ParallelSecurityScanService(ScanExecutionService):
             if current and current.status != ScanStatus.CANCELLED.value:
                 self._set_status(current, ScanStatus.NORMALIZING, progress=94, stage="Indexing code structure and mapping security evidence")
                 try:
-                    ASTAnalysisService(self.db).analyze_and_persist(current, workspace.source)
+                    ast_run = ASTAnalysisService(self.db).analyze_and_persist(current, workspace.source)
+                    if ast_run.status == "PARTIAL":
+                        failures.append(ScannerExecutionResult(
+                            engine_name="ast",
+                            status=EngineExecutionStatus.FAILED,
+                            error_message=ast_run.error_summary or "AST indexing completed with file-level errors",
+                        ))
                 except Exception as exc:
                     self.db.rollback()
                     ast_error = f"AST indexing failed: {type(exc).__name__}: {exc}"

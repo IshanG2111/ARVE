@@ -35,6 +35,8 @@ export const CodeIntelligencePage: React.FC = () => {
   const [astSymbols, setAstSymbols] = useState<any[]>([]);
   const [astScanId, setAstScanId] = useState<string | null>(null);
   const [astLoading, setAstLoading] = useState(false);
+  const [selectedSecurityContext, setSelectedSecurityContext] = useState<any>(null);
+  const [contextLoading, setContextLoading] = useState(false);
 
 
   const fileParam = searchParams.get('file');
@@ -584,6 +586,23 @@ export const CodeIntelligencePage: React.FC = () => {
                                   <div style={{ fontSize: '10.5px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
                                     {f.engine} · L{f.line_start || 1}
                                   </div>
+                                  <button
+                                    type="button"
+                                    disabled={!astScanId || contextLoading}
+                                    onClick={async () => {
+                                      if (!astScanId) return;
+                                      setContextLoading(true);
+                                      try {
+                                        const context = await api.getFindingContext(astScanId, f.id);
+                                        setSelectedSecurityContext(context);
+                                      } catch {
+                                        setSelectedSecurityContext({ unavailable: true, finding_id: f.id });
+                                      } finally {
+                                        setContextLoading(false);
+                                      }
+                                    }}
+                                    style={{ marginTop: '7px', padding: '4px 8px', fontSize: '10px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--accent)', cursor: astScanId ? 'pointer' : 'not-allowed' }}
+                                  >Inspect AST context</button>
                                 </div>
                               </div>
                               <StatusBadge status={f.status} size="sm" />
@@ -591,6 +610,23 @@ export const CodeIntelligencePage: React.FC = () => {
                           ))}
                         </div>
                       )}
+                    {selectedSecurityContext && <div style={{ marginTop: '14px', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <strong style={{ fontSize: '11px', color: 'var(--primary)' }}>Security evidence context</strong>
+                        <button type="button" onClick={() => setSelectedSecurityContext(null)} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}>Close</button>
+                      </div>
+                      {selectedSecurityContext.unavailable ? <div style={{ fontSize: '11px', color: 'var(--muted)' }}>No AST context was resolved for this finding.</div> : <>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Resolution: {selectedSecurityContext.resolution_status}</div>
+                        <div style={{ fontSize: '11px', marginTop: '6px', color: 'var(--primary)' }}>Function: {selectedSecurityContext.function || 'Not resolved'} · Class: {selectedSecurityContext.class || 'Not resolved'}</div>
+                        <div style={{ fontSize: '11px', marginTop: '5px', color: 'var(--primary)' }}>Route: {selectedSecurityContext.route ? `${selectedSecurityContext.route.method} ${selectedSecurityContext.route.path} · ${selectedSecurityContext.route.framework}` : 'Not detected'}</div>
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Observed inputs (syntactic observations)</div>
+                        {(selectedSecurityContext.observed_inputs || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', fontFamily: 'var(--font-code)', marginTop: '3px' }}>L{item.line}: {item.expression}</div>)}
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Security-sensitive operations (not proof of data flow)</div>
+                        {(selectedSecurityContext.security_operations || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', fontFamily: 'var(--font-code)', marginTop: '3px' }}>L{item.line}: {item.expression}</div>)}
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Evidence</div>
+                        {(selectedSecurityContext.evidence || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', marginTop: '3px' }}>{item.type} · {item.file}:{item.line_start || '—'} · {item.description}</div>)}
+                      </>}
+                    </div>}
                     </div>
                   )}
                 </motion.div>
