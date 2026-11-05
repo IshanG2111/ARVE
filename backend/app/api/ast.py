@@ -67,6 +67,9 @@ def ast_summary(scan_id: str, db: Session = Depends(get_db), user: User = Depend
         "imports": run.total_imports, "calls": run.total_calls,
         "relationships": run.total_relationships, "error_summary": run.error_summary,
         "started_at": run.started_at, "completed_at": run.completed_at,
+        "artifact_status": run.artifact_status,
+        "artifact_sha256": run.artifact_sha256,
+        "artifact_size_bytes": run.artifact_size_bytes,
     }
 
 

@@ -47,7 +47,7 @@ class ASTAnalysisService:
                 except OSError:
                     sample = b""
                 reason = (
-                    "binary_file" if b"\\x00" in sample
+                    "binary_file" if b"\x00" in sample
                     else ("unsupported_extension" if path.suffix else "unknown_file_type")
                 )
                 unsupported_paths.append({"path": rel, "reason": reason})
