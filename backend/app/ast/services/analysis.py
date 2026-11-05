@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib, logging, re
 from datetime import datetime
 from pathlib import Path
-from app.ast.engine import SCHEMA_VERSION, detect_language, normalize_and_link, parser_versions, parse_source
+from app.ast.engine import SCHEMA_VERSION, detect_language, normalize_and_link, parser_versions, parse_source, validate_output
 from app.ast.engine.extractors.python import extract_python
 from app.ast.engine.extractors.javascript import extract_javascript
 from app.ast.engine.extractors.typescript import extract_typescript
@@ -52,6 +52,9 @@ class ASTAnalysisService:
             except Exception as exc:
                 errors.append(f"{rel}: {type(exc).__name__}: {exc}")
         files,relationships=normalize_and_link(files)
+        contract_errors=validate_output({"schema_version":SCHEMA_VERSION,"files":files,"relationships":relationships})
+        if contract_errors:
+            raise ValueError("AST output contract validation failed: "+"; ".join(contract_errors[:20]))
         self._persist(run,files,relationships,file_sources)
         run.files_parsed=len(files); run.files_failed=len(errors); run.files_unsupported=unsupported
         run.total_functions=sum(len(f.get("functions",[])) for f in files)
