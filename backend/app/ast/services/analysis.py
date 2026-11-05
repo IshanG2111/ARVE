@@ -11,6 +11,7 @@ from app.ast.engine.extractors.java import extract_java
 from app.ast.engine.extractors.php import extract_php
 from app.ast.engine.extractors.go import extract_go
 from app.models.models import ASTAnalysisRun, ASTFile, ASTSymbol, ASTRelationship, SecurityContext, SecurityFinding
+from app.ast.schema import require_ast_schema
 logger=logging.getLogger(__name__)
 EXTRACTORS={"python":extract_python,"javascript":extract_javascript,"typescript":extract_typescript,"java":extract_java,"php":extract_php,"go":extract_go}
 MAX_FILES=5000
@@ -22,6 +23,8 @@ OP_RE=re.compile(r"\b(query|execute|exec|findOne|findMany|insert|update|delete|u
 class ASTAnalysisService:
     def __init__(self, db): self.db=db
     def analyze_and_persist(self, scan, workspace):
+        # Verify migrations before ORM queries so missing schema is actionable.
+        require_ast_schema(self.db)
         prior=self.db.query(ASTAnalysisRun).filter(ASTAnalysisRun.scan_id==scan.id).first()
         if prior and prior.status in {"COMPLETED","PARTIAL"}: return prior
         if prior: self.db.delete(prior); self.db.flush()

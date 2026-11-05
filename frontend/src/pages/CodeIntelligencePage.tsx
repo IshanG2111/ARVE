@@ -35,6 +35,7 @@ export const CodeIntelligencePage: React.FC = () => {
   const [astSymbols, setAstSymbols] = useState<any[]>([]);
   const [astScanId, setAstScanId] = useState<string | null>(null);
   const [astLoading, setAstLoading] = useState(false);
+  const [astError, setAstError] = useState<string | null>(null);
   const [selectedSecurityContext, setSelectedSecurityContext] = useState<any>(null);
   const [contextLoading, setContextLoading] = useState(false);
 
@@ -82,25 +83,42 @@ export const CodeIntelligencePage: React.FC = () => {
 
   // Load AST index for the latest completed security scan of this project.
   useEffect(() => {
-    if (!currentProject?.id) { setAstSummary(null); setAstFiles([]); setAstScanId(null); return; }
+    if (!currentProject?.id) {
+      setAstSummary(null); setAstFiles([]); setAstScanId(null); setAstError(null);
+      return;
+    }
     let cancelled = false;
     setAstLoading(true);
+    setAstError(null);
     api.getProjectScans(currentProject.id)
       .then(async (scans: any[]) => {
-        const scan = (scans || []).find((item) => ['COMPLETED', 'PARTIAL'].includes(String(item.status).toUpperCase()));
+        const scan = (scans || []).find((item) =>
+          ['COMPLETED', 'PARTIAL'].includes(String(item.status).toUpperCase())
+        );
         if (!scan) return null;
-        const summary = await api.getAstSummary(scan.id);
-        const filesResult = await api.getAstFiles(scan.id, 500, 0);
-        return { scanId: scan.id, summary, files: filesResult.items || [] };
+        try {
+          const summary = await api.getAstSummary(scan.id);
+          const filesResult = await api.getAstFiles(scan.id, 500, 0);
+          return { scanId: scan.id, summary, files: filesResult.items || [] };
+        } catch (error: any) {
+          return {
+            scanId: scan.id, summary: null, files: [],
+            error: error?.message || 'AST data could not be loaded.',
+          };
+        }
       })
       .then((result: any) => {
         if (cancelled) return;
         setAstScanId(result?.scanId || null);
         setAstSummary(result?.summary || null);
         setAstFiles(result?.files || []);
+        setAstError(result?.error || null);
       })
-      .catch(() => {
-        if (!cancelled) { setAstSummary(null); setAstFiles([]); setAstScanId(null); }
+      .catch((error: any) => {
+        if (!cancelled) {
+          setAstSummary(null); setAstFiles([]); setAstScanId(null);
+          setAstError(error?.message || 'Unable to load scan history.');
+        }
       })
       .finally(() => { if (!cancelled) setAstLoading(false); });
     return () => { cancelled = true; };
@@ -294,11 +312,16 @@ export const CodeIntelligencePage: React.FC = () => {
             <div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>AST Code Intelligence</div>
               <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
-                {astLoading ? 'Loading AST index…' : astSummary ? `Commit ${String(astSummary.commit_sha || '').slice(0, 8)} · ${astSummary.status}` : 'No AST index available for a completed scan yet.'}
+                {astLoading ? 'Loading AST index…' : astSummary ? `Commit ${String(astSummary.commit_sha || '').slice(0, 8)} · ${astSummary.status}` : astError ? 'AST indexing is unavailable for the selected scan.' : 'No AST index available for a completed scan yet.'}
               </div>
             </div>
             {astSummary && <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Schema {astSummary.schema_version}</span>}
           </div>
+          {astError && <div role="alert" style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '7px', border: '1px solid var(--border)', background: 'var(--elevated)', color: 'var(--primary)', fontSize: '11px', lineHeight: 1.6 }}>
+            <strong>AST indexing unavailable</strong>
+            <div style={{ marginTop: '4px', color: 'var(--muted)' }}>{astError}</div>
+            <div style={{ marginTop: '6px', color: 'var(--muted)' }}>Security findings and repository browsing remain available. Apply backend Alembic migrations, restart the API and worker, then run a fresh scan to create AST data.</div>
+          </div>}
           {astSummary && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px', marginTop: '14px' }}>
             {[
               ['Files', astSummary.files_parsed], ['Failed', astSummary.files_failed],
