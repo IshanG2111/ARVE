@@ -12,6 +12,7 @@ from app.ast.engine.extractors.php import extract_php
 from app.ast.engine.extractors.go import extract_go
 from app.models.models import ASTAnalysisRun, ASTFile, ASTSymbol, ASTRelationship, SecurityContext, SecurityFinding
 from app.ast.schema import require_ast_schema
+from app.scanner.artifacts import ScanArtifactStore
 logger=logging.getLogger(__name__)
 EXTRACTORS={"python":extract_python,"javascript":extract_javascript,"typescript":extract_typescript,"java":extract_java,"php":extract_php,"go":extract_go}
 MAX_FILES=5000
@@ -36,12 +37,21 @@ class ASTAnalysisService:
         if len(paths)>MAX_FILES: raise ValueError(f"AST file limit exceeded ({len(paths)} > {MAX_FILES})")
         total=sum(p.stat().st_size for p in paths)
         if total>MAX_BYTES: raise ValueError(f"AST workspace size exceeds {MAX_BYTES} bytes")
-        files=[]; file_sources={}; errors=[]; unsupported=0
+        files=[]; file_sources={}; errors=[]; unsupported_paths=[]
         for path in paths:
             rel=path.relative_to(workspace).as_posix()
             detected=detect_language(rel)
             if not detected:
-                unsupported+=1; continue
+                try:
+                    sample = path.open("rb").read(4096)
+                except OSError:
+                    sample = b""
+                reason = (
+                    "binary_file" if b"\\x00" in sample
+                    else ("unsupported_extension" if path.suffix else "unknown_file_type")
+                )
+                unsupported_paths.append({"path": rel, "reason": reason})
+                continue
             if path.stat().st_size>MAX_FILE_BYTES:
                 errors.append(f"{rel}: file exceeds {MAX_FILE_BYTES} bytes"); continue
             try:
@@ -59,7 +69,7 @@ class ASTAnalysisService:
         if contract_errors:
             raise ValueError("AST output contract validation failed: "+"; ".join(contract_errors[:20]))
         self._persist(run,files,relationships,file_sources)
-        run.files_parsed=len(files); run.files_failed=len(errors); run.files_unsupported=unsupported
+        run.files_parsed=len(files); run.files_failed=len(errors); run.files_unsupported=len(unsupported_paths)
         run.total_functions=sum(len(f.get("functions",[])) for f in files)
         run.total_classes=sum(len(f.get("classes",[])) for f in files)
         run.total_imports=sum(len(f.get("imports",[])) for f in files)
@@ -69,6 +79,77 @@ class ASTAnalysisService:
         run.error_summary="\n".join(errors[:100]) or None
         run.completed_at=datetime.utcnow()
         self._map_findings(scan.id,run,files,file_sources)
+        self.db.flush()
+        contexts = self.db.query(SecurityContext).filter_by(
+            scan_id=scan.id, ast_analysis_id=run.id
+        ).all()
+        context_json = [{
+            "finding_id": row.finding_id, "file_path": row.file_path,
+            "function_name": row.function_name, "class_name": row.class_name,
+            "route": {"method": row.route_method, "path": row.route_path,
+                      "framework": row.framework} if row.route_path else None,
+            "observed_inputs": row.observed_inputs or [],
+            "security_operations": row.security_operations or [],
+            "resolution_status": row.resolution_status, "evidence": row.evidence or [],
+        } for row in contexts]
+        ast_document = {
+            "schema_version": SCHEMA_VERSION,
+            "artifact_type": "arve.ast.normalized",
+            "artifact_version": "1",
+            "scan": {"scan_id": str(scan.id), "project_id": str(scan.project_id),
+                     "commit_sha": scan.commit_sha},
+            "analysis": {
+                "analysis_id": str(run.id), "status": run.status,
+                "parser_versions": run.parser_versions,
+                "started_at": run.started_at.isoformat() if run.started_at else None,
+                "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+                "files_discovered": run.files_discovered, "files_parsed": run.files_parsed,
+                "files_failed": run.files_failed, "files_unsupported": run.files_unsupported,
+                "totals": {"functions": run.total_functions, "classes": run.total_classes,
+                           "imports": run.total_imports, "calls": run.total_calls,
+                           "relationships": run.total_relationships},
+                "errors": errors, "unsupported_files": unsupported_paths,
+            },
+            "files": files, "relationships": relationships,
+            "security_contexts": context_json,
+        }
+        try:
+            store = ScanArtifactStore()
+            artifact = store.persist_json_document(
+                scan.id, "ast", "ast-output.json", ast_document
+            )
+            if artifact["status"] == "STORED":
+                store.persist_json_document(
+                    scan.id, "ast", "manifest.json",
+                    {
+                        "artifact_type": "arve.ast.manifest",
+                        "schema_version": SCHEMA_VERSION,
+                        "scan_id": str(scan.id),
+                        "analysis_id": str(run.id),
+                        "object_key": artifact["key"],
+                        "sha256": artifact["sha256"],
+                        "size_bytes": artifact["size_bytes"],
+                        "parser_versions": run.parser_versions,
+                    },
+                )
+            run.artifact_status = artifact["status"]
+            run.artifact_bucket = artifact.get("bucket")
+            run.artifact_key = artifact.get("key")
+            run.artifact_sha256 = artifact.get("sha256")
+            run.artifact_size_bytes = artifact.get("size_bytes")
+            run.artifact_created_at = datetime.utcnow() if artifact["status"] == "STORED" else None
+            run.artifact_error = None
+            if artifact["status"] == "DISABLED":
+                logger.warning("scan=%s AST JSON artifact disabled: B2 is not configured", scan.id)
+        except Exception as exc:
+            run.artifact_status = "FAILED"
+            run.artifact_error = str(exc)[:2000]
+            run.status = "PARTIAL"
+            run.error_summary = (
+                ((run.error_summary + "\n") if run.error_summary else "")
+                + "AST JSON artifact persistence failed: " + str(exc)[:500]
+            )
+            logger.exception("scan=%s AST JSON artifact persistence failed", scan.id)
         self.db.commit(); self.db.refresh(run)
         return run
     def _persist(self,run,files,relationships,sources):

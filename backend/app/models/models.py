@@ -260,6 +260,13 @@ class ASTAnalysisRun(Base):
     error_summary = Column(Text, nullable=True)
     started_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
+    artifact_status = Column(String, nullable=False, default="PENDING")
+    artifact_bucket = Column(String, nullable=True)
+    artifact_key = Column(Text, nullable=True)
+    artifact_sha256 = Column(String, nullable=True)
+    artifact_size_bytes = Column(Integer, nullable=True)
+    artifact_created_at = Column(DateTime, nullable=True)
+    artifact_error = Column(Text, nullable=True)
 
 class ASTFile(Base):
     __tablename__ = "ast_files"

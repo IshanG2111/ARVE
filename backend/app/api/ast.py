@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.ast.schema import ASTSchemaNotReady, require_ast_schema
 from app.core.database import get_db
+from app.scanner.artifacts import ScanArtifactStore
 from app.models.models import (
     ASTAnalysisRun, ASTFile, ASTRelationship, ASTSymbol,
     Project, Scan, SecurityContext, User,
@@ -155,3 +157,34 @@ def finding_context(
         "security_operations": row.security_operations,
         "resolution_status": row.resolution_status, "evidence": row.evidence,
     }
+
+
+@router.get("/scans/{scan_id}/ast/export")
+def ast_export(scan_id: str, db: Session = Depends(get_db),
+               user: User = Depends(get_current_user)):
+    """Return the complete normalized AST JSON artifact from private B2 storage."""
+    owned(db, scan_id, user.id)
+    run = get_run(db, scan_id)
+    if run.artifact_status != "STORED" or not run.artifact_key:
+        raise HTTPException(status_code=404, detail={
+            "code": "AST_ARTIFACT_NOT_AVAILABLE",
+            "message": "A durable AST JSON artifact is not available for this scan.",
+            "artifact_status": run.artifact_status,
+            "artifact_error": run.artifact_error,
+        })
+    store = ScanArtifactStore()
+    expected_prefix = store._object_prefix(scan_id, "ast") + "/"
+    if not run.artifact_key.startswith(expected_prefix):
+        raise HTTPException(status_code=409, detail="AST artifact reference does not match this scan")
+    try:
+        document, checksum = store.read_json_document(run.artifact_key)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "AST_ARTIFACT_UNAVAILABLE", "message": str(exc)
+        }) from exc
+    if run.artifact_sha256 and checksum != run.artifact_sha256:
+        raise HTTPException(status_code=409, detail="AST artifact checksum does not match database metadata")
+    return JSONResponse(content=document, headers={
+        "ETag": f'"{checksum}"',
+        "X-ARVE-AST-Schema-Version": run.schema_version,
+    })

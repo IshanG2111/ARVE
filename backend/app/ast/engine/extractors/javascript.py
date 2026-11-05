@@ -86,25 +86,39 @@ def extract_javascript(tree, source_code, file_path):
 
     def get_function_name(node, parent=None):
         name_node = node.child_by_field_name("name")
-
         if name_node is not None:
             return text(name_node)
-
-        # For: const greet = (name) => name
         if parent is not None and parent.type == "variable_declarator":
             variable_name = parent.child_by_field_name("name")
-
             if variable_name is not None:
                 return text(variable_name)
-
-        # For methods, use the method's name field.
         if node.type == "method_definition":
             property_node = node.child_by_field_name("name")
-
             if property_node is not None:
                 return text(property_node)
+        prefix = source_bytes[:node.start_byte].decode("utf-8", errors="replace")
+        import re
+        matches = list(re.finditer(
+            r"""(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]""",
+            prefix, re.IGNORECASE
+        ))
+        if matches:
+            route = matches[-1]
+            between = prefix[route.end():]
+            if between.count(")") <= between.count("(") + 2:
+                return f"{route.group(1).upper()} {route.group(2)} handler"
+        loc = get_location(node)
+        return f"<anonymous>@{loc['start_line']}:{loc['start_column']}"
 
-        return "<anonymous>"
+    def call_details(function_node):
+        expression = text(function_node) if function_node is not None else "<unknown>"
+        receiver = member = None
+        if function_node is not None and function_node.type in {"member_expression", "optional_member_expression"}:
+            object_node = function_node.child_by_field_name("object")
+            property_node = function_node.child_by_field_name("property")
+            receiver = text(object_node) if object_node is not None else None
+            member = text(property_node) if property_node is not None else None
+        return expression, receiver, member
 
     def walk(node, parent=None):
         # Extract imports.
@@ -186,11 +200,8 @@ def extract_javascript(tree, source_code, file_path):
             function_node = node.child_by_field_name("function")
             arguments_node = node.child_by_field_name("arguments")
 
-            call_name = (
-                text(function_node)
-                if function_node is not None
-                else "<unknown>"
-            )
+            callee_expression, receiver, member = call_details(function_node)
+            call_name = member or callee_expression
 
             arguments = []
 
@@ -210,6 +221,9 @@ def extract_javascript(tree, source_code, file_path):
                     call_location["start_line"],
                 ),
                 "name": call_name,
+                "callee_expression": callee_expression,
+                "receiver": receiver,
+                "member": member,
                 "arguments": arguments,
                 "location": call_location,
             })

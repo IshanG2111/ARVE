@@ -78,15 +78,35 @@ def extract_typescript(tree, source_code, file_path):
             name_node = node.child_by_field_name("name")
             if name_node is not None and name_node.type != "ERROR":
                 return text(name_node)
-
             if parent is not None and parent.type == "variable_declarator":
                 variable_name = parent.child_by_field_name("name")
                 if variable_name is not None and variable_name.type != "ERROR":
                     return text(variable_name)
         except Exception:
             pass
+        prefix = source_bytes[:node.start_byte].decode("utf-8", errors="replace")
+        import re
+        matches = list(re.finditer(
+            r"""(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]""",
+            prefix, re.IGNORECASE
+        ))
+        if matches:
+            route = matches[-1]
+            between = prefix[route.end():]
+            if between.count(")") <= between.count("(") + 2:
+                return f"{route.group(1).upper()} {route.group(2)} handler"
+        loc = get_location(node)
+        return f"<anonymous>@{loc['start_line']}:{loc['start_column']}"
 
-        return "<anonymous>"
+    def call_details(function_node):
+        expression = text(function_node) if function_node is not None else "<unknown>"
+        receiver = member = None
+        if function_node is not None and function_node.type in {"member_expression", "optional_member_expression"}:
+            object_node = function_node.child_by_field_name("object")
+            property_node = function_node.child_by_field_name("property")
+            receiver = text(object_node) if object_node is not None else None
+            member = text(property_node) if property_node is not None else None
+        return expression, receiver, member
 
     def walk_function_body(root, function_record):
         if root is None or root.type == "ERROR":
@@ -104,7 +124,8 @@ def extract_typescript(tree, source_code, file_path):
                 if node.type == "call_expression":
                     function_node = node.child_by_field_name("function")
                     arguments_node = node.child_by_field_name("arguments")
-                    call_name = text(function_node) if function_node is not None else "<unknown>"
+                    callee_expression, receiver, member = call_details(function_node)
+                    call_name = member or callee_expression
                     arguments = _named_children(arguments_node) if arguments_node is not None else []
                     location = get_location(node)
                     function_record["calls"].append({
@@ -115,6 +136,9 @@ def extract_typescript(tree, source_code, file_path):
                             location["start_line"],
                         ),
                         "name": call_name,
+                        "callee_expression": callee_expression,
+                        "receiver": receiver,
+                        "member": member,
                         "arguments": [text(argument) for argument in arguments],
                         "location": location,
                     })

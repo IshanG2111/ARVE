@@ -254,6 +254,97 @@ def normalize_and_link(files: list[dict]) -> tuple[list[dict], list[dict]]:
                                              "location": call.get("location")},
                             })
 
+    # Resolve statically declared relative JavaScript/TypeScript imports.
+    # Only unique named-import targets are linked; ambiguous imports are not guessed.
+    supported_extensions = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+    files_by_path = {
+        posixpath.normpath(str(item.get("path", "")).replace("\\", "/")): item
+        for item in files
+    }
+    for file_data in files:
+        if file_data.get("language") not in {"javascript", "typescript"}:
+            continue
+        source_path = posixpath.normpath(str(file_data.get("path", "")).replace("\\", "/"))
+        source_dir = posixpath.dirname(source_path)
+        aliases = {}
+        for imp in file_data.get("imports", []):
+            raw = str(imp.get("name", ""))
+            from_match = re.search(r"""from\s*['"]([^'"]+)['"]""", raw)
+            if not from_match:
+                continue
+            module_token = from_match.group(1)
+            if not module_token.startswith("."):
+                continue
+            base = posixpath.normpath(posixpath.join(source_dir, module_token))
+            candidates = [base] + [base + ext for ext in supported_extensions]
+            candidates += [posixpath.join(base, "index" + ext) for ext in supported_extensions]
+            target_file = next((files_by_path[candidate] for candidate in candidates if candidate in files_by_path), None)
+            if target_file is None:
+                imp.setdefault("resolution_status", "unresolved")
+                continue
+            imp["resolution_status"] = "resolved"
+            imp["target_file_id"] = target_file["id"]
+            relationships.append({
+                "id": f"rel:{stable_id(file_data['id'], 'IMPORTS_MODULE', target_file['id'], imp['id'])}",
+                "type": "IMPORTS_MODULE", "source_id": file_data["id"],
+                "target_id": target_file["id"], "import_id": imp["id"],
+                "resolution_status": "resolved",
+                "evidence": {"source": "relative JS/TS module path", "file": source_path,
+                             "target_file": target_file["path"], "import": raw,
+                             "location": imp.get("location")},
+            })
+            clause_match = re.search(r"""^\s*import\s+(.+?)\s+from\s*['"]""", raw, re.S)
+            if not clause_match:
+                continue
+            clause = clause_match.group(1).strip()
+            named_block = re.search(r"\{([^}]+)\}", clause)
+            if named_block:
+                for item in named_block.group(1).split(","):
+                    parts = re.split(r"\s+as\s+", item.strip())
+                    imported_name = parts[0].strip()
+                    local_name = (parts[-1] if len(parts) > 1 else parts[0]).strip()
+                    if re.fullmatch(r"[A-Za-z_$][\w$]*", imported_name):
+                        aliases[local_name] = (imported_name, target_file)
+        for caller in file_data.get("functions", []):
+            for call in caller.get("calls", []):
+                match = aliases.get(call.get("name", "")) or aliases.get(call.get("receiver"))
+                if not match:
+                    continue
+                imported_name, target_file = match
+                candidates = [fn for fn in target_file.get("functions", [])
+                              if fn.get("name") == imported_name]
+                if len(candidates) == 1:
+                    target_fn = candidates[0]
+                    call["resolution_status"] = "resolved_cross_file"
+                    call["candidate_ids"] = [target_fn["id"]]
+                    relationships.append({
+                        "id": f"rel:{stable_id(call['id'], 'CALLS', target_fn['id'])}",
+                        "type": "CALLS", "source_id": caller["id"],
+                        "target_id": target_fn["id"], "call_site_id": call["id"],
+                        "resolution_status": "resolved_cross_file",
+                        "evidence": {"source": "unique static JS/TS named import",
+                                     "file": source_path, "target_file": target_file["path"],
+                                     "imported_symbol": imported_name,
+                                     "location": call.get("location")},
+                    })
+                elif len(candidates) > 1:
+                    call["resolution_status"] = "ambiguous"
+                    call["candidate_ids"] = sorted(fn["id"] for fn in candidates)
+
+    external_globals = {
+        "fetch", "setTimeout", "setInterval", "clearTimeout", "clearInterval",
+        "JSON.parse", "JSON.stringify", "Math.max", "Math.min",
+        "Promise.resolve", "Promise.all", "console.log", "console.error",
+    }
+    for file_data in files:
+        for function in file_data.get("functions", []):
+            for call in function.get("calls", []):
+                if call.get("resolution_status") == "unresolved":
+                    expression = call.get("callee_expression") or call.get("name", "")
+                    if expression in external_globals:
+                        call["resolution_status"] = "external"
+                        call["candidate_ids"] = []
+
     return files, relationships
 
 
