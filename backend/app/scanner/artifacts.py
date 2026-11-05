@@ -206,6 +206,57 @@ class ScanArtifactStore:
         # This is a logical object-prefix reference, not a local filesystem path.
         return f"b2://{self.bucket}/{object_prefix}"
 
+    def persist_json_document(self, scan_id: str, namespace: str, filename: str, payload: Any) -> dict[str, Any]:
+        """Serialize and persist one private JSON artifact to Backblaze B2."""
+        import json
+        namespace = self._safe_segment(namespace, "artifacts")
+        filename = self._safe_segment(filename, "artifact.json")
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+        if not self.is_configured:
+            if settings.is_development:
+                return {"status": "DISABLED", "bucket": None, "key": None,
+                        "sha256": None, "size_bytes": 0}
+            self._get_client()
+        body = json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
+        digest = hashlib.sha256(body).hexdigest()
+        key = posixpath.join(self._object_prefix(scan_id, namespace), filename)
+        try:
+            self._get_client().put_object(
+                Bucket=self.bucket, Key=key, Body=body,
+                ContentType="application/json; charset=utf-8",
+                Metadata={"sha256": digest, "scan-id": str(scan_id),
+                          "artifact-type": "ast-json",
+                          "schema-version": str(payload.get("schema_version", "unknown"))
+                          if isinstance(payload, dict) else "unknown"},
+            )
+        except Exception as exc:
+            raise ScanOrchestrationError(
+                f"Failed to persist {namespace} JSON artifact to Backblaze B2: {exc}"
+            ) from exc
+        return {"status": "STORED", "bucket": self.bucket, "key": key,
+                "sha256": digest, "size_bytes": len(body)}
+
+    def read_json_document(self, object_key: str) -> tuple[Any, str]:
+        """Read a private JSON artifact and verify its SHA-256 metadata."""
+        import json
+        if not object_key.startswith(self.prefix + "/") or ".." in object_key.split("/"):
+            raise ScanOrchestrationError("Invalid B2 artifact key")
+        try:
+            response = self._get_client().get_object(Bucket=self.bucket, Key=object_key)
+            body = response["Body"].read()
+            digest = hashlib.sha256(body).hexdigest()
+            expected = (response.get("Metadata") or {}).get("sha256")
+            if expected and expected != digest:
+                raise ScanOrchestrationError("AST artifact checksum verification failed")
+            return json.loads(body.decode("utf-8")), digest
+        except ScanOrchestrationError:
+            raise
+        except Exception as exc:
+            raise ScanOrchestrationError(
+                f"Failed to read JSON artifact from Backblaze B2: {exc}"
+            ) from exc
+
     def delete_scan_artifacts(self, scan_id: str) -> None:
         """Delete all B2 objects for one scan.
 

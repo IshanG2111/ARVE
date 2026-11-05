@@ -20,7 +20,9 @@ class CodeqlEngine:
     """ScannerEngine implementation for CodeQL deep SAST."""
 
     name: str = EngineName.CODEQL.value
-    image: str = getattr(settings, "SCANNER_CODEQL_IMAGE", "arve-codeql:2.27.1")
+    def __init__(self) -> None:
+        # Resolve configuration at instance creation time.
+        self.image = settings.SCANNER_CODEQL_IMAGE
 
     def build_command(self, context: ScannerExecutionContext) -> Sequence[str]:
         """Construct arguments for the CodeQL container entrypoint."""
@@ -34,8 +36,6 @@ class CodeqlEngine:
             "/output/codeql.sarif",
             "--profile",
             getattr(settings, "SCANNER_CODEQL_QUERY_SUITE", "security-extended"),
-            "--ram",
-            str(getattr(settings, "SCANNER_CODEQL_RAM_MB", 2048)),
         ]
 
     def artifact_path(self, context: ScannerExecutionContext) -> Path:

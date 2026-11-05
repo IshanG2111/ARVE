@@ -30,6 +30,15 @@ export const CodeIntelligencePage: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<RepositoryFile | null>(null);
   const [fileSearch, setFileSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'source' | 'findings'>('source');
+  const [astSummary, setAstSummary] = useState<any>(null);
+  const [astFiles, setAstFiles] = useState<any[]>([]);
+  const [astSymbols, setAstSymbols] = useState<any[]>([]);
+  const [astScanId, setAstScanId] = useState<string | null>(null);
+  const [astLoading, setAstLoading] = useState(false);
+  const [astError, setAstError] = useState<string | null>(null);
+  const [selectedSecurityContext, setSelectedSecurityContext] = useState<any>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+
 
   const fileParam = searchParams.get('file');
 
@@ -70,6 +79,61 @@ export const CodeIntelligencePage: React.FC = () => {
 
     return () => { cancelled = true; };
   }, [latestRun?.id, fileParam]);
+
+
+  // Load AST index for the latest completed security scan of this project.
+  useEffect(() => {
+    if (!currentProject?.id) {
+      setAstSummary(null); setAstFiles([]); setAstScanId(null); setAstError(null);
+      return;
+    }
+    let cancelled = false;
+    setAstLoading(true);
+    setAstError(null);
+    api.getProjectScans(currentProject.id)
+      .then(async (scans: any[]) => {
+        const scan = (scans || []).find((item) =>
+          ['COMPLETED', 'PARTIAL'].includes(String(item.status).toUpperCase())
+        );
+        if (!scan) return null;
+        try {
+          const summary = await api.getAstSummary(scan.id);
+          const filesResult = await api.getAstFiles(scan.id, 500, 0);
+          return { scanId: scan.id, summary, files: filesResult.items || [] };
+        } catch (error: any) {
+          return {
+            scanId: scan.id, summary: null, files: [],
+            error: error?.message || 'AST data could not be loaded.',
+          };
+        }
+      })
+      .then((result: any) => {
+        if (cancelled) return;
+        setAstScanId(result?.scanId || null);
+        setAstSummary(result?.summary || null);
+        setAstFiles(result?.files || []);
+        setAstError(result?.error || null);
+      })
+      .catch((error: any) => {
+        if (!cancelled) {
+          setAstSummary(null); setAstFiles([]); setAstScanId(null);
+          setAstError(error?.message || 'Unable to load scan history.');
+        }
+      })
+      .finally(() => { if (!cancelled) setAstLoading(false); });
+    return () => { cancelled = true; };
+  }, [currentProject?.id]);
+
+  useEffect(() => {
+    if (!astScanId || !selectedFile) { setAstSymbols([]); return; }
+    const astFile = astFiles.find((item) => norm(item.path) === norm(selectedFile.path));
+    if (!astFile) { setAstSymbols([]); return; }
+    let cancelled = false;
+    api.getAstFileSymbols(astScanId, astFile.id)
+      .then((items: any[]) => { if (!cancelled) setAstSymbols(items || []); })
+      .catch(() => { if (!cancelled) setAstSymbols([]); });
+    return () => { cancelled = true; };
+  }, [astScanId, astFiles, selectedFile?.path]);
 
   // Filter & tree
   const filteredFiles = useMemo(() => {
@@ -240,6 +304,45 @@ export const CodeIntelligencePage: React.FC = () => {
             </span>
           }
         />
+
+
+        {/* AST analysis summary and selected-file symbol index */}
+        <section style={{ marginBottom: '16px', padding: '16px', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', background: 'var(--surface)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>AST Code Intelligence</div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
+                {astLoading ? 'Loading AST index…' : astSummary ? `Commit ${String(astSummary.commit_sha || '').slice(0, 8)} · ${astSummary.status}` : astError ? 'AST indexing is unavailable for the selected scan.' : 'No AST index available for a completed scan yet.'}
+              </div>
+            </div>
+            {astSummary && <span style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Schema {astSummary.schema_version}</span>}
+          </div>
+          {astError && <div role="alert" style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '7px', border: '1px solid var(--border)', background: 'var(--elevated)', color: 'var(--primary)', fontSize: '11px', lineHeight: 1.6 }}>
+            <strong>AST indexing unavailable</strong>
+            <div style={{ marginTop: '4px', color: 'var(--muted)' }}>{astError}</div>
+            <div style={{ marginTop: '6px', color: 'var(--muted)' }}>Security findings and repository browsing remain available. Apply backend Alembic migrations, restart the API and worker, then run a fresh scan to create AST data.</div>
+          </div>}
+          {astSummary && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: '8px', marginTop: '14px' }}>
+            {[
+              ['Files', astSummary.files_parsed], ['Failed', astSummary.files_failed],
+              ['Functions', astSummary.functions], ['Classes', astSummary.classes],
+              ['Imports', astSummary.imports], ['Calls', astSummary.calls],
+              ['Relationships', astSummary.relationships], ['Unsupported', astSummary.files_unsupported],
+            ].map(([label, value]) => <div key={String(label)} style={{ padding: '10px', borderRadius: '8px', background: 'var(--elevated)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--primary)' }}>{value ?? 0}</div>
+              <div style={{ fontSize: '10px', color: 'var(--muted)' }}>{label}</div>
+            </div>)}
+          </div>}
+          {astSummary?.error_summary && <pre style={{ whiteSpace: 'pre-wrap', fontSize: '10px', color: 'var(--muted)', marginTop: '10px' }}>{astSummary.error_summary}</pre>}
+          {selectedFile && <div style={{ marginTop: '14px', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 650, color: 'var(--primary)', marginBottom: '8px' }}>Symbols in {norm(selectedFile.path)}</div>
+            {astSymbols.length ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {astSymbols.map((symbol) => <span key={symbol.id} style={{ padding: '5px 8px', borderRadius: '6px', background: 'var(--elevated)', border: '1px solid var(--border)', fontSize: '10px', color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
+                {symbol.type} · {symbol.name} {symbol.line_start ? `L${symbol.line_start}` : ''}
+              </span>)}
+            </div> : <div style={{ fontSize: '10px', color: 'var(--muted)' }}>{astSummary ? 'No AST symbols found for this file.' : 'AST symbols will appear after indexing.'}</div>}
+          </div>}
+        </section>
 
         {/* Dual pane layout */}
         <div style={{
@@ -506,6 +609,23 @@ export const CodeIntelligencePage: React.FC = () => {
                                   <div style={{ fontSize: '10.5px', color: 'var(--muted)', fontFamily: 'var(--font-code)', marginTop: '2px' }}>
                                     {f.engine} · L{f.line_start || 1}
                                   </div>
+                                  <button
+                                    type="button"
+                                    disabled={!astScanId || contextLoading}
+                                    onClick={async () => {
+                                      if (!astScanId) return;
+                                      setContextLoading(true);
+                                      try {
+                                        const context = await api.getFindingContext(astScanId, f.id);
+                                        setSelectedSecurityContext(context);
+                                      } catch {
+                                        setSelectedSecurityContext({ unavailable: true, finding_id: f.id });
+                                      } finally {
+                                        setContextLoading(false);
+                                      }
+                                    }}
+                                    style={{ marginTop: '7px', padding: '4px 8px', fontSize: '10px', borderRadius: '5px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--accent)', cursor: astScanId ? 'pointer' : 'not-allowed' }}
+                                  >Inspect AST context</button>
                                 </div>
                               </div>
                               <StatusBadge status={f.status} size="sm" />
@@ -513,6 +633,23 @@ export const CodeIntelligencePage: React.FC = () => {
                           ))}
                         </div>
                       )}
+                    {selectedSecurityContext && <div style={{ marginTop: '14px', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <strong style={{ fontSize: '11px', color: 'var(--primary)' }}>Security evidence context</strong>
+                        <button type="button" onClick={() => setSelectedSecurityContext(null)} style={{ border: 0, background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}>Close</button>
+                      </div>
+                      {selectedSecurityContext.unavailable ? <div style={{ fontSize: '11px', color: 'var(--muted)' }}>No AST context was resolved for this finding.</div> : <>
+                        <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Resolution: {selectedSecurityContext.resolution_status}</div>
+                        <div style={{ fontSize: '11px', marginTop: '6px', color: 'var(--primary)' }}>Function: {selectedSecurityContext.function || 'Not resolved'} · Class: {selectedSecurityContext.class || 'Not resolved'}</div>
+                        <div style={{ fontSize: '11px', marginTop: '5px', color: 'var(--primary)' }}>Route: {selectedSecurityContext.route ? `${selectedSecurityContext.route.method} ${selectedSecurityContext.route.path} · ${selectedSecurityContext.route.framework}` : 'Not detected'}</div>
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Observed inputs (syntactic observations)</div>
+                        {(selectedSecurityContext.observed_inputs || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', fontFamily: 'var(--font-code)', marginTop: '3px' }}>L{item.line}: {item.expression}</div>)}
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Security-sensitive operations (not proof of data flow)</div>
+                        {(selectedSecurityContext.security_operations || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', fontFamily: 'var(--font-code)', marginTop: '3px' }}>L{item.line}: {item.expression}</div>)}
+                        <div style={{ fontSize: '10px', marginTop: '8px', color: 'var(--muted)' }}>Evidence</div>
+                        {(selectedSecurityContext.evidence || []).map((item: any, i: number) => <div key={i} style={{ fontSize: '10px', marginTop: '3px' }}>{item.type} · {item.file}:{item.line_start || '—'} · {item.description}</div>)}
+                      </>}
+                    </div>}
                     </div>
                   )}
                 </motion.div>

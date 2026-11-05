@@ -17,3 +17,6 @@ api_router.include_router(targets_router)
 api_router.include_router(repositories_router)
 api_router.include_router(ingestion_router)
 api_router.include_router(scans_router)
+
+from app.api.ast import router as ast_router
+api_router.include_router(ast_router)
