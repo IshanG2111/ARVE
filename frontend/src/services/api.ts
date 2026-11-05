@@ -52,7 +52,11 @@ function authHeaders(): HeadersInit {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    const detail = err?.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : detail?.message || detail?.remediation || err?.message || `HTTP ${res.status}`;
+    throw new Error(message);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
