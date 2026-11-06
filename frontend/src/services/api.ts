@@ -14,6 +14,7 @@ import type {
   Scan,
   ScanStatusResponse,
   SecurityFinding,
+  ScanReportData,
 } from '@/types';
 
 export type {
@@ -31,6 +32,7 @@ export type {
   Scan,
   ScanStatusResponse,
   SecurityFinding,
+  ScanReportData,
 };
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -346,6 +348,44 @@ export async function getEngineArtifact(scanId: string, engineName: string = 'os
   return handleResponse<any>(res);
 }
 
+// ─── Phase 5: Security Reports & AI Assessment ─────────────────────────────
+export async function getScanReport(scanId: string): Promise<ScanReportData> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanReportData>(res);
+}
+
+export async function generateScanReport(scanId: string, forceRefresh: boolean = false): Promise<ScanReportData> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report/generate?force_refresh=${forceRefresh}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanReportData>(res);
+}
+
+export async function downloadScanReport(scanId: string, format: 'pdf' | 'md' = 'pdf'): Promise<void> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report/download?format=${format}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Failed to download ${format.toUpperCase()} report`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ARVE_Security_Report_${scanId.slice(0, 8)}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -375,4 +415,7 @@ Object.assign(api, {
   getFindingContext,
   updateFindingStatus,
   getEngineArtifact,
+  getScanReport,
+  generateScanReport,
+  downloadScanReport,
 });

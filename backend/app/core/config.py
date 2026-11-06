@@ -78,6 +78,23 @@ class Settings(BaseSettings):
     B2_SECRET_ACCESS_KEY: Optional[str] = None
     B2_ARTIFACT_PREFIX: str = "scans"
 
+    # AI Integration (Multi-Provider: Gemini, Ollama, Groq)
+    AI_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_TIMEOUT_SECONDS: int = 30
+    GEMINI_MAX_RETRIES: int = 2
+    GEMINI_MAX_INPUT_TOKENS: int = 30000
+    GEMINI_MAX_OUTPUT_TOKENS: int = 4096
+
+    # Ollama Provider Configuration
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3:latest"
+
+    # Groq Provider Configuration
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+
     model_config = SettingsConfigDict(case_sensitive=False, env_file=ENV_FILES, extra="ignore")
 
     @model_validator(mode="after")

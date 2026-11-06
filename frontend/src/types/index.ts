@@ -268,3 +268,125 @@ export interface SecurityFinding {
   created_at?: string;
   updated_at?: string;
 }
+
+// ─── Security Reports & AI Assessment ───────────────────────────────────────
+export interface ReportFindingItem {
+  id: string;
+  display_id: string;
+  title: string;
+  severity: FindingSeverity | string;
+  file_path?: string;
+  line_start?: number;
+  line_end?: number;
+  engine: string;
+  rule_id?: string;
+  package_name?: string;
+  package_version?: string;
+  fixed_version?: string;
+  cwe?: string;
+  cve?: string;
+  ghsa?: string;
+  description?: string;
+  issue_summary?: string;
+  potential_impact?: string;
+  recommended_fix?: string;
+  applicability?: string;
+  raw_evidence?: string;
+  fingerprint: string;
+  status: string;
+}
+
+export interface PriorityRiskItem {
+  index: string;
+  title: string;
+  severity: string;
+  description: string;
+  target: string;
+  severity_footnote?: string;
+  related_finding_ids?: string[];
+  related_finding_uuids?: string[];
+}
+
+export interface AIProvenanceMetadata {
+  provider: string;
+  model: string;
+  prompt_version: string;
+  schema_version: string;
+  generation_status: string;
+  generated_at: string;
+  cache_status: string;
+  input_hash: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  thought_tokens?: number;
+  latency_ms?: number;
+}
+
+export interface PriorityActionItem {
+  priority: string;
+  action: string;
+  target?: string;
+  rationale?: string;
+}
+
+export interface EngineCoverageItem {
+  engine_name: string;
+  status: string;
+  purpose?: string;
+  duration_ms?: number;
+  findings_count: number;
+  notes?: string;
+}
+
+export interface ASTCoverageInfo {
+  status: string;
+  total_functions: number;
+  total_classes: number;
+  total_imports: number;
+  total_relationships: number;
+  files_discovered?: number;
+  files_parsed: number;
+  files_failed: number;
+  data_available?: boolean;
+  error_summary?: string;
+  notes?: string;
+}
+
+export interface ScanReportData {
+  scan_id: string;
+  project_id: string;
+  project_name: string;
+  repository_name?: string;
+  commit_sha: string;
+  scan_timestamp: string;
+  scan_status: string;
+  executive_summary: string;
+  main_concerns: string[];
+  risk_overview: string;
+  impact: string;
+  reachability_assessment?: string;
+  positive_observations: string[];
+  is_ai_fallback: boolean;
+  ai_model: string;
+  ai_status_message?: string;
+  provenance?: AIProvenanceMetadata;
+  severity_counts: {
+    CRITICAL: number;
+    HIGH: number;
+    MEDIUM: number;
+    LOW: number;
+    INFO: number;
+  };
+  total_findings: number;
+  priority_risks?: PriorityRiskItem[];
+  important_findings: ReportFindingItem[];
+  prioritized_actions?: PriorityActionItem[];
+  consolidated_remediations?: string[];
+  ai_recommendations: string[];
+  engine_coverage: EngineCoverageItem[];
+  ast_coverage?: ASTCoverageInfo;
+  ast_status_label?: string;
+  limitations: string[];
+  appendix_findings: ReportFindingItem[];
+}
+

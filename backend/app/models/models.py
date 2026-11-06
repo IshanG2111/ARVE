@@ -96,6 +96,8 @@ class Scan(Base):
     analysis_run = relationship("AnalysisRun", back_populates="scans")
     engine_runs = relationship("ScanEngineRun", back_populates="scan", cascade="all, delete-orphan")
     findings = relationship("SecurityFinding", back_populates="scan", cascade="all, delete-orphan")
+    ai_explanations = relationship("AIExplanation", back_populates="scan", cascade="all, delete-orphan")
+    reports = relationship("ScanReport", back_populates="scan", cascade="all, delete-orphan")
 
 
 class ScanEngineRun(Base):
@@ -323,3 +325,55 @@ class SecurityContext(Base):
     security_operations = Column(JSON, nullable=False, default=list)
     resolution_status = Column(String, nullable=False, default="UNRESOLVED")
     evidence = Column(JSON, nullable=False, default=list)
+
+
+class AIExplanation(Base):
+    """Cached and validated AI-generated explanations and summaries."""
+    __tablename__ = "ai_explanations"
+    __table_args__ = (
+        UniqueConstraint("cache_key", name="uq_ai_explanations_cache_key"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("security_findings.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String, nullable=False, default="scan_summary")
+    cache_key = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    served_model = Column(String, nullable=True)
+    response_json = Column(Text, nullable=False)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    thought_tokens = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+    scan = relationship("Scan", back_populates="ai_explanations")
+    finding = relationship("SecurityFinding")
+
+
+class ScanReport(Base):
+    """Persisted security assessment reports for completed scans."""
+    __tablename__ = "scan_reports"
+    __table_args__ = (
+        UniqueConstraint("scan_id", name="uq_scan_reports_scan_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="READY")
+    title = Column(String, nullable=True)
+    ai_explanation_id = Column(String, ForeignKey("ai_explanations.id", ondelete="SET NULL"), nullable=True)
+    report_json = Column(Text, nullable=False)
+    markdown_content = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    scan = relationship("Scan", back_populates="reports")
+    project = relationship("Project")
+    ai_explanation = relationship("AIExplanation")
+

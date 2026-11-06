@@ -36,6 +36,32 @@ This document records key architectural decisions, design trade-offs, security c
 29. [ADR-029: Scanner-Specific Exit-Code Semantics](#adr-029-scanner-specific-exit-code-semantics)
 30. [ADR-030: Secret-Scanning Redaction and Non-Persistence](#adr-030-secret-scanning-redaction-and-non-persistence)
 31. [ADR-031: Per-Engine Failure Isolation and PARTIAL Scan Semantics](#adr-031-per-engine-failure-isolation-and-partial-scan-semantics)
+32. [ADR-032: Semgrep SAST Integration and Canonical Normalization Boundary](#adr-032-semgrep-sast-integration-and-canonical-normalization-boundary)
+33. [ADR-033: SAST Taint & Pattern Rule Strategy and Decoupled Remediation Layer](#adr-033-sast-taint--pattern-rule-strategy-and-decoupled-remediation-layer)
+34. [ADR-034: Multi-Engine Tri-Scanner Orchestration (OSV, Gitleaks, Semgrep)](#adr-034-multi-engine-tri-scanner-orchestration-osv-gitleaks-semgrep)
+35. [ADR-035: Production Celery + Redis Asynchronous Task Pipeline & Queue Hardening](#adr-035-production-celery--redis-asynchronous-task-pipeline--queue-hardening)
+36. [ADR-036: Production Health & Observability Endpoint (/health & /api/health)](#adr-036-production-health--observability-endpoint-health--apihealth)
+37. [ADR-037: Semgrep Container Hardening, Ephemeral Mounts & Offline Rules](#adr-037-semgrep-container-hardening-ephemeral-mounts--offline-rules)
+38. [ADR-038: Separation of SAST (Source Code) vs DAST (Live Deployment Verification)](#adr-038-separation-of-sast-source-code-vs-dast-live-deployment-verification)
+39. [ADR-039: Polyglot Semgrep Rulepack Extension (Go & PHP Security Rules)](#adr-039-polyglot-semgrep-rulepack-extension-go--php-security-rules)
+40. [ADR-040: CodeQL Deep SAST Integration](#adr-040-codeql-deep-sast-integration)
+41. [ADR-041: Pluggable CodeQL Engine](#adr-041-pluggable-codeql-engine)
+42. [ADR-042: Pinned and Verified CodeQL Container](#adr-042-pinned-and-verified-codeql-container)
+43. [ADR-043: Multi-Language Support with Automatic Detection](#adr-043-multi-language-support-with-automatic-detection)
+44. [ADR-044: Isolated Database per Language](#adr-044-isolated-database-per-language)
+45. [ADR-045: Native SARIF Output and Merging](#adr-045-native-sarif-output-and-merging)
+46. [ADR-046: Offline CodeQL Execution](#adr-046-offline-codeql-execution)
+47. [ADR-047: ARVE Canonical Finding Normalization](#adr-047-arve-canonical-finding-normalization)
+48. [ADR-048: Parallel Execution with Failure Isolation](#adr-048-parallel-execution-with-failure-isolation)
+49. [ADR-049: AST as a Semantic Enrichment Layer — Separate from Security Detection](#adr-049-ast-as-a-semantic-enrichment-layer--separate-from-security-detection)
+50. [ADR-050: Hybrid AST Persistence — Relational Records and Backblaze B2 Artifacts](#adr-050-hybrid-ast-persistence--relational-analysis-records-and-versioned-json-artifacts-in-backblaze-b2)
+51. [ADR-051: Conservative Cross-File Symbol Resolution](#adr-051-conservative-cross-file-symbol-resolution--resolve-only-when-the-relationship-is-unambiguous)
+52. [ADR-052: Partial AST Analysis and Explicit Unsupported-File Tracking](#adr-052-partial-ast-analysis-and-explicit-unsupported-file-tracking)
+53. [ADR-053: Multi-Provider LLM Security Assessment Reports (Groq + Gemini + Fallback)](#adr-053-multi-provider-llm-security-assessment-reports-groq--gemini--fallback)
+54. [ADR-054: Token-Optimized Canonical Payload Compression for Fast AI Inference](#adr-054-token-optimized-canonical-payload-compression-for-fast-ai-inference)
+55. [ADR-055: Decommissioning of Premature Attack Graph in Favor of True AST Intelligence](#adr-055-decommissioning-of-premature-attack-graph-in-favor-of-true-ast-intelligence)
+56. [ADR-056: Dual-Layer Markdown Sanitization and Sans-Serif Minimalist UI Typography](#adr-056-dual-layer-markdown-sanitization-and-sans-serif-minimalist-ui-typography)
+57. [ADR-057: Neon Serverless PostgreSQL Data Layer and Repository Deduplication](#adr-057-neon-serverless-postgresql-data-layer-and-repository-deduplication)
 
 ---
 
@@ -1651,5 +1677,96 @@ The supported AST language scope includes:
 The key principle is:
 
 > Incomplete repository coverage should be reported explicitly, not treated as a reason to discard valid AST analysis results.
+
+---
+
+## ADR-053: Multi-Provider LLM Security Assessment Reports (Groq + Gemini + Fallback)
+
+### Context
+Generating executive security assessments and remediations from multi-engine scan findings (OSV, Gitleaks, Semgrep, CodeQL) requires high-quality LLM synthesis. Initially, ARVE relied exclusively on Gemini. Production usage revealed critical reliability vulnerabilities:
+1. Google API quotas (HTTP 429) frequently halted report generation for active developer teams.
+2. Intermittent network timeouts or third-party outage left users with empty or broken report pages.
+3. Lack of alternative providers created single-vendor lock-in.
+
+### Decision
+Implement a multi-provider AI report architecture in `backend/app/ai/` and `backend/app/reports/`:
+1. **Primary High-Speed Provider (Groq)**: Uses OpenAI-compatible endpoints with models such as `openai/gpt-oss-120b` and `llama-3.3-70b-versatile`, delivering complete executive security reports in under 3 seconds.
+2. **Secondary Provider (Gemini)**: Maintained through Google GenAI SDK with graceful quota handling.
+3. **Deterministic Rule-Based Fallback**: If all LLM providers fail, time out, or exhaust quotas, `ReportGenerator` immediately constructs a deterministic executive security assessment report directly from canonical findings and CVSS distributions without throwing an HTTP 500 error.
+4. **Transparent Provenance UX**: The UI prominently badges the report status (`DETERMINISTIC FALLBACK` vs `AI ENRICHED`) and provides a 1-click `Refresh AI` trigger.
+
+### AI Reasoning & Trade-off Analysis
+- **High Availability**: The security reporting workflow never breaks. Users always receive prioritized SLAs (24h Critical, 7d High) and remediation plans regardless of external API quotas.
+- **Provider Agility**: Switching between Groq, Gemini, or future self-hosted LLMs requires only environment configuration changes (`GROQ_API_KEY`, `GEMINI_API_KEY`).
+
+---
+
+## ADR-054: Token-Optimized Canonical Payload Compression for Fast AI Inference
+
+### Context
+Scans across real-world repositories frequently produce hundreds of findings (e.g. 245 dependency and code vulnerabilities). Passing raw scanner output and verbose stack traces directly to LLM context windows causes:
+1. Massive prompt payload sizes (>200,000 tokens), causing rate-limit violations and high latency.
+2. "Lost in the middle" attention degradation, causing LLMs to generate generic or hallucinated summaries.
+
+### Decision
+Implement aggressive token-optimized payload serialization in `backend/app/reports/generator.py`:
+1. **Deduplicated Grouping**: Group findings by vulnerability identity (package name, ecosystem, CWE, rule ID).
+2. **Exemplar Selection**: Extract the top representative exemplars (prioritizing `CRITICAL` and `HIGH` severity).
+3. **Diagnostic Stripping**: Prune raw JSON ASTs, stack traces, and non-actionable boilerplate.
+4. **Structured Compression**: Format the serialized payload into an ultra-compact summary under 4,000 tokens.
+
+### AI Reasoning & Trade-off Analysis
+- **Speed**: Prompt payload fits within any LLM tier and executes on Groq in ~1.8 seconds.
+- **Fidelity**: Focuses LLM attention strictly on actionable vulnerability clusters, concrete package version jumps, and code locations.
+
+---
+
+## ADR-055: Decommissioning of Premature Attack Graph in Favor of True AST Intelligence
+
+### Context
+Early iterations of ARVE featured an "Attack Graph" navigation item and canvas mockups (`AttackGraphPage.tsx`). However, automated full-chain exploit synthesis from external entrypoint to database sink remains a future roadmap deliverable. Retaining mock graphs caused confusion and misrepresented system capabilities.
+
+Meanwhile, ARVE has a working multi-language AST engine supporting Python, TypeScript, JavaScript, Java, PHP, and Go with symbol extraction, import mapping, route discovery, and reachability context.
+
+### Decision
+1. **Purge Premature Mockups**: Delete `AttackGraphPage.tsx`, `/attack-graph` route, navbar tab, and synthetic dashboard links.
+2. **Elevate Working AST Intelligence**: Replace item `03` in navigation and dashboard with genuine **Code Intelligence** backed by the AST engine (`/ast`, `backend/app/ast/engine/`).
+3. **Commitment to Truth in Engineering**: ARVE's UI and documentation strictly present implemented and verifiable capabilities.
+
+### AI Reasoning & Trade-off Analysis
+- **Integrity**: Eliminates deceptive placeholder features.
+- **Actionable Value**: Users access verified AST code metrics (functions, classes, imports, routes, call graphs) instead of speculative attack diagrams.
+
+---
+
+## ADR-056: Dual-Layer Markdown Sanitization and Sans-Serif Minimalist UI Typography
+
+### Context
+Third-party vulnerability advisories (OSV, NVD, GHSA) and LLM markdown generations frequently include unescaped raw markdown headings (`### Impact`, `## Overview`), unmatched backticks, and mid-sentence cutoffs. When rendered inside dashboard cards, these caused broken layout boxes, awkward font sizing, and visual noise.
+
+### Decision
+1. **Server-Side Sanitization**: Implement regex cleaning in `_clean_issue_summary()` to strip raw `#`, `##`, `###` headings, remove dangling parentheticals, and normalize whitespace.
+2. **Client-Side Defense**: Enforce `cleanFindingText()` in `ScanReportView.tsx` for real-time string normalization.
+3. **Minimalist Typography**: Replace dark nested monospace code blocks with clean, legible sans-serif typography (`var(--font-ui)`) for package names, version strings, and file locations. Fixed versions are rendered with subtle emerald pill badges (`Fixed in: 4.14.2`).
+
+### AI Reasoning & Trade-off Analysis
+- **Readability**: Eliminates ugly markdown artifacts and preserves clean, executive-ready presentation.
+- **Visual Polish**: Professional, high-contrast typography consistent across dark and light design themes.
+
+---
+
+## ADR-057: Neon Serverless PostgreSQL Data Layer and Repository Deduplication
+
+### Context
+Using local SQLite (`arve.db`) during development led to locked file handles on Windows, schema migration friction, and transient concurrency errors in multi-container setups. Furthermore, querying project repositories occasionally produced duplicate repository cards if identical GitHub repositories were ingested under multiple analysis runs.
+
+### Decision
+1. **Neon Serverless PostgreSQL**: Transition primary database persistence to cloud-managed Neon PostgreSQL with connection pooling (`sslmode=require`).
+2. **Local DB Decommissioning**: Remove local `arve.db` and test databases from repository tracking and disk.
+3. **Frontend Deduplication**: In `RepositoryContext.tsx`, deduplicate repository records by `full_name || id || repo_url` prior to rendering.
+
+### AI Reasoning & Trade-off Analysis
+- **Production Parity**: Dev and prod environments operate on identical PostgreSQL semantics, JSONB operators, and concurrency rules.
+- **Clean UI**: Users see exactly one distinct repository card per unique project.
 
 ---

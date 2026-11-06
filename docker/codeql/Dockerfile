@@ -40,7 +40,7 @@ RUN groupadd --gid 1000 arve 2>/dev/null || true \
     && chown -R 1000:1000 /opt/arve-codeql /tmp/arve /tmp/codeql-db /tmp/codeql-results
 
 COPY run-codeql.sh /opt/arve-codeql/run-codeql.sh
-RUN chmod 0755 /opt/arve-codeql/run-codeql.sh
+RUN sed -i 's/\r$//' /opt/arve-codeql/run-codeql.sh && chmod 0755 /opt/arve-codeql/run-codeql.sh
 
 ENV HOME=/tmp/arve \
     CODEQL_ENABLE_TELEMETRY=false \
