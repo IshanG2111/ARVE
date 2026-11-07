@@ -9,6 +9,9 @@ import { EmptyState } from '../components/common/EmptyState';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { Wave } from '../components/ui/wave';
 import { JsonViewer } from '../components/ui/JsonViewer';
+import { ScanReportView } from '../components/reports/ScanReportView';
+import { ScanProgressCockpit } from '../components/scanner/ScanProgressCockpit';
+import { parseUtcDate } from '@/lib/utils';
 import {
   Play,
   Layers,
@@ -42,7 +45,7 @@ export const AnalysisPage: React.FC = () => {
   const [selectedScanStatus, setSelectedScanStatus] = useState<ScanStatusResponse | null>(null);
   const [triggeringScan, setTriggeringScan] = useState(false);
   const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
-  const [activeInspectorTab, setActiveInspectorTab] = useState<'overview' | 'engines' | 'logs'>('overview');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'overview' | 'engines' | 'logs' | 'report'>('overview');
   const [viewingArtifact, setViewingArtifact] = useState<{ name: string; content: any } | null>(null);
   const [loadingArtifact, setLoadingArtifact] = useState(false);
   const [activeIngestionId, setActiveIngestionId] = useState<string | null>(null);
@@ -69,6 +72,12 @@ export const AnalysisPage: React.FC = () => {
       refreshRuns();
     }
   }, [activeIngestionId, latestRun?.id, latestRun?.status, refreshRuns]);
+
+  // Reset selection on project change
+  useEffect(() => {
+    setSelectedScanId(null);
+    setSelectedRunId(null);
+  }, [currentProjectId]);
 
   // Auto-select latest scan or run
   useEffect(() => {
@@ -352,64 +361,47 @@ export const AnalysisPage: React.FC = () => {
                   {latestScan?.status === 'COMPLETED' || latestScan?.status === 'PARTIAL' ? 'Findings Available' : 'No Active Scan'}
                 </div>
               </div>
-              <div style={{ marginTop: '6px' }}>
+              <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                 <a
                   href={`/findings${currentProjectId ? `?repo=${currentProjectId}` : ''}`}
                   style={{ fontSize: '11.5px', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                 >
                   Open Findings Dashboard →
                 </a>
+                {latestScan && (
+                  <button
+                    onClick={() => {
+                      setHistoryTab('scans');
+                      setActiveInspectorTab('report');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      fontSize: '11.5px',
+                      color: 'var(--accent)',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                    }}
+                  >
+                    View Report →
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Live Active Scan Banner */}
+        {/* Dynamic Scan Progress Cockpit with Real-Time ETA */}
         {isScanActive && latestScan && (
-          <div
-            className="card"
-            style={{
-              padding: '18px 22px',
-              background: 'var(--elevated)',
-              border: '1px solid var(--accent-border)',
-              borderRadius: 'var(--radius-lg)',
-              marginBottom: '24px',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Wave size="sm" color="var(--accent)" />
-                <span style={{ fontSize: '14px', fontWeight: 650, color: 'var(--primary)' }}>
-                  Analysis in Progress — {latestScan.current_stage || 'Executing Security Engines'}
-                </span>
-              </div>
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: '11.5px', color: 'var(--critical)' }}
-                onClick={handleCancelScan}
-              >
-                Cancel Run
-              </button>
-            </div>
-
-            {/* Progress Bar */}
-            <div style={{ height: '6px', background: 'var(--surface)', borderRadius: '999px', overflow: 'hidden', margin: '10px 0 8px' }}>
-              <div
-                style={{
-                  height: '100%',
-                  width: `${latestScan.progress_percent || 10}%`,
-                  background: 'var(--accent)',
-                  transition: 'width 300ms ease',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', fontFamily: 'var(--font-code)', color: 'var(--muted)' }}>
-              <span>Progress: {latestScan.progress_percent}%</span>
-              <span>Commit: {latestScan.commit_sha ? latestScan.commit_sha.slice(0, 7) : 'Snapshot'}</span>
-              <span>Engines: OSV, Gitleaks, Semgrep, CodeQL</span>
-            </div>
-          </div>
+          <ScanProgressCockpit
+            scan={latestScan}
+            telemetry={selectedScanStatus?.id === latestScan.id ? selectedScanStatus : null}
+            onCancel={handleCancelScan}
+          />
         )}
 
         {/* ── Systematic History Section with Tab Switcher ── */}
@@ -490,7 +482,8 @@ export const AnalysisPage: React.FC = () => {
                         <th>Commit SHA</th>
                         <th>Stage</th>
                         <th>Progress</th>
-                        <th>Started</th>
+                        <th>Date</th>
+                        <th>Duration</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -530,6 +523,22 @@ export const AnalysisPage: React.FC = () => {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
+                            </td>
+                            <td style={{ fontFamily: 'var(--font-code)', fontSize: '11.5px', color: 'var(--primary)' }}>
+                              {(() => {
+                                const start = parseUtcDate(s.started_at || s.created_at);
+                                if (s.completed_at && start > 0) {
+                                  const end = parseUtcDate(s.completed_at);
+                                  if (end >= start) {
+                                    return `${Math.max(1, Math.floor((end - start) / 1000))}s`;
+                                  }
+                                }
+                                if (['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(s.status) && start > 0) {
+                                  const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+                                  return `${sec}s`;
+                                }
+                                return '—';
+                              })()}
                             </td>
                             <td>
                               <button
@@ -681,7 +690,7 @@ export const AnalysisPage: React.FC = () => {
 
                 {/* Sub-tabs inside Inspector */}
                 <div style={{ display: 'flex', gap: '4px', background: 'var(--elevated)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                  {(['overview', 'engines', 'logs'] as const).map((tab) => (
+                  {(historyTab === 'scans' ? (['overview', 'engines', 'logs', 'report'] as const) : (['overview', 'engines', 'logs'] as const)).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveInspectorTab(tab)}
@@ -699,7 +708,7 @@ export const AnalysisPage: React.FC = () => {
                         textTransform: 'capitalize',
                       }}
                     >
-                      {tab}
+                      {tab === 'report' ? 'Security Report' : tab}
                     </button>
                   ))}
                 </div>
@@ -733,6 +742,24 @@ export const AnalysisPage: React.FC = () => {
                     <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Files Skipped</div>
                     <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-code)', color: 'var(--warning)', marginTop: '2px' }}>
                       {activeRun?.files_skipped || 0}
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Duration</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-code)', color: 'var(--primary)', marginTop: '2px' }}>
+                      {(() => {
+                        const target = historyTab === 'scans' ? activeScan : activeRun;
+                        if (!target) return '—';
+                        const start = parseUtcDate(target.started_at || (target as any).created_at);
+                        if (target.completed_at && start > 0) {
+                          const end = parseUtcDate(target.completed_at);
+                          return `${Math.max(1, Math.floor((end - start) / 1000))}s`;
+                        }
+                        if (start > 0 && target.status && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(target.status)) {
+                          return `${Math.max(0, Math.floor((Date.now() - start) / 1000))}s`;
+                        }
+                        return '—';
+                      })()}
                     </div>
                   </div>
                   <div style={{ padding: '12px 16px' }}>
@@ -837,6 +864,13 @@ export const AnalysisPage: React.FC = () => {
                   <div>[INFO] Phase 3 worker sandbox initialized.</div>
                   <div>[INFO] Security scanner engines executed with zero regressions.</div>
                   <div>[SUCCESS] Pipeline telemetry verified deterministically.</div>
+                </div>
+              )}
+
+              {/* Inspector Tab 4: Security Assessment Report */}
+              {activeInspectorTab === 'report' && activeScan && (
+                <div style={{ marginTop: '16px' }}>
+                  <ScanReportView scanId={activeScan.id} />
                 </div>
               )}
             </div>

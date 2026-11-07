@@ -1173,4 +1173,64 @@ code, pre, .font-mono {
   animation: arve-shimmer 1.8s ease-in-out infinite;
 }
 
+/* ── Cyber Radar & Report Synthesis Animations ──────────────────────── */
+@keyframes arve-radar-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes arve-radar-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes arve-glow-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: drop-shadow(0 0 6px var(--accent));
+  }
+  50% {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 14px var(--accent));
+  }
+}
+
+@keyframes arve-terminal-cursor {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.radar-sweep-beam {
+  transform-origin: center center;
+  animation: arve-radar-sweep 3s linear infinite;
+}
+
+.radar-ping-ring {
+  transform-origin: center center;
+  animation: arve-radar-ping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.report-glow-pulse {
+  animation: arve-glow-pulse 2.5s ease-in-out infinite;
+}
+
+
 

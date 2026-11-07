@@ -15,11 +15,23 @@ logger = logging.getLogger(__name__)
 def enqueue_scan(scan_id: str, background_tasks: BackgroundTasks | None = None) -> str:
     backend = settings.SCAN_QUEUE_BACKEND.lower().strip()
     if backend == "celery":
-        from app.scanner.tasks import execute_scan_task
+        try:
+            from app.scanner.tasks import execute_scan_task
 
-        result = execute_scan_task.delay(scan_id)
-        logger.info("scan=%s queued celery_task=%s", scan_id, result.id)
-        return result.id
+            result = execute_scan_task.apply_async(args=[scan_id], retry=False)
+            logger.info("scan=%s queued celery_task=%s", scan_id, result.id)
+            return result.id
+        except Exception as exc:
+            logger.warning(
+                "scan=%s celery/redis dispatch failed (%s); falling back to in-process BackgroundTasks",
+                scan_id,
+                exc,
+            )
+            if background_tasks is not None:
+                background_tasks.add_task(run_scan_background, scan_id)
+                logger.info("scan=%s successfully enqueued via BackgroundTasks fallback", scan_id)
+                return scan_id
+            raise
 
     if backend in {"background", "background_tasks", "asyncio"}:
         if background_tasks is None:
