@@ -11,6 +11,7 @@ import { Wave } from '../components/ui/wave';
 import { JsonViewer } from '../components/ui/JsonViewer';
 import { ScanReportView } from '../components/reports/ScanReportView';
 import { ScanProgressCockpit } from '../components/scanner/ScanProgressCockpit';
+import { parseUtcDate } from '@/lib/utils';
 import {
   Play,
   Layers,
@@ -396,7 +397,11 @@ export const AnalysisPage: React.FC = () => {
 
         {/* Dynamic Scan Progress Cockpit with Real-Time ETA */}
         {isScanActive && latestScan && (
-          <ScanProgressCockpit scan={latestScan} onCancel={handleCancelScan} />
+          <ScanProgressCockpit
+            scan={latestScan}
+            telemetry={selectedScanStatus?.id === latestScan.id ? selectedScanStatus : null}
+            onCancel={handleCancelScan}
+          />
         )}
 
         {/* ── Systematic History Section with Tab Switcher ── */}
@@ -477,7 +482,8 @@ export const AnalysisPage: React.FC = () => {
                         <th>Commit SHA</th>
                         <th>Stage</th>
                         <th>Progress</th>
-                        <th>Started</th>
+                        <th>Date</th>
+                        <th>Duration</th>
                         <th>Action</th>
                       </tr>
                     </thead>
@@ -517,6 +523,22 @@ export const AnalysisPage: React.FC = () => {
                                 hour: '2-digit',
                                 minute: '2-digit',
                               })}
+                            </td>
+                            <td style={{ fontFamily: 'var(--font-code)', fontSize: '11.5px', color: 'var(--primary)' }}>
+                              {(() => {
+                                const start = parseUtcDate(s.started_at || s.created_at);
+                                if (s.completed_at && start > 0) {
+                                  const end = parseUtcDate(s.completed_at);
+                                  if (end >= start) {
+                                    return `${Math.max(1, Math.floor((end - start) / 1000))}s`;
+                                  }
+                                }
+                                if (['QUEUED', 'INGESTING', 'SCANNING', 'NORMALIZING'].includes(s.status) && start > 0) {
+                                  const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+                                  return `${sec}s`;
+                                }
+                                return '—';
+                              })()}
                             </td>
                             <td>
                               <button
@@ -720,6 +742,24 @@ export const AnalysisPage: React.FC = () => {
                     <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Files Skipped</div>
                     <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-code)', color: 'var(--warning)', marginTop: '2px' }}>
                       {activeRun?.files_skipped || 0}
+                    </div>
+                  </div>
+                  <div style={{ padding: '12px 16px', borderRight: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', fontFamily: 'var(--font-code)' }}>Duration</div>
+                    <div style={{ fontSize: '18px', fontWeight: 700, fontFamily: 'var(--font-code)', color: 'var(--primary)', marginTop: '2px' }}>
+                      {(() => {
+                        const target = historyTab === 'scans' ? activeScan : activeRun;
+                        if (!target) return '—';
+                        const start = parseUtcDate(target.started_at || (target as any).created_at);
+                        if (target.completed_at && start > 0) {
+                          const end = parseUtcDate(target.completed_at);
+                          return `${Math.max(1, Math.floor((end - start) / 1000))}s`;
+                        }
+                        if (start > 0 && target.status && !['COMPLETED', 'FAILED', 'CANCELLED'].includes(target.status)) {
+                          return `${Math.max(0, Math.floor((Date.now() - start) / 1000))}s`;
+                        }
+                        return '—';
+                      })()}
                     </div>
                   </div>
                   <div style={{ padding: '12px 16px' }}>

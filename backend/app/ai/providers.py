@@ -236,11 +236,11 @@ class GroqProvider(BaseAIProvider):
 
 def get_ai_provider(provider_type: Optional[str] = None) -> BaseAIProvider:
     """Factory creating an AI provider instance based on configured settings."""
-    chosen = (provider_type or settings.AI_PROVIDER or "gemini").lower()
+    chosen = (provider_type or settings.AI_PROVIDER or "groq").lower()
     if chosen == "ollama":
         return OllamaProvider()
-    if chosen == "groq":
-        return GroqProvider()
-    # Default to Gemini
-    return GeminiProvider()
+    if chosen == "gemini":
+        return GeminiProvider()
+    # Default to Groq
+    return GroqProvider()
 

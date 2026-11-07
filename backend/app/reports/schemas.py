@@ -52,8 +52,8 @@ class PriorityRiskItem(BaseModel):
 class AIProvenanceMetadata(BaseModel):
     """Internal technical provenance metadata for AI-generated assessment."""
 
-    provider: str = "gemini"  # "gemini", "ollama", "groq", "deterministic-engine"
-    model: str = "gemini-3.5-flash"
+    provider: str = "groq"  # "groq", "ollama", "deterministic-engine"
+    model: str = "openai/gpt-oss-120b"
     prompt_version: str = "2026.11.02"
     schema_version: str = "2026.11.02"
     generation_status: str = "success"  # "success", "failed", "fallback"
@@ -121,7 +121,7 @@ class ScanReportData(BaseModel):
     reachability_assessment: Optional[str] = None
     positive_observations: List[str] = Field(default_factory=list)
     is_ai_fallback: bool = False
-    ai_model: str = "gemini-2.5-flash"
+    ai_model: str = "openai/gpt-oss-120b"
     ai_status_message: str = ""
     provenance: Optional[AIProvenanceMetadata] = None
 

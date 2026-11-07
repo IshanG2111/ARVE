@@ -78,8 +78,8 @@ class Settings(BaseSettings):
     B2_SECRET_ACCESS_KEY: Optional[str] = None
     B2_ARTIFACT_PREFIX: str = "scans"
 
-    # AI Integration (Multi-Provider: Gemini, Ollama, Groq)
-    AI_PROVIDER: str = "gemini"
+    # AI Integration (Multi-Provider: Groq, Ollama, Gemini)
+    AI_PROVIDER: str = "groq"
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-1.5-flash"
     GEMINI_TIMEOUT_SECONDS: int = 30

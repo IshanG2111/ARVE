@@ -8,6 +8,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { ProjectWizardModal } from '../components/ProjectWizardModal';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { Wave } from '../components/ui/wave';
+import { ScanProgressCockpit } from '../components/scanner/ScanProgressCockpit';
 import {
   Play,
   ArrowRight,
@@ -313,6 +314,22 @@ export const DashboardPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Dynamic Scan Progress Cockpit with Real-Time ETA */}
+        {isScanActive && latestScan && (
+          <ScanProgressCockpit
+            scan={latestScan}
+            onCancel={async () => {
+              try {
+                await api.cancelScan(latestScan.id);
+                toast.success('Security scan cancelled.');
+                await refreshScans();
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : 'Failed to cancel scan');
+              }
+            }}
+          />
+        )}
 
         {/* ── Section 2: Real Essential Metrics Grid ────────────────────────── */}
         <div
