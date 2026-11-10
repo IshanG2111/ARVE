@@ -30,6 +30,10 @@ interface RepositoryContextType {
 
 const RepositoryContext = createContext<RepositoryContextType | undefined>(undefined);
 
+const EMPTY_PROJECTS: Project[] = [];
+const EMPTY_RUNS: AnalysisRun[] = [];
+const EMPTY_SCANS: Scan[] = [];
+
 export function projectDisplayName(p?: Project | null): string {
   if (!p) return 'Repository Workspace';
   if (p.name) return p.name;
@@ -49,7 +53,18 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
+  const { data: rawProjects = EMPTY_PROJECTS, isLoading: isProjectsLoading } = useProjects();
+
+  // Deduplicate projects by unique repo_name / id so duplicate repos never appear
+  const projects = useMemo(() => {
+    const seen = new Set<string>();
+    return rawProjects.filter((p) => {
+      const key = (p.repo_name || p.name || p.id).trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [rawProjects]);
 
   const pathProjectId = location.pathname.startsWith('/projects/') ? location.pathname.split('/')[2] : null;
   const repoParam = searchParams.get('repo') || pathProjectId;
@@ -86,7 +101,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const currentProjectId = currentProject?.id || null;
 
   const {
-    data: runs = [],
+    data: runs = EMPTY_RUNS,
     refetch: refreshRuns,
     isFetching: isRunsFetching,
   } = useQuery({
@@ -102,7 +117,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   });
 
   const {
-    data: scans = [],
+    data: scans = EMPTY_SCANS,
     refetch: refreshScans,
     isFetching: isScansFetching,
   } = useQuery({
@@ -122,7 +137,7 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   );
 
   const {
-    data: serverFindings = [],
+    data: serverFindings,
     isFetching: isFindingsFetching,
   } = useQuery({
     queryKey: ['findings', currentProjectId],
@@ -136,8 +151,10 @@ export const RepositoryProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [findings, setFindings] = useState<SecurityFinding[]>([]);
 
   useEffect(() => {
-    setFindings(serverFindings || []);
-  }, [serverFindings, currentProjectId]);
+    if (serverFindings) {
+      setFindings(serverFindings);
+    }
+  }, [serverFindings]);
 
   const selectProject = useCallback(
     (projectId: string) => {

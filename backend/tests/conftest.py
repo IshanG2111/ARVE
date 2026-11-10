@@ -1,3 +1,8 @@
+import os
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["SCAN_QUEUE_BACKEND"] = "background"
+os.environ["SCANNER_ENABLE_TEST_ENGINE"] = "false"
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient

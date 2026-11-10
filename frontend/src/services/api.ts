@@ -14,6 +14,7 @@ import type {
   Scan,
   ScanStatusResponse,
   SecurityFinding,
+  ScanReportData,
 } from '@/types';
 
 export type {
@@ -31,6 +32,7 @@ export type {
   Scan,
   ScanStatusResponse,
   SecurityFinding,
+  ScanReportData,
 };
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -52,7 +54,11 @@ function authHeaders(): HeadersInit {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
-    throw new Error(err.detail || `HTTP ${res.status}`);
+    const detail = err?.detail;
+    const message = typeof detail === 'string'
+      ? detail
+      : detail?.message || detail?.remediation || err?.message || `HTTP ${res.status}`;
+    throw new Error(message);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -298,6 +304,24 @@ export async function getScanFindings(scanId: string): Promise<SecurityFinding[]
   return handleResponse<SecurityFinding[]>(res);
 }
 
+
+export async function getAstSummary(scanId: string): Promise<any> {
+  const res = await fetch(`${BASE}/scans/${scanId}/ast`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<any>(res);
+}
+export async function getAstFiles(scanId: string, limit = 100, offset = 0): Promise<any> {
+  const res = await fetch(`${BASE}/scans/${scanId}/ast/files?limit=${limit}&offset=${offset}`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<any>(res);
+}
+export async function getAstFileSymbols(scanId: string, fileId: string): Promise<any[]> {
+  const res = await fetch(`${BASE}/scans/${scanId}/ast/files/${fileId}/symbols`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<any[]>(res);
+}
+export async function getFindingContext(scanId: string, findingId: string): Promise<any> {
+  const res = await fetch(`${BASE}/scans/${scanId}/findings/${findingId}/context`, { headers: authHeaders(), credentials: 'include' });
+  return handleResponse<any>(res);
+}
+
 export async function updateFindingStatus(
   findingId: string,
   payload: {
@@ -324,6 +348,44 @@ export async function getEngineArtifact(scanId: string, engineName: string = 'os
   return handleResponse<any>(res);
 }
 
+// ─── Phase 5: Security Reports & AI Assessment ─────────────────────────────
+export async function getScanReport(scanId: string): Promise<ScanReportData> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanReportData>(res);
+}
+
+export async function generateScanReport(scanId: string, forceRefresh: boolean = false): Promise<ScanReportData> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report/generate?force_refresh=${forceRefresh}`, {
+    method: 'POST',
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  return handleResponse<ScanReportData>(res);
+}
+
+export async function downloadScanReport(scanId: string, format: 'pdf' | 'md' = 'pdf'): Promise<void> {
+  const res = await fetch(`${BASE}/scans/${scanId}/report/download?format=${format}`, {
+    headers: authHeaders(),
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(errorText || `Failed to download ${format.toUpperCase()} report`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `ARVE_Security_Report_${scanId.slice(0, 8)}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+}
+
 Object.assign(api, {
   me: getMe,
   getGitHubRepos,
@@ -347,6 +409,13 @@ Object.assign(api, {
   getProjectScans,
   getProjectFindings,
   getScanFindings,
+  getAstSummary,
+  getAstFiles,
+  getAstFileSymbols,
+  getFindingContext,
   updateFindingStatus,
   getEngineArtifact,
+  getScanReport,
+  generateScanReport,
+  downloadScanReport,
 });

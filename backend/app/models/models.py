@@ -1,7 +1,7 @@
 import datetime
 import uuid
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -96,6 +96,8 @@ class Scan(Base):
     analysis_run = relationship("AnalysisRun", back_populates="scans")
     engine_runs = relationship("ScanEngineRun", back_populates="scan", cascade="all, delete-orphan")
     findings = relationship("SecurityFinding", back_populates="scan", cascade="all, delete-orphan")
+    ai_explanations = relationship("AIExplanation", back_populates="scan", cascade="all, delete-orphan")
+    reports = relationship("ScanReport", back_populates="scan", cascade="all, delete-orphan")
 
 
 class ScanEngineRun(Base):
@@ -235,3 +237,143 @@ class SecurityFinding(Base):
 
     scan = relationship("Scan", back_populates="findings")
     project = relationship("Project", back_populates="findings")
+
+
+
+class ASTAnalysisRun(Base):
+    __tablename__ = "ast_analysis_runs"
+    __table_args__ = (UniqueConstraint("scan_id", name="uq_ast_analysis_runs_scan"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    commit_sha = Column(String, nullable=False, index=True)
+    schema_version = Column(String, nullable=False)
+    parser_versions = Column(JSON, nullable=False)
+    status = Column(String, nullable=False, default="RUNNING", index=True)
+    files_discovered = Column(Integer, default=0, nullable=False)
+    files_parsed = Column(Integer, default=0, nullable=False)
+    files_failed = Column(Integer, default=0, nullable=False)
+    files_unsupported = Column(Integer, default=0, nullable=False)
+    total_functions = Column(Integer, default=0, nullable=False)
+    total_classes = Column(Integer, default=0, nullable=False)
+    total_imports = Column(Integer, default=0, nullable=False)
+    total_calls = Column(Integer, default=0, nullable=False)
+    total_relationships = Column(Integer, default=0, nullable=False)
+    error_summary = Column(Text, nullable=True)
+    started_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    artifact_status = Column(String, nullable=False, default="PENDING")
+    artifact_bucket = Column(String, nullable=True)
+    artifact_key = Column(Text, nullable=True)
+    artifact_sha256 = Column(String, nullable=True)
+    artifact_size_bytes = Column(Integer, nullable=True)
+    artifact_created_at = Column(DateTime, nullable=True)
+    artifact_error = Column(Text, nullable=True)
+
+class ASTFile(Base):
+    __tablename__ = "ast_files"
+    __table_args__ = (UniqueConstraint("ast_analysis_id", "path", name="uq_ast_files_analysis_path"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    ast_analysis_id = Column(String, ForeignKey("ast_analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    path = Column(String, nullable=False, index=True)
+    language = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False)
+    has_syntax_errors = Column(Boolean, default=False, nullable=False)
+    content_hash = Column(String, nullable=True)
+    function_count = Column(Integer, default=0, nullable=False)
+    class_count = Column(Integer, default=0, nullable=False)
+    import_count = Column(Integer, default=0, nullable=False)
+
+class ASTSymbol(Base):
+    __tablename__ = "ast_symbols"
+    __table_args__ = (UniqueConstraint("ast_analysis_id", "stable_key", name="uq_ast_symbols_stable_key"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    ast_analysis_id = Column(String, ForeignKey("ast_analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    ast_file_id = Column(String, ForeignKey("ast_files.id", ondelete="CASCADE"), nullable=False, index=True)
+    stable_key = Column(String, nullable=False, index=True)
+    symbol_type = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    line_start = Column(Integer, nullable=True)
+    line_end = Column(Integer, nullable=True)
+    parent_stable_key = Column(String, nullable=True)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+
+class ASTRelationship(Base):
+    __tablename__ = "ast_relationships"
+    id = Column(String, primary_key=True, default=generate_uuid)
+    ast_analysis_id = Column(String, ForeignKey("ast_analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_stable_key = Column(String, nullable=False, index=True)
+    target_stable_key = Column(String, nullable=False, index=True)
+    relationship_type = Column(String, nullable=False, index=True)
+    evidence = Column(JSON, nullable=False)
+    resolution_status = Column(String, nullable=False, default="resolved")
+
+class SecurityContext(Base):
+    __tablename__ = "security_contexts"
+    __table_args__ = (UniqueConstraint("finding_id", name="uq_security_context_finding"),)
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("security_findings.id", ondelete="CASCADE"), nullable=False, index=True)
+    ast_analysis_id = Column(String, ForeignKey("ast_analysis_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_path = Column(String, nullable=True)
+    function_name = Column(String, nullable=True)
+    class_name = Column(String, nullable=True)
+    route_method = Column(String, nullable=True)
+    route_path = Column(String, nullable=True)
+    framework = Column(String, nullable=True)
+    observed_inputs = Column(JSON, nullable=False, default=list)
+    security_operations = Column(JSON, nullable=False, default=list)
+    resolution_status = Column(String, nullable=False, default="UNRESOLVED")
+    evidence = Column(JSON, nullable=False, default=list)
+
+
+class AIExplanation(Base):
+    """Cached and validated AI-generated explanations and summaries."""
+    __tablename__ = "ai_explanations"
+    __table_args__ = (
+        UniqueConstraint("cache_key", name="uq_ai_explanations_cache_key"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("security_findings.id", ondelete="CASCADE"), nullable=True, index=True)
+    kind = Column(String, nullable=False, default="scan_summary")
+    cache_key = Column(String, nullable=False)
+    prompt_version = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    served_model = Column(String, nullable=True)
+    response_json = Column(Text, nullable=False)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    thought_tokens = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    project = relationship("Project")
+    scan = relationship("Scan", back_populates="ai_explanations")
+    finding = relationship("SecurityFinding")
+
+
+class ScanReport(Base):
+    """Persisted security assessment reports for completed scans."""
+    __tablename__ = "scan_reports"
+    __table_args__ = (
+        UniqueConstraint("scan_id", name="uq_scan_reports_scan_id"),
+    )
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    scan_id = Column(String, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="READY")
+    title = Column(String, nullable=True)
+    ai_explanation_id = Column(String, ForeignKey("ai_explanations.id", ondelete="SET NULL"), nullable=True)
+    report_json = Column(Text, nullable=False)
+    markdown_content = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow, nullable=False)
+
+    scan = relationship("Scan", back_populates="reports")
+    project = relationship("Project")
+    ai_explanation = relationship("AIExplanation")
+

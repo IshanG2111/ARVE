@@ -28,7 +28,7 @@ def test_codeql_sarif_maps_findings_with_metadata():
 
 def test_codeql_mapper_uses_rule_metadata_and_result_level():
     data = json.loads(_fixture("codeql_findings.sarif"))
-    data["runs"][0]["rules"][1]["properties"].pop("security-severity")
+    data["runs"][0]["tool"]["driver"]["rules"][1]["properties"].pop("security-severity")
     findings = CodeqlFindingMapper().map_artifact(data)
     assert findings[1].severity == FindingSeverity.HIGH
     assert findings[1].confidence is not None
@@ -48,7 +48,7 @@ def test_normalizer_computes_deterministic_fingerprint():
 
 def test_codeql_mapper_normalizes_zero_padded_cwe():
     data = json.loads(_fixture("codeql_findings.sarif"))
-    data["runs"][0]["rules"][0]["properties"]["tags"] = ["security", "external/cwe/cwe-089"]
+    data["runs"][0]["tool"]["driver"]["rules"][0]["properties"]["tags"] = ["security", "external/cwe/cwe-089"]
     findings = CodeqlFindingMapper().map_artifact(data)
     assert findings[0].cwe == "CWE-89"
 

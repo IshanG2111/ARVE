@@ -361,7 +361,6 @@ export const Navbar: React.FC<NavbarProps> = ({ user, onOpenConnectModal }) => {
               { label: 'CODE INTELLIGENCE', ariaLabel: 'Explore AST and source code', link: '/code' },
               { label: 'ANALYSIS & SCANS', ariaLabel: 'View analysis runs and scan executions', link: '/analysis' },
               { label: 'SECURITY FINDINGS', ariaLabel: 'Inspect and triage vulnerabilities', link: '/findings' },
-              { label: 'TARGET ASSETS', ariaLabel: 'Manage target domains and deployments', link: '/targets' },
               { label: 'SETTINGS', ariaLabel: 'Workspace settings and configuration', link: '/settings' },
             ] : [
               { label: 'HOME', ariaLabel: 'Go to home page', link: '/' },

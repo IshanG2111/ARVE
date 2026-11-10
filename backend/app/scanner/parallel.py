@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 
 from app.core.config import settings
+from app.ast.services.analysis import ASTAnalysisService
 from app.models.models import Scan, ScanEngineRun
 from app.scanner.exceptions import ScanOrchestrationError, ScanValidationError, ScannerExecutionError
 from app.scanner.interfaces import EngineExecutionStatus, ScannerExecutionResult
@@ -236,6 +237,32 @@ class ParallelSecurityScanService(ScanExecutionService):
                 self.db.add_all(all_db_findings)
                 self.db.commit()
                 logger.info("scan=%s persisted %d security findings", scan.id, len(all_db_findings))
+
+            # AST runs against the exact same immutable Phase 2 workspace after
+            # canonical findings exist, so security contexts can resolve findings.
+            ast_error = None
+            current = self.db.query(Scan).filter(Scan.id == scan_id_value).first()
+            if current and current.status != ScanStatus.CANCELLED.value:
+                self._set_status(current, ScanStatus.NORMALIZING, progress=94, stage="Indexing code structure and mapping security evidence")
+                try:
+                    ast_run = ASTAnalysisService(self.db).analyze_and_persist(current, workspace.source)
+                    if ast_run.status == "PARTIAL":
+                        failures.append(ScannerExecutionResult(
+                            engine_name="ast",
+                            status=EngineExecutionStatus.FAILED,
+                            error_message=ast_run.error_summary or "AST indexing completed with file-level errors",
+                        ))
+                except Exception as exc:
+                    self.db.rollback()
+                    ast_error = f"AST indexing failed: {type(exc).__name__}: {exc}"
+                    logger.exception("scan=%s AST indexing failed", scan_id_value)
+
+            if ast_error:
+                failures.append(ScannerExecutionResult(
+                    engine_name="ast",
+                    status=EngineExecutionStatus.FAILED,
+                    error_message=ast_error,
+                ))
 
             if failures:
                 message = "; ".join(

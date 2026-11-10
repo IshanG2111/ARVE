@@ -332,7 +332,7 @@ export const LandingPage: React.FC = () => {
             }}
           >
             Adaptive security intelligence for GitHub repositories.
-            Map vulnerability attack paths, generate automated patches,
+            Detect vulnerabilities, analyze reachability with AST,
             and verify code health deterministically.
           </motion.div>
 

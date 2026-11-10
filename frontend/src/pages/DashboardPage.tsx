@@ -8,23 +8,19 @@ import { EmptyState } from '../components/common/EmptyState';
 import { ProjectWizardModal } from '../components/ProjectWizardModal';
 import { IngestionOverlay } from '../components/ui/IngestionOverlay';
 import { Wave } from '../components/ui/wave';
+import { ScanProgressCockpit } from '../components/scanner/ScanProgressCockpit';
 import {
   Play,
   ArrowRight,
   Shield,
   Layers,
-  Globe,
   Code2,
   FolderGit2,
   FileCode2,
   Activity,
   Network,
-  GitFork,
   Sparkles,
   Zap,
-  Lock,
-  Database,
-  Server,
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
@@ -46,7 +42,6 @@ export const DashboardPage: React.FC = () => {
     refreshScans,
     refreshProjects,
     selectProject,
-    targets,
     findings,
   } = useRepository();
 
@@ -54,10 +49,7 @@ export const DashboardPage: React.FC = () => {
   const [showIngestionOverlay, setShowIngestionOverlay] = useState(false);
   const [triggeringScan, setTriggeringScan] = useState(false);
   const [triggeringIngest, setTriggeringIngest] = useState(false);
-  const [activeHoverNode, setActiveHoverNode] = useState<string | null>(null);
 
-  const verifiedTargets = targets.filter((t) => t.is_verified);
-  const targetCount = targets.length;
   const repoQuery = currentProjectId ? `?repo=${currentProjectId}` : '';
 
   const criticalFindings = findings.filter((f) => f.severity === 'CRITICAL');
@@ -323,6 +315,22 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Dynamic Scan Progress Cockpit with Real-Time ETA */}
+        {isScanActive && latestScan && (
+          <ScanProgressCockpit
+            scan={latestScan}
+            onCancel={async () => {
+              try {
+                await api.cancelScan(latestScan.id);
+                toast.success('Security scan cancelled.');
+                await refreshScans();
+              } catch (err: unknown) {
+                toast.error(err instanceof Error ? err.message : 'Failed to cancel scan');
+              }
+            }}
+          />
+        )}
+
         {/* ── Section 2: Real Essential Metrics Grid ────────────────────────── */}
         <div
           style={{
@@ -393,7 +401,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Card 3: Target Endpoints */}
+          {/* Card 3: Code Intelligence */}
           <div
             className="card"
             style={{
@@ -406,18 +414,18 @@ export const DashboardPage: React.FC = () => {
               justifyContent: 'space-between',
               cursor: 'pointer',
             }}
-            onClick={() => navigate(`/targets${repoQuery}`)}
+            onClick={() => navigate(`/code${repoQuery}`)}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--muted)', fontSize: '11px', fontFamily: 'var(--font-code)', textTransform: 'uppercase' }}>
-              <span>Target Endpoints</span>
-              <Globe size={14} color="var(--accent)" />
+              <span>Code Intelligence</span>
+              <Code2 size={14} color="var(--accent)" />
             </div>
             <div style={{ marginTop: '8px' }}>
               <div style={{ fontSize: '18px', fontWeight: 750, color: 'var(--primary)', fontFamily: 'var(--font-code)' }}>
-                {targetCount}
+                {latestRun?.files_ingested ?? 0} Files
               </div>
               <div style={{ fontSize: '11.5px', color: 'var(--muted)', marginTop: '2px' }}>
-                {targetCount === 0 ? 'No endpoints added' : `${verifiedTargets.length} verified domain(s)`}
+                AST structure &amp; call graph
               </div>
             </div>
           </div>
@@ -452,150 +460,16 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* ── Section 3: Future Architecture Visual Placeholders (Phase 5-7 Roadmap) ──── */}
+        {/* ── Section 3: Architecture & Security Graph ──── */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+            gridTemplateColumns: '1fr',
             gap: '18px',
             marginBottom: '24px',
           }}
         >
-          {/* Visual Placeholder 1: Project Attack Graph Reconstruction (Phase 7) */}
-          <div
-            className="card"
-            style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <GitFork size={15} color="var(--accent)" />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--primary)' }}>
-                    Project Attack Graph
-                  </span>
-                </div>
-                <span
-                  style={{
-                    fontSize: '10px',
-                    fontFamily: 'var(--font-code)',
-                    fontWeight: 650,
-                    padding: '2px 8px',
-                    borderRadius: '12px',
-                    background: 'var(--accent-muted)',
-                    color: 'var(--accent)',
-                    border: '1px solid var(--accent-border)',
-                  }}
-                >
-                  Phase 7 • Architecture Preview
-                </span>
-              </div>
-
-              <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 16px', lineHeight: 1.45 }}>
-                Reconstructs deterministic exploit paths from external HTTP entrypoints to sensitive data sinks.
-              </p>
-
-              {/* Visual Node Flow Mockup */}
-              <div
-                style={{
-                  background: 'var(--elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
-                  padding: '16px 12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '6px',
-                  overflowX: 'auto',
-                }}
-              >
-                {/* Node 1: Entrypoint */}
-                <div
-                  onMouseEnter={() => setActiveHoverNode('entry')}
-                  onMouseLeave={() => setActiveHoverNode(null)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: activeHoverNode === 'entry' ? 'var(--elevated-2)' : 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    textAlign: 'center',
-                    minWidth: '85px',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <Server size={13} color="var(--accent)" style={{ margin: '0 auto 4px' }} />
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--primary)' }}>/api/users/:id</div>
-                  <div style={{ fontSize: '9px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Entrypoint</div>
-                </div>
-
-                <div style={{ color: 'var(--muted)', fontSize: '12px', fontFamily: 'var(--font-code)' }}>──▶</div>
-
-                {/* Node 2: Weakness */}
-                <div
-                  onMouseEnter={() => setActiveHoverNode('weakness')}
-                  onMouseLeave={() => setActiveHoverNode(null)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: activeHoverNode === 'weakness' ? 'var(--critical-bg)' : 'var(--surface)',
-                    border: '1px solid var(--critical-border)',
-                    textAlign: 'center',
-                    minWidth: '95px',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <Lock size={13} color="var(--critical)" style={{ margin: '0 auto 4px' }} />
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--critical)' }}>Missing Auth</div>
-                  <div style={{ fontSize: '9px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>IDOR / CWE-639</div>
-                </div>
-
-                <div style={{ color: 'var(--muted)', fontSize: '12px', fontFamily: 'var(--font-code)' }}>──▶</div>
-
-                {/* Node 3: Sink */}
-                <div
-                  onMouseEnter={() => setActiveHoverNode('sink')}
-                  onMouseLeave={() => setActiveHoverNode(null)}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    background: activeHoverNode === 'sink' ? 'var(--elevated-2)' : 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    textAlign: 'center',
-                    minWidth: '85px',
-                    transition: 'all 0.2s ease',
-                  }}
-                >
-                  <Database size={13} color="var(--accent)" style={{ margin: '0 auto 4px' }} />
-                  <div style={{ fontSize: '10.5px', fontWeight: 700, color: 'var(--primary)' }}>User Records</div>
-                  <div style={{ fontSize: '9px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>Sensitive Sink</div>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
-              <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'var(--font-code)' }}>
-                Target: {targets[0]?.domain || 'api.production.app'}
-              </span>
-              <button
-                className="btn btn-ghost"
-                onClick={() => navigate(`/analysis${repoQuery}`)}
-                style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--accent)', gap: '4px' }}
-              >
-                Scan Pipeline <ArrowRight size={11} />
-              </button>
-            </div>
-          </div>
-
-          {/* Visual Placeholder 2: Global Security Knowledge Graph & Patterns (Phase 5/6) */}
+          {/* Security Knowledge Graph & Patterns */}
           <div
             className="card"
             style={{
@@ -630,12 +504,12 @@ export const DashboardPage: React.FC = () => {
                     border: '1px solid var(--border)',
                   }}
                 >
-                  Phase 5/6 • Clustering Roadmap
+                  Architecture Overview
                 </span>
               </div>
 
               <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '0 0 16px', lineHeight: 1.45 }}>
-                Interactive Obsidian-style graph correlating AI code patterns, CWE taxonomies, and cross-project attack techniques.
+                Correlates AI code patterns, CWE taxonomies, dependency trees, and cross-project vulnerability clusters.
               </p>
 
               {/* Visual Pattern Clusters Grid */}
@@ -814,26 +688,6 @@ export const DashboardPage: React.FC = () => {
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>Code Intelligence</div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Inspect file tree and AST normalized symbols</div>
-                  </div>
-                </div>
-                <ArrowRight size={13} color="var(--muted)" />
-              </button>
-
-              <button
-                className="btn btn-secondary"
-                onClick={() => navigate(`/targets${repoQuery}`)}
-                style={{
-                  width: '100%',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius-md)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <Globe size={15} color="var(--accent)" />
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--primary)' }}>Target Endpoints</div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>Manage domain ownership &amp; verification</div>
                   </div>
                 </div>
                 <ArrowRight size={13} color="var(--muted)" />
